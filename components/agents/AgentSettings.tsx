@@ -7,7 +7,10 @@ interface Option { id: string; name?: string; email?: string; from_email?: strin
 export interface AgentForm {
   name: string; mode: string; min_score: number; fit_weight: number; daily_lead_cap: number; autopilot_delay_minutes: number;
   linkedin_account_id: string | null; email_account_id: string | null; workflow_id: string | null; booking_url: string | null; enrich_emails: number;
+  goal: string; tone: string; exclude_first_degree: number;
 }
+
+const FORM_KEYS = ["name", "mode", "min_score", "fit_weight", "daily_lead_cap", "autopilot_delay_minutes", "linkedin_account_id", "email_account_id", "workflow_id", "booking_url", "enrich_emails", "goal", "tone", "exclude_first_degree"] as const;
 
 /** Agent settings: senders, campaign, thresholds and mode. */
 export default function AgentSettings({ agentId, initial, onSaved }: { agentId: string; initial: AgentForm; onSaved: () => void }) {
@@ -23,7 +26,8 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
     setSaving(true);
     const r = await fetch(`/api/agents/${agentId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...f, min_score: Number(f.min_score), fit_weight: Number(f.fit_weight), daily_lead_cap: Number(f.daily_lead_cap), autopilot_delay_minutes: Number(f.autopilot_delay_minutes), enrich_emails: !!f.enrich_emails, booking_url: f.booking_url || null }),
+      // Only this form's fields: status and outreach have their own controls.
+      body: JSON.stringify({ ...Object.fromEntries(FORM_KEYS.map((k) => [k, f[k]])), min_score: Number(f.min_score), fit_weight: Number(f.fit_weight), daily_lead_cap: Number(f.daily_lead_cap), autopilot_delay_minutes: Number(f.autopilot_delay_minutes), enrich_emails: !!f.enrich_emails, exclude_first_degree: !!f.exclude_first_degree, booking_url: f.booking_url || null }),
     });
     setSaving(false);
     if (!r.ok) return toast.error((await r.json()).error ?? "Could not save");
@@ -61,6 +65,11 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
         <Field label="Leads per day"><input type="number" min={1} max={500} className={inputCls} value={f.daily_lead_cap} onChange={(e) => setF({ ...f, daily_lead_cap: Number(e.target.value) })} /></Field>
         <Field label="Autopilot delay (min)"><input type="number" min={0} className={inputCls} value={f.autopilot_delay_minutes} onChange={(e) => setF({ ...f, autopilot_delay_minutes: Number(e.target.value) })} /></Field>
       </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Campaign goal"><select className={inputCls} value={f.goal} onChange={(e) => setF({ ...f, goal: e.target.value })}><option value="conversations">Start conversations</option><option value="meetings">Book meetings</option></select></Field>
+        <Field label="Message tone"><select className={inputCls} value={f.tone} onChange={(e) => setF({ ...f, tone: e.target.value })}><option value="professional">Professional</option><option value="conversational">Conversational</option><option value="direct">Direct</option></select></Field>
+      </div>
+      <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="checkbox checkbox-sm" checked={!!f.exclude_first_degree} onChange={(e) => setF({ ...f, exclude_first_degree: e.target.checked ? 1 : 0 })} /> Exclude 1st-degree connections</label>
       <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="checkbox checkbox-sm" checked={!!f.enrich_emails} onChange={(e) => setF({ ...f, enrich_emails: e.target.checked ? 1 : 0 })} /> Find emails for qualified leads (waterfall)</label>
       <button className={primaryBtn} disabled={saving} onClick={save}>{saving ? "Saving…" : "Save settings"}</button>
     </Card>

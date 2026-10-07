@@ -3,13 +3,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { RiAddLine, RiPauseLine, RiPlayLine, RiRobot2Line } from "react-icons/ri";
-import { Card, Empty, PageHeader, primaryBtn, ghostBtn, SignalChip, StatusDot, timeAgo } from "@/components/agents/ui";
+import { Card, Empty, PageHeader, primaryBtn, ghostBtn, SignalChip, timeAgo } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 
 export const getServerSideProps = requireSignedIn;
 
 interface AgentRow {
-  id: string; name: string; status: string; mode: string; last_run_at: string | null; last_error: string | null; daily_lead_cap: number;
+  id: string; name: string; status: string; outreach_enabled: number; mode: string; last_run_at: string | null; last_error: string | null; daily_lead_cap: number;
   counts: { today: { discovered: number; qualified: number; enrolled: number; pending_approvals: number } };
   sources: Array<{ source_type: string; enabled: number }>;
 }
@@ -32,11 +32,11 @@ export default function AgentsPage() {
       <Head><title>Agents — Linki</title></Head>
       <div className="space-y-6">
         <PageHeader eyebrow="AI SDR" title="Agents" subtitle="Each agent watches buying signals, qualifies people and starts conversations."
-          actions={<Link href="/onboarding" className={primaryBtn}><RiAddLine size={16} /> New agent</Link>} />
+          actions={<Link href="/agents/new" className={primaryBtn}><RiAddLine size={16} /> New agent</Link>} />
         {agents === null ? <p className="text-sm text-base-content/40">Loading…</p> : agents.length === 0 ? (
           <Empty title="No agents yet">
             <p>Give Linki your website and it will build your ICP and find people already showing intent.</p>
-            <Link href="/onboarding" className={`${primaryBtn} mt-4`}><RiRobot2Line size={16} /> Launch your first agent</Link>
+            <Link href="/agents/new" className={`${primaryBtn} mt-4`}><RiRobot2Line size={16} /> Launch your first agent</Link>
           </Empty>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -46,7 +46,7 @@ export default function AgentsPage() {
                   <div className="min-w-0">
                     <Link href={`/agents/${a.id}`} className="block truncate text-base font-semibold hover:underline">{a.name}</Link>
                     <div className="mt-1 flex items-center gap-3 text-xs text-base-content/50">
-                      <StatusDot status={a.status} /><span className="capitalize">{a.mode}</span><span>Last run {timeAgo(a.last_run_at)}</span>
+                      <span className={a.status === "active" ? "text-info" : ""}>{a.status === "active" ? "Finding leads" : a.status === "draft" ? "Draft" : "Paused"}</span><span className={a.outreach_enabled ? "text-success" : ""}>{a.outreach_enabled ? "Outreach on" : "Outreach paused"}</span><span className="capitalize">{a.mode}</span><span>Last run {timeAgo(a.last_run_at)}</span>
                     </div>
                   </div>
                   <button className={ghostBtn} onClick={() => toggle(a)}>{a.status === "active" ? <><RiPauseLine size={14} /> Pause</> : <><RiPlayLine size={14} /> Run</>}</button>

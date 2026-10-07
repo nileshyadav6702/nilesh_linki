@@ -60,6 +60,21 @@ export function ScoreBadge({ score, verdict }: { score: number | null | undefine
   );
 }
 
+/** Lead score as 1-3 flames, the way sales teams scan a list. */
+export function Flames({ score }: { score: number | null | undefined }) {
+  if (score === null || score === undefined) return <span className="text-xs text-base-content/30">—</span>;
+  const n = score >= 70 ? 3 : score >= 50 ? 2 : 1;
+  return (
+    <span className="inline-flex items-center gap-0.5" title={`Lead score ${Math.round(score)}`} aria-label={`Lead score ${Math.round(score)}`}>
+      {[1, 2, 3].map((i) => (
+        <svg key={i} width="12" height="14" viewBox="0 0 12 14" aria-hidden="true">
+          <path d="M6 0c.6 2.4 4.8 4.4 4.8 8.2A4.8 4.8 0 0 1 1.2 8.2C1.2 6 2.8 4.6 3.6 3.4c.3 1.5 1.1 2.3 2 2.6C5.4 4 5.4 2 6 0Z" fill={i <= n ? "var(--warning-solid, #e8590c)" : "currentColor"} opacity={i <= n ? 1 : 0.15} />
+        </svg>
+      ))}
+    </span>
+  );
+}
+
 export const SIGNAL_LABEL: Record<string, string> = {
   competitor_engagement: "Competitor engagement",
   influencer_engagement: "Influencer engagement",
@@ -70,6 +85,8 @@ export const SIGNAL_LABEL: Record<string, string> = {
   funding: "Funding",
   website_visit: "Website visit",
   lookalike: "Lookalike",
+  existing_list: "Existing list",
+  linkedin_import: "LinkedIn import",
   technology: "Technology",
   product_intent: "Product intent",
   custom: "Custom",
@@ -107,3 +124,14 @@ export function timeAgo(iso: string | null | undefined): string {
 /** Comma/line separated text ↔ string list, for simple list editing. */
 export const toList = (s: string) => s.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
 export const fromList = (l: string[] | undefined) => (l ?? []).join(", ");
+
+/** "in 3h" for a future timestamp; "due" once it has passed. */
+export function timeUntil(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const t = Date.parse(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
+  const s = (t - Date.now()) / 1000;
+  if (s <= 60) return "due";
+  if (s < 3600) return `in ${Math.round(s / 60)}m`;
+  if (s < 86400) return `in ${Math.round(s / 3600)}h`;
+  return `in ${Math.round(s / 86400)}d`;
+}

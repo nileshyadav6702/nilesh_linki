@@ -190,7 +190,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const SELECT = `SELECT t.id, t.linkedin_url, t.full_name, t.title, t.company, t.location,
           t.email, t.email_status, t.degree,
           t.connection_requested_at, t.connected_at, t.message_sent_at, t.last_replied_at,
-          t.apollo_enriched_at, t.seniority, t.created_at
+          t.apollo_enriched_at, t.seniority, t.created_at,
+          t.lead_score, t.intent_score, t.fit_verdict, t.agent_status,
+          (SELECT s.title FROM signals s WHERE s.target_id = t.id ORDER BY s.occurred_at DESC LIMIT 1) AS top_signal,
+          (SELECT COUNT(*) FROM signals s WHERE s.target_id = t.id) AS signal_count
    FROM targets t`;
 
   let rows: unknown[];

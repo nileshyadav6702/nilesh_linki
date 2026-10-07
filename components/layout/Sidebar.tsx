@@ -24,7 +24,7 @@ import {
   RiShieldUserLine,
   RiRobot2Line,
   RiRadarLine,
-  RiCheckDoubleLine,
+  RiSteering2Line,
 } from "react-icons/ri";
 import { pathToTourPage, replayPageTour } from "@/lib/tour";
 
@@ -39,7 +39,7 @@ const workspaceNav = [
 const agentNav = [
   { href: "/agents", label: "Agents", icon: RiRobot2Line, tour: "nav-agents" },
   { href: "/leads", label: "Leads", icon: RiRadarLine, tour: "nav-leads" },
-  { href: "/approvals", label: "Approvals", icon: RiCheckDoubleLine, tour: "nav-approvals" },
+  { href: "/copilot", label: "Copilot", icon: RiSteering2Line, tour: "nav-copilot" },
 ];
 
 const growthNav = [

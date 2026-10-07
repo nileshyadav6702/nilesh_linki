@@ -1,7 +1,6 @@
 import Head from "next/head";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { GetServerSideProps } from "next";
-import { useRouter } from "next/router";
 import { getDb } from "@/lib/db";
 import { getServerWorkspace, loginRedirect } from "@/lib/server-workspace";
 import { toast } from "sonner";
@@ -13,6 +12,8 @@ import {
 } from "react-icons/ri";
 import FilterBar, { ActiveFilter, filtersToParams } from "@/components/ui/FilterBar";
 import { emailStatusBadge } from "@/lib/email-status";
+import LeadDrawer from "@/components/agents/LeadDrawer";
+import { Flames } from "@/components/agents/ui";
 
 const PAGE_SIZE = 50;
 
@@ -34,6 +35,10 @@ interface Contact {
   apollo_enriched_at: string | null;
   seniority: string | null;
   created_at: string;
+  lead_score: number | null;
+  intent_score: number | null;
+  top_signal: string | null;
+  signal_count: number;
 }
 
 interface ListOption {
@@ -80,7 +85,6 @@ function ConnectionIcon({ t }: { t: Contact }) {
 }
 
 export default function ContactsPage({ lists, total: initialTotal }: { lists: ListOption[]; total: number }) {
-  const router = useRouter();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(0);
@@ -101,6 +105,7 @@ export default function ContactsPage({ lists, total: initialTotal }: { lists: Li
   const [addToListLoading, setAddToListLoading] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [drawer, setDrawer] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
@@ -319,7 +324,8 @@ export default function ContactsPage({ lists, total: initialTotal }: { lists: Li
                     <th>Name</th>
                     <th>Title</th>
                     <th>Company</th>
-                    <th>Location</th>
+                    <th>Signal</th>
+                    <th className="w-20">Score</th>
                     <th>Email</th>
                     <th className="w-24">Status</th>
                     <th className="w-8"></th>
@@ -330,7 +336,7 @@ export default function ContactsPage({ lists, total: initialTotal }: { lists: Li
                     <tr
                       key={c.id}
                       className={`border-b border-[var(--border-subtle)] last:border-0 cursor-pointer transition-colors ${selected.has(c.id) ? "bg-base-200" : "hover:bg-base-200"}`}
-                      onClick={() => router.push(`/contacts/${c.id}`)}
+                      onClick={() => setDrawer(c.id)}
                     >
                       <td onClick={(e) => e.stopPropagation()}>
                         <input
@@ -350,7 +356,10 @@ export default function ContactsPage({ lists, total: initialTotal }: { lists: Li
                       </td>
                       <td className="text-base-content/60 max-w-44 truncate">{c.title ?? "—"}</td>
                       <td className="text-base-content/60 truncate max-w-36">{c.company ?? "—"}</td>
-                      <td className="text-base-content/45 text-xs truncate max-w-32">{c.location ?? "—"}</td>
+                      <td className="max-w-56 text-xs">
+                        {c.top_signal ? <div className="flex items-center gap-1.5"><span className="truncate text-base-content/70">{c.top_signal}</span>{c.signal_count > 1 && <span className="shrink-0 rounded bg-base-200 px-1.5 text-[11px] text-base-content/50">+{c.signal_count - 1}</span>}</div> : <span className="text-base-content/30">—</span>}
+                      </td>
+                      <td>{c.lead_score !== null || (c.intent_score ?? 0) > 0 ? <Flames score={c.lead_score ?? c.intent_score} /> : <span className="text-base-content/30">—</span>}</td>
                       <td className="text-base-content/60 text-xs font-mono truncate max-w-40">{c.email ?? <span className="text-base-content/30">—</span>}</td>
                       <td onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-1.5">
@@ -586,6 +595,7 @@ export default function ContactsPage({ lists, total: initialTotal }: { lists: Li
           <div className="modal-backdrop" onClick={() => !deleteLoading && setShowDeleteConfirm(false)} />
         </div>
       )}
+      <LeadDrawer targetId={drawer} onClose={() => setDrawer(null)} onChanged={() => fetch_(page, listId, debouncedSearch, filters)} />
     </>
   );
 }

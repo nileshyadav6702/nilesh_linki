@@ -16,7 +16,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const agent = getAgent(String(req.query.id), ctx.workspaceId);
   if (!agent) return res.status(404).json({ error: "Agent not found" });
   const db = getDb();
-  const sources = listSources(agent.id, ctx.workspaceId).filter((s) => s.enabled);
+  // ?source_id= runs just that source ("Launch now" on one row).
+  const only = typeof req.query.source_id === "string" ? req.query.source_id : null;
+  const sources = listSources(agent.id, ctx.workspaceId).filter((s) => s.enabled && (!only || s.id === only));
   const http: Array<{ source_type: string; ingested: number; error: string | null }> = [];
   let queued = 0;
   for (const s of sources) {
@@ -28,7 +30,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       http.push({ source_type: s.source_type, ingested: r.ingested, error: r.error });
     }
   }
-  const pass = await runAgentPass(agent);
+  const pass = only ? null : await runAgentPass(agent);
   return res.json({ linkedin_sources_queued: queued, http_sources: http, pass, note: agent.status !== "active" && queued ? "LinkedIn sources run only while the agent is active" : undefined });
 }
 

@@ -24,7 +24,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const runs = db.prepare(`SELECT dr.*, s.source_type FROM detector_runs dr JOIN agent_sources s ON s.id = dr.agent_source_id
       WHERE s.agent_id = ? ORDER BY dr.started_at DESC LIMIT 20`).all(id);
     return res.json({
-      agent, sources: listSources(id, ctx.workspaceId), runs, counts: agentCounts(db, id),
+      agent, runs, counts: agentCounts(db, id),
+      sources: listSources(id, ctx.workspaceId).map((src) => ({ ...src, leads: (db.prepare("SELECT COALESCE(SUM(ingested), 0) n FROM detector_runs WHERE agent_source_id = ?").get(src.id) as { n: number }).n })),
       funnel: signalFunnel(db, ctx.workspaceId, id), sequence: sequenceSteps(db, agent.workflow_id),
       workflow: agent.workflow_id ? db.prepare("SELECT id, name FROM workflows WHERE id = ?").get(agent.workflow_id) ?? null : null,
       linkedin_budget: agent.linkedin_account_id ? budgetSnapshot(agent.linkedin_account_id) : null,
