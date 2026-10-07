@@ -1,0 +1,45 @@
+import type { NextApiRequest, NextApiResponse } from "next";
+import { getDb } from "@/lib/db";
+import { enrollLead } from "@/lib/agents/enroll";
+import { enrichTargetEmail } from "@/lib/enrichment/waterfall";
+import type { Agent } from "@/lib/agents/store";
+import { recordAudit, requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+
+// PATCH /api/leads/:id { action: 'enroll' | 'skip' | 'requalify' | 'find_email', reason? }
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "PATCH") { res.setHeader("Allow", ["PATCH"]); return res.status(405).end(); }
+  const ctx = requireWorkspace(req, res, "member");
+  if (!ctx) return;
+  const id = String(req.query.id);
+  if (!requireWorkspaceEntity(res, ctx, "targets", id)) return;
+  const db = getDb();
+  const action = String(req.body?.action ?? "");
+  const lead = db.prepare("SELECT id, agent_id FROM targets WHERE id = ?").get(id) as { id: string; agent_id: string | null };
+  const agent = lead.agent_id ? db.prepare("SELECT * FROM agents WHERE id = ? AND workspace_id = ?").get(lead.agent_id, ctx.workspaceId) as Agent | undefined : undefined;
+
+  if (action === "skip") {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.slice(0, 300) : "Skipped by user";
+    db.prepare("UPDATE targets SET agent_status = 'skipped', skip_reason = ?, agent_status_at = datetime('now') WHERE id = ?").run(reason, id);
+    db.prepare("UPDATE approval_queue SET status = 'rejected', decided_by = ?, decided_at = datetime('now') WHERE target_id = ? AND status = 'pending'").run(ctx.userId, id);
+    recordAudit(ctx, "lead.skipped", "contact", id, { reason });
+    return res.json({ ok: true });
+  }
+  if (action === "requalify") {
+    db.prepare("UPDATE targets SET agent_status = 'new', scored_icp_id = NULL, skip_reason = NULL, agent_status_at = datetime('now') WHERE id = ?").run(id);
+    return res.json({ ok: true });
+  }
+  if (action === "enroll") {
+    if (!agent) return res.status(400).json({ error: "This contact is not managed by an agent" });
+    const pending = (db.prepare("SELECT COUNT(*) n FROM approval_queue WHERE target_id = ? AND status = 'pending'").get(id) as { n: number }).n;
+    if (pending) return res.status(409).json({ error: "Review the pending drafts first" });
+    const r = enrollLead(db, agent, id);
+    if (!r.enrolled) return res.status(400).json({ error: r.reason });
+    recordAudit(ctx, "lead.enrolled", "contact", id);
+    return res.json({ ok: true });
+  }
+  if (action === "find_email") {
+    const r = await enrichTargetEmail(db, ctx.workspaceId, id);
+    return res.json({ found: !!r, ...r });
+  }
+  return res.status(400).json({ error: "Unknown action" });
+}

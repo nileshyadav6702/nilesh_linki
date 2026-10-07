@@ -30,6 +30,7 @@ export function isPrivateAddress(ip: string): boolean {
 
 export function normalizeWebsiteUrl(input: string): URL {
   const raw = input.trim();
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) && !/^https?:\/\//i.test(raw)) throw new UnsafeUrlError("Only http(s) URLs are allowed");
   const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
   if (!["http:", "https:"].includes(url.protocol)) throw new UnsafeUrlError("Only http(s) URLs are allowed");
   if (url.username || url.password) throw new UnsafeUrlError("URLs with credentials are not allowed");
@@ -94,7 +95,8 @@ export function htmlToText(html: string): string {
 
 export function extractInterestingLinks(html: string, base: URL, limit = MAX_SUBPAGES): URL[] {
   const out = new Map<string, URL>();
-  for (const m of html.matchAll(/<a[^>]+href=["']([^"'#]+)["']/gi)) {
+  for (const m of html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)) {
+    if (m[1].startsWith("#")) continue;
     let u: URL;
     try { u = new URL(m[1], base); } catch { continue; }
     if (u.origin !== base.origin) continue;
