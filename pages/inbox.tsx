@@ -15,6 +15,7 @@ import {
 } from "react-icons/ri";
 import type { InboxReply } from "./api/inbox/index";
 import type { EmailMessage } from "./api/inbox/thread";
+import AiDraftButton from "@/components/agents/AiDraftButton";
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -361,7 +362,8 @@ function ReplyModal({ reply, onClose, onActionDone, hasPremium, savedReplies }: 
               className="w-full bg-base-100 border border-[var(--border)] rounded-[10px] px-3 py-2 text-sm text-base-content placeholder:text-base-content/35 focus:outline-none focus:border-[var(--border-focus)] resize-none"
             />
             {savedReplies.length>0&&<select className="select select-bordered select-xs w-full" defaultValue="" onChange={(e)=>{const saved=savedReplies.find(x=>x.id===e.target.value);if(saved)setReplyText(saved.body);e.target.value="";}}><option value="">Insert saved reply…</option>{savedReplies.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>}
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <AiDraftButton replyId={reply.reply_id} onDraft={setReplyText} />
               <button
                 onClick={handleSend}
                 disabled={!replyText.trim() || sending}

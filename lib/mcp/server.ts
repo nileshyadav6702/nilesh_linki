@@ -4,13 +4,14 @@ import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import type { McpScope } from "@/lib/mcp/auth";
+import { registerAgentTools } from "@/lib/mcp/agent-tools";
 import { getMemberships, getMembership } from "@/lib/workspace";
 
 type JsonObject = Record<string, unknown>;
 type ApiOptions = { method?: string; query?: Record<string, string | number | boolean | undefined>; body?: unknown };
 
-const MCP_DOMAINS = ["contacts","companies","lists","imports","templates","workflows","workflow-steps","outreach-previews","conditional-branches","runs","enrollments","LinkedIn-senders","email-senders","reply-intelligence","team-inbox","todos","activities","suppression","deliverability","signals","custom-fields","pipeline","meetings","CRM-sync","calendar-sync","integration-credentials","AI-configuration","domain-events","webhooks","API-keys","workspaces","invitations","members","RBAC","audit","settings"];
-const MCP_ROUTE_FAMILIES = ["accounts","activity-logs","agent/preview","companies","dashboard","email-accounts","email-accounts/gmail-app-password","email-health","imports","inbox","integrations","lists","openrouter/models","platform/*","premium-status","runs","settings/import-cap","targets","templates","todos","tour","workflows","workflows/preview"];
+const MCP_DOMAINS = ["contacts","companies","lists","imports","templates","workflows","workflow-steps","outreach-previews","conditional-branches","runs","enrollments","LinkedIn-senders","email-senders","reply-intelligence","team-inbox","todos","activities","suppression","deliverability","signals","custom-fields","pipeline","meetings","CRM-sync","calendar-sync","integration-credentials","AI-configuration","domain-events","webhooks","API-keys","workspaces","invitations","members","RBAC","audit","settings","ICP","AI-agents","signal-sources","leads","approvals","email-waterfall","website-visitors"];
+const MCP_ROUTE_FAMILIES = ["accounts","activity-logs","agent/preview","companies","dashboard","email-accounts","email-accounts/gmail-app-password","email-health","imports","inbox","integrations","lists","openrouter/models","platform/*","premium-status","runs","settings/import-cap","targets","templates","todos","tour","workflows","workflows/preview","icp","agents","leads","approvals","enrichment","site-pixel"];
 const MCP_FEATURES = ["contact-specific manual and AI outreach previews","Gmail sender connection using an app password","plain or enhanced email delivery with open/click tracking controls","switching the active workspace within a connection","AI spend and token analytics","granular run enrollment, removal and retry","live per-contact email thread and direct send","email step A/B testing (up to 4 variants, random per send) with per-variant sent/open/click analytics"];
 const MCP_EXCLUSIONS = ["password authentication and signup","OAuth token issuance/revocation","the MCP endpoint itself","host software update","public invitation acceptance","the versioned public-API façade (its underlying workspace operations are exposed directly)","the diagnostic hello endpoint"];
 
@@ -627,6 +628,7 @@ export function createLinkiMcpServer(input: { origin: string; auth: AuthInfo }) 
     });
   });
 
+  registerAgentTools(server, api, run);
   registerResources(server, api);
   registerPrompts(server);
   return server;

@@ -6,6 +6,7 @@ import { getDb } from "@/lib/db";
 import { getServerWorkspace, loginRedirect } from "@/lib/server-workspace";
 import { emailStatusBadge } from "@/lib/email-status";
 import { toast } from "sonner";
+import ContactSignals from "@/components/agents/ContactSignals";
 import {
   RiArrowLeftLine, RiExternalLinkLine, RiMailLine, RiBuilding2Line,
   RiUserFollowLine, RiUserAddLine, RiMapPinLine, RiBriefcaseLine,
@@ -1012,6 +1013,8 @@ export default function ContactDetailPage({
 
           {/* Left col — 2/3 */}
           <div className="flex-1 min-w-0 w-full">
+
+        <ContactSignals targetId={target.id} />
 
         {/* Contact info */}
         <div className="bg-base-100 border border-[var(--border-subtle)] rounded-2xl shadow-[var(--shadow-raised)] p-5 mb-4">

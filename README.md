@@ -39,6 +39,18 @@ No SaaS middleman. No per-seat pricing. No black box.
 
 ## Features
 
+### 🤖 AI SDR agents (signal-based prospecting)
+
+- **ICP from your website**: paste your URL and Linki drafts your ideal customer profile — offer, personas, competitors, topics, exclusions — for you to edit
+- **Buying signals**: agents watch for people engaging with competitors', creators' or your own LinkedIn posts, people active on your topics, job changes, companies hiring (Greenhouse/Lever/Ashby), recent funding (news feeds), website visitors (pixel + IPinfo) and Sales Navigator lookalikes
+- **Lead scoring**: an AI ICP-fit verdict with its reason, blended with a decaying intent score; competitors' employees and excluded titles are filtered before any spend
+- **Signal-aware first touch**: drafts that open on the lead's real signal, reviewed in an approval queue (copilot) or sent after a delay (autopilot)
+- **Email waterfall**: Apollo, Hunter, Prospeo, Findymail, then pattern + SMTP check — first verified address wins
+- **AI reply drafts** in the inbox with your meeting link, and a funnel per signal type showing what turns into meetings
+- **Safe by design**: discovery runs after outreach in the same LinkedIn session, under small per-account daily request budgets, only in active hours, and pauses for 24h if LinkedIn pushes back
+
+Start at **AI SDR → Agents → New agent**. Configure an OpenRouter key and default model in Settings first. Design notes: [docs/prd/ai-signal-sdr-prd.md](docs/prd/ai-signal-sdr-prd.md).
+
 ### 📬 Multichannel Campaigns
 
 - **LinkedIn + email in one campaign**: run LinkedIn actions (visit, connect, message) and email actions in parallel within a single campaign sequence

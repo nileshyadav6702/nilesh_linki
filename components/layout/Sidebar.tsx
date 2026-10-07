@@ -22,6 +22,9 @@ import {
   RiMenuLine,
   RiCloseLine,
   RiShieldUserLine,
+  RiRobot2Line,
+  RiRadarLine,
+  RiCheckDoubleLine,
 } from "react-icons/ri";
 import { pathToTourPage, replayPageTour } from "@/lib/tour";
 
@@ -31,6 +34,12 @@ const workspaceNav = [
   { href: "/", label: "Overview", icon: RiLayoutGridLine, tour: "nav-dashboard" },
   { href: "/inbox", label: "Inbox", icon: RiInboxLine, tour: "nav-inbox" },
   { href: "/todos", label: "Tasks", icon: RiCheckboxCircleLine, tour: "nav-todos", premium: true },
+];
+
+const agentNav = [
+  { href: "/agents", label: "Agents", icon: RiRobot2Line, tour: "nav-agents" },
+  { href: "/leads", label: "Leads", icon: RiRadarLine, tour: "nav-leads" },
+  { href: "/approvals", label: "Approvals", icon: RiCheckDoubleLine, tour: "nav-approvals" },
 ];
 
 const growthNav = [
@@ -57,7 +66,7 @@ const mobilePrimary = [workspaceNav[0], workspaceNav[1], growthNav[3], growthNav
 export const SIDEBAR_WIDTH_EXPANDED = 264;
 export const SIDEBAR_WIDTH_COLLAPSED = 264;
 
-type NavItem = (typeof workspaceNav)[number] | (typeof growthNav)[number] | (typeof systemNav)[number] | (typeof adminNav)[number];
+type NavItem = (typeof workspaceNav)[number] | (typeof agentNav)[number] | (typeof growthNav)[number] | (typeof systemNav)[number] | (typeof adminNav)[number];
 
 function initials(value?: string | null) {
   if (!value) return "LK";
@@ -138,6 +147,7 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
 
         <div className="flex-1 overflow-y-auto px-3 py-3">
           <NavSection label="Workspace" items={workspaceNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
+          <NavSection label="AI SDR" items={agentNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
           <NavSection label="Build pipeline" items={growthNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
           <NavSection label="Operations" items={systemNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
           {isSuperadmin && (
@@ -227,6 +237,7 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
             </div>
             <div className="space-y-4">
               <MobileSection label="Workspace" items={workspaceNav} render={(item) => <MobileLink key={item.href} item={item} />} />
+              <MobileSection label="AI SDR" items={agentNav} render={(item) => <MobileLink key={item.href} item={item} />} />
               <MobileSection label="Build pipeline" items={growthNav} render={(item) => <MobileLink key={item.href} item={item} />} />
               <div>
                 <h3 className="mb-1 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">Operations</h3>

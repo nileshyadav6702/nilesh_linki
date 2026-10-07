@@ -2,8 +2,9 @@ import Head from "next/head";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
+import SignalDataSettings from "@/components/agents/SignalDataSettings";
 
-type Tab = "overview" | "deliverability" | "automation" | "integrations" | "admin";
+type Tab = "overview" | "deliverability" | "automation" | "ai_data" | "integrations" | "admin";
 type Data = Record<string, unknown>;
 
 const API_KEY_SCOPES = ["contacts:read", "contacts:write", "campaigns:read", "campaigns:write", "events:read", "events:write", "signals:write", "crm:read", "crm:write", "email:send"];
@@ -11,7 +12,7 @@ const DEFAULT_API_KEY_SCOPES = new Set(["contacts:read", "contacts:write", "camp
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "overview", label: "Overview" }, { id: "deliverability", label: "Deliverability" },
-  { id: "automation", label: "Automation & signals" }, { id: "integrations", label: "CRM & calendar" },
+  { id: "automation", label: "Automation & signals" }, { id: "ai_data", label: "AI data sources" }, { id: "integrations", label: "CRM & calendar" },
   { id: "admin", label: "Workspace & API" },
 ];
 
@@ -116,6 +117,8 @@ export default function PlatformPage() {
         <Section title="Conditional workflows" subtitle="Campaign steps can branch on connection, reply, email availability, intent score, signals, target fields, and custom fields."><p className="text-sm text-base-content/55">Branches are available in the workflow API and MCP tools. Branch targets are validated as forward-only to prevent accidental loops.</p></Section>
         <Section title="Reply intelligence" subtitle="Positive, negative, out-of-office, unsubscribe, and human-review classification."><div className="grid grid-cols-2 gap-2">{["positive","negative","out_of_office","unsubscribe","human_review"].map(k=><div key={k} className="rounded-[10px] border border-[var(--border-subtle)] bg-base-200 px-3 py-2 text-xs text-base-content/70">{k.replaceAll("_"," ")}</div>)}</div></Section>
       </div>}
+
+      {tab === "ai_data" && <SignalDataSettings />}
 
       {tab === "integrations" && <div className="space-y-5">
         <div className="grid lg:grid-cols-2 gap-5">

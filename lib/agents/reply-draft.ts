@@ -39,7 +39,7 @@ export async function draftReply(db: Database.Database, workspaceId: string, rep
       "Positive or curious reply: thank them briefly, answer what they asked using only facts in data.offer, and propose a short call." + (booking ? " Offer the booking link in data.booking_url." : " Suggest two concrete time windows in the next three business days."),
       "Objection: acknowledge it in one sentence, address it with one fact from data.offer, and leave the door open. Not interested or unsubscribe: a one-line courteous close, nothing else.",
       "Out of office: a one-line note that you will follow up after they return.",
-      "Plain text, 30-120 words, sign off with first name only placeholder {{sender_first_name}}. Never invent facts, prices or customers.",
+      "Plain text, 30-120 words, no signature block (the sender's mail client adds it). Never invent facts, prices or customers.",
     ],
     data: {
       classification: kind,
