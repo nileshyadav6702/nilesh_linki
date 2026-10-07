@@ -6,7 +6,7 @@ import { ingestSignal } from "@/lib/platform/signals";
 import { emitDomainEvent } from "@/lib/platform/events";
 import { communityAi } from "@/lib/community-ai";
 import { scoreNewLeads } from "@/lib/agents/fit";
-import { draftChannels, queueDraft, strongestSignals, writeFirstTouch } from "@/lib/agents/drafts";
+import { draftableSteps, queueDraft, strongestSignals, writeSequence } from "@/lib/agents/drafts";
 import { autoApproveDue } from "@/lib/agents/approvals";
 import { enrollLead, workflowChannels } from "@/lib/agents/enroll";
 import { enrichTargetEmail } from "@/lib/enrichment/waterfall";
@@ -34,9 +34,11 @@ function adoptListMembers(db: Database.Database, agent: Agent): number {
   if (!agent.list_id) return 0;
   const rows = db.prepare(`SELECT t.id FROM list_targets lt JOIN targets t ON t.id = lt.target_id
     WHERE lt.list_id = ? AND t.agent_status IS NULL LIMIT 200`).all(agent.list_id) as Array<{ id: string }>;
+  // Members arrive via Sales Navigator imports (lookalike search or a pasted URL) or by hand.
+  const lookalike = !!db.prepare("SELECT 1 FROM agent_sources WHERE agent_id = ? AND source_type = 'lookalike' AND enabled = 1").get(agent.id);
   for (const r of rows) {
-    db.prepare("UPDATE targets SET agent_id = COALESCE(agent_id, ?), agent_status = 'new', agent_status_at = datetime('now'), lead_source = COALESCE(lead_source, 'lookalike') WHERE id = ?").run(agent.id, r.id);
-    ingestSignal({ workspaceId: agent.workspace_id, targetId: r.id, type: "lookalike", title: "Matches your ideal customer profile", source: "agent:lookalike", agentId: agent.id, dedupeKey: `lookalike:${agent.id}:${r.id}` });
+    db.prepare("UPDATE targets SET agent_id = COALESCE(agent_id, ?), agent_status = 'new', agent_status_at = datetime('now'), lead_source = COALESCE(lead_source, ?) WHERE id = ?").run(agent.id, lookalike ? "lookalike" : "imported", r.id);
+    if (lookalike) ingestSignal({ workspaceId: agent.workspace_id, targetId: r.id, type: "lookalike", title: "Matches your ideal customer profile", source: "agent:lookalike", agentId: agent.id, dedupeKey: `lookalike:${agent.id}:${r.id}` });
   }
   return rows.length;
 }
@@ -54,12 +56,17 @@ async function enrichQualified(db: Database.Database, agent: Agent, limit = 5): 
 async function draftQualified(db: Database.Database, agent: Agent, icp: ReturnType<typeof getLatestIcp>): Promise<{ drafted: number; enrolled: number }> {
   const room = agent.daily_lead_cap - handledToday(db, agent.id);
   if (room <= 0) return { drafted: 0, enrolled: 0 };
-  const leads = db.prepare(`SELECT id, linkedin_url, email FROM targets WHERE agent_id = ? AND agent_status = 'qualified'
-    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, Math.min(room, 10)) as Array<{ id: string; linkedin_url: string | null; email: string | null }>;
+  const leads = db.prepare(`SELECT id, linkedin_url, email, degree FROM targets WHERE agent_id = ? AND agent_status = 'qualified'
+    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, Math.min(room, 10)) as Array<{ id: string; linkedin_url: string | null; email: string | null; degree: number | null }>;
   const aiReady = isAiConfigured(agent.workspace_id);
   let drafted = 0; let enrolled = 0;
   for (const lead of leads) {
-    const channels = draftChannels(db, agent, lead);
+    if (agent.exclude_first_degree && lead.degree === 1) {
+      db.prepare("UPDATE targets SET agent_status = 'skipped', skip_reason = 'Already a 1st-degree connection', agent_status_at = datetime('now') WHERE id = ?").run(lead.id);
+      continue;
+    }
+    const steps = draftableSteps(db, agent, lead);
+    const channels = [...new Set(steps.map((s) => s.channel!))];
     // Without AI (or with a campaign that has no first message to personalise), the lead
     // goes straight into the campaign in autopilot, or waits for a one-click approve in copilot.
     if (!aiReady || !channels.length) {
@@ -71,9 +78,10 @@ async function draftQualified(db: Database.Database, agent: Agent, icp: ReturnTy
     if (!bundle) continue;
     const signals = strongestSignals(db, lead.id);
     try {
-      for (const channel of channels) {
-        const draft = await writeFirstTouch(agent, icp?.data ?? null, channel, bundle.contact, bundle.company, signals);
-        queueDraft(db, agent, lead.id, channel, draft, signals[0]?.id ?? null);
+      const written = await writeSequence(agent, icp?.data ?? null, steps, { contact: bundle.contact, company: bundle.company, signals });
+      for (const step of steps) {
+        const draft = written.get(step.id);
+        if (draft) queueDraft(db, agent, lead.id, step.channel!, draft, signals[0]?.id ?? null, step);
       }
       db.prepare("UPDATE targets SET agent_status = 'drafted', agent_status_at = datetime('now') WHERE id = ?").run(lead.id);
       emitDomainEvent({ workspaceId: agent.workspace_id, type: "draft.pending", entityType: "contact", entityId: lead.id, payload: { agent_id: agent.id, channels } });

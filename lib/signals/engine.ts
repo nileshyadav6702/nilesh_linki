@@ -12,6 +12,7 @@ import { jobChangeRunner } from "@/lib/signals/sources/job-change";
 import { hiringRunner } from "@/lib/signals/sources/hiring";
 import { fundingRunner } from "@/lib/signals/sources/funding";
 import { lookalikeRunner } from "@/lib/signals/sources/lookalike";
+import { existingListRunner, linkedinImportRunner } from "@/lib/signals/sources/imports";
 import type { EmitResult, EmittedSignal, SourceRunContext, SourceRunner } from "@/lib/signals/sources/types";
 import type { VoyagerLike } from "@/lib/linkedin/engagers";
 
@@ -24,6 +25,8 @@ const RUNNERS: Record<SourceType, SourceRunner> = {
   hiring: hiringRunner,
   funding: fundingRunner,
   lookalike: lookalikeRunner,
+  existing_list: existingListRunner,
+  linkedin_import: linkedinImportRunner,
 };
 
 /** New leads one agent may add per day, so a viral post can't flood the workspace. */
@@ -53,7 +56,7 @@ function findOrCreateCompany(db: Database.Database, workspaceId: string, c: { na
 
 export interface RunStats { candidates: number; ingested: number; filtered: number; duplicates: number }
 
-export function buildContext(db: Database.Database, agent: Agent, source: AgentSource, detectorRunId: string, stats: RunStats, deps: { voyager?: VoyagerLike; browser?: BrowserContext }): SourceRunContext {
+export function buildContext(db: Database.Database, agent: Agent, source: AgentSource, detectorRunId: string, stats: RunStats, deps: { voyager?: VoyagerLike; browser?: BrowserContext; maxNew?: number }): SourceRunContext {
   const icpRecord = agent.icp_id ? getIcp(agent.icp_id, agent.workspace_id) : getLatestIcp(agent.workspace_id);
   const icp = icpRecord?.data ?? null;
   const cap = discoveryCap(agent);
@@ -69,13 +72,14 @@ export function buildContext(db: Database.Database, agent: Agent, source: AgentS
   };
 
   return {
-    db, workspaceId: agent.workspace_id, agent, source, config: parseSourceConfig(source.config_json), icp, detectorRunId, cursor, ...deps,
+    db, workspaceId: agent.workspace_id, agent, source, config: parseSourceConfig(source.config_json), icp, detectorRunId, cursor, voyager: deps.voyager, browser: deps.browser,
+    isFull: () => deps.maxNew !== undefined && stats.ingested >= deps.maxNew,
     emitLead(candidate, signal): EmitResult {
       stats.candidates++;
       if (signalExists(db, agent.workspace_id, signal.dedupeKey)) { stats.duplicates++; return "duplicate"; }
       const verdict = prefilterLead(candidate, { icp });
       if (!verdict.ok) { stats.filtered++; return "filtered"; }
-      if (newLeadsToday(db, agent.id) >= cap) return "capped";
+      if (newLeadsToday(db, agent.id) >= cap || (deps.maxNew !== undefined && stats.ingested >= deps.maxNew)) return "capped";
       const { targetId } = upsertLead(db, agent.workspace_id, agent.id, candidate, signal.type === "lookalike" ? "lookalike" : "signal");
       addToList(db, agent.list_id, targetId);
       ingest(targetId, undefined, signal, signal.dedupeKey);
@@ -108,7 +112,7 @@ export function buildContext(db: Database.Database, agent: Agent, source: AgentS
 }
 
 /** Run one source now. Records a detector_runs row and reschedules the source. */
-export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLike & { requests?: number }; browser?: BrowserContext } = {}): Promise<RunStats & { error: string | null }> {
+export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLike & { requests?: number }; browser?: BrowserContext; maxNew?: number } = {}): Promise<RunStats & { error: string | null }> {
   const db = getDb();
   const agent = db.prepare("SELECT * FROM agents WHERE id = ?").get(source.agent_id) as Agent | undefined;
   const stats: RunStats = { candidates: 0, ingested: 0, filtered: 0, duplicates: 0 };

@@ -1,18 +1,21 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { enrollLead } from "@/lib/agents/enroll";
+import { getLeadDetail } from "@/lib/agents/copilot";
 import { enrichTargetEmail } from "@/lib/enrichment/waterfall";
 import type { Agent } from "@/lib/agents/store";
 import { recordAudit, requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
 
+// GET   /api/leads/:id → profile, company, signals, agent and the full sequence with drafts
 // PATCH /api/leads/:id { action: 'enroll' | 'skip' | 'requalify' | 'find_email', reason? }
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "PATCH") { res.setHeader("Allow", ["PATCH"]); return res.status(405).end(); }
-  const ctx = requireWorkspace(req, res, "member");
+  if (req.method !== "PATCH" && req.method !== "GET") { res.setHeader("Allow", ["GET", "PATCH"]); return res.status(405).end(); }
+  const ctx = requireWorkspace(req, res, req.method === "GET" ? "viewer" : "member");
   if (!ctx) return;
   const id = String(req.query.id);
   if (!requireWorkspaceEntity(res, ctx, "targets", id)) return;
   const db = getDb();
+  if (req.method === "GET") return res.json(getLeadDetail(db, ctx.workspaceId, id));
   const action = String(req.body?.action ?? "");
   const lead = db.prepare("SELECT id, agent_id FROM targets WHERE id = ?").get(id) as { id: string; agent_id: string | null };
   const agent = lead.agent_id ? db.prepare("SELECT * FROM agents WHERE id = ? AND workspace_id = ?").get(lead.agent_id, ctx.workspaceId) as Agent | undefined : undefined;

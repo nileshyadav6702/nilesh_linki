@@ -27,7 +27,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (refError) return res.status(400).json({ error: refError });
     // Onboarding can ask for a ready-made campaign instead of picking an existing one.
     if (!parsed.data.workflow_id && req.body?.create_default_campaign) {
-      parsed.data.workflow_id = createDefaultCampaign(db, ctx.workspaceId, `${parsed.data.name} · signal outreach`, !!parsed.data.email_account_id);
+      parsed.data.workflow_id = createDefaultCampaign(db, ctx.workspaceId, `${parsed.data.name} · signal outreach`, parsed.data.email_account_id ? parsed.data.channel : (parsed.data.channel === "email" ? "email" : "linkedin"));
     }
     const sources = Array.isArray(req.body?.sources) ? req.body.sources as Array<{ source_type?: unknown; config?: unknown; interval_hours?: unknown }> : [];
     for (const s of sources) if (!isSourceType(s.source_type)) return res.status(400).json({ error: `Unknown source type: ${String(s.source_type)}` });

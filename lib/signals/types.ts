@@ -39,6 +39,8 @@ export const SOURCE_TYPES = {
   hiring: { signal: "hiring", needsLinkedIn: false, configHint: "Greenhouse / Lever / Ashby board slugs + role keywords" },
   funding: { signal: "funding", needsLinkedIn: false, configHint: "News RSS feeds announcing funding rounds" },
   lookalike: { signal: "lookalike", needsLinkedIn: true, configHint: "Imports people matching the ICP from Sales Navigator" },
+  existing_list: { signal: "custom", needsLinkedIn: false, configHint: "Leads from your existing lists or CSV imports" },
+  linkedin_import: { signal: "lookalike", needsLinkedIn: false, configHint: "A Sales Navigator list or search URL to import" },
 } as const;
 
 export type SourceType = keyof typeof SOURCE_TYPES;

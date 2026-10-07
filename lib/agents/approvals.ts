@@ -34,6 +34,30 @@ export function decideDraft(db: Database.Database, workspaceId: string, id: stri
   return { ok: true as const, ...settled };
 }
 
+/** Save an edit to a pending draft without deciding it. */
+export function saveDraft(db: Database.Database, workspaceId: string, id: string, edits: { subject?: string | null; body?: string }) {
+  const row = db.prepare("SELECT status FROM approval_queue WHERE id = ? AND workspace_id = ?").get(id, workspaceId) as { status: string } | undefined;
+  if (!row) return { ok: false as const, error: "Draft not found" };
+  if (row.status !== "pending") return { ok: false as const, error: `Draft already ${row.status}` };
+  if (edits.body !== undefined && edits.body.trim().length < 2) return { ok: false as const, error: "Message body is empty" };
+  db.prepare("UPDATE approval_queue SET subject = COALESCE(?, subject), body = COALESCE(?, body), updated_at = datetime('now') WHERE id = ?")
+    .run(edits.subject ?? null, edits.body?.trim() ?? null, id);
+  return { ok: true as const };
+}
+
+/**
+ * Copilot decides per contact: approving approves every pending step draft (enrolling the
+ * lead); rejecting rejects them all and skips the lead.
+ */
+export function decideLead(db: Database.Database, workspaceId: string, targetId: string, decision: "approve" | "reject", userId: string | null, reason?: string) {
+  const pending = db.prepare("SELECT id FROM approval_queue WHERE target_id = ? AND workspace_id = ? AND status = 'pending' ORDER BY position").all(targetId, workspaceId) as Array<{ id: string }>;
+  if (!pending.length) return { ok: false as const, error: "Nothing to review for this contact" };
+  let last: ReturnType<typeof decideDraft> = { ok: false, error: "Nothing decided" };
+  for (const d of pending) last = decideDraft(db, workspaceId, d.id, decision, userId);
+  if (decision === "reject" && reason) db.prepare("UPDATE targets SET skip_reason = ? WHERE id = ?").run(reason.slice(0, 300), targetId);
+  return last;
+}
+
 /** Autopilot: approve drafts whose review window has passed. */
 export function autoApproveDue(db: Database.Database, agent: Agent): number {
   const due = db.prepare("SELECT id FROM approval_queue WHERE agent_id = ? AND status = 'pending' AND auto_approve_at IS NOT NULL AND auto_approve_at <= ?")

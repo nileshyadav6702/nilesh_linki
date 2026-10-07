@@ -701,8 +701,8 @@ async function executeStep(
       }
 
       let messageText = "";
-      // An AI agent's approved first touch replaces the step's own content, once.
-      const approvedDraft = (step.message_position ?? 1) === 1 ? takeApprovedDraft(db, target.id, "linkedin_message") : null;
+      // An AI agent's approved draft for this step replaces the step's own content, once.
+      const approvedDraft = takeApprovedDraft(db, target.id, "linkedin_message", step.id, (step.message_position ?? 1) === 1);
       if (approvedDraft) {
         messageText = approvedDraft.body;
         log(db, runId, target.id, "info", `Using the approved agent draft for ${name}`);
@@ -959,7 +959,7 @@ async function executeStep(
       let emailSubject = "";
       let emailBody = "";
       let emailVariantId: string | null = null;
-      const approvedEmail = (step.email_position ?? 1) === 1 ? takeApprovedDraft(db, target.id, "email") : null;
+      const approvedEmail = takeApprovedDraft(db, target.id, "email", step.id, (step.email_position ?? 1) === 1);
       if (approvedEmail) {
         emailSubject = approvedEmail.subject ?? "";
         emailBody = approvedEmail.body;

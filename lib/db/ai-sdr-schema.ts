@@ -119,7 +119,27 @@ const STATEMENTS: string[] = [
 
   "ALTER TABLE meetings ADD COLUMN agent_id TEXT",
   "ALTER TABLE meetings ADD COLUMN signal_id TEXT",
+
+  // Copilot: one draft per AI step of the campaign, not just the first touch.
+  "ALTER TABLE approval_queue ADD COLUMN step_id TEXT",
+  "ALTER TABLE approval_queue ADD COLUMN position INTEGER",
+  "ALTER TABLE approval_queue ADD COLUMN updated_at TEXT",
+  "CREATE INDEX IF NOT EXISTS idx_approval_queue_step ON approval_queue(target_id, step_id, status)",
+
+  // Finding leads (agents.status) and outreach are separate switches.
+  "ALTER TABLE agents ADD COLUMN outreach_enabled INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE agents ADD COLUMN goal TEXT NOT NULL DEFAULT 'conversations'",
+  "ALTER TABLE agents ADD COLUMN tone TEXT NOT NULL DEFAULT 'professional'",
+  "ALTER TABLE agents ADD COLUMN channel TEXT NOT NULL DEFAULT 'multi'",
+  "ALTER TABLE agents ADD COLUMN exclude_first_degree INTEGER NOT NULL DEFAULT 1",
 ];
+
+/** Agents created before the split were "active" for both discovery and outreach. */
+function splitOutreachFlag(db: Database.Database) {
+  if (db.prepare("SELECT 1 FROM _migration_flags WHERE key = 'agents_outreach_split_v1'").get()) return;
+  db.exec(`UPDATE agents SET outreach_enabled = 1 WHERE status = 'active';
+    INSERT INTO _migration_flags (key) VALUES ('agents_outreach_split_v1');`);
+}
 
 /** signals.type had a CHECK limited to six types; rebuild once without it (validated in app). */
 function widenSignalTypes(db: Database.Database) {
@@ -149,6 +169,7 @@ export function runAiSdrMigrations(db: Database.Database): void {
   for (const sql of STATEMENTS) {
     try { db.exec(sql); } catch { /* already applied */ }
   }
+  try { splitOutreachFlag(db); } catch { /* agents/_migration_flags not present yet */ }
   try { widenSignalTypes(db); } catch (err) {
     console.error("[db] signals widen migration failed:", err instanceof Error ? err.message : err);
   }

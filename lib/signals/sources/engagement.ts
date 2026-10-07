@@ -29,6 +29,7 @@ async function harvestPost(ctx: SourceRunContext, post: PostRef, type: SignalTyp
   const engagers = await fetchPostEngagers(ctx.voyager!, post.activityUrn, { reactions: ctx.config.max_engagers_per_post, comments: ctx.config.max_engagers_per_post });
   const excerpt = post.text ? `"${post.text.slice(0, 160)}${post.text.length > 160 ? "…" : ""}"` : null;
   for (const e of engagers) {
+    if (ctx.isFull()) return;
     const verb = e.kind === "comment" ? "Commented on" : "Reacted to";
     ctx.emitLead(
       { name: e.name, firstName: e.firstName, lastName: e.lastName, headline: e.headline, profileUrl: e.profileUrl, memberUrn: e.memberUrn },
@@ -54,7 +55,7 @@ export function engagementRunner(type: SignalType): SourceRunner {
       if (!entity) continue;
       const posts = await fetchRecentPosts(ctx.voyager, entity, ctx.config.posts_per_entity);
       const what = type === "own_content_engagement" ? "your post" : `${entityLabel(url)}'s post`;
-      for (const post of posts) await harvestPost(ctx, post, type, what);
+      for (const post of posts) { if (ctx.isFull()) return; await harvestPost(ctx, post, type, what); }
     }
   };
 }
@@ -64,6 +65,6 @@ export const keywordRunner: SourceRunner = async (ctx) => {
   const keywords = ctx.config.keywords.length ? ctx.config.keywords : (ctx.icp?.keywords ?? []).slice(0, 5);
   for (const keyword of keywords) {
     const posts = await searchPostsByKeyword(ctx.voyager, keyword, ctx.config.posts_per_entity);
-    for (const post of posts) await harvestPost(ctx, post, "keyword_engagement", `a post about "${keyword}"`);
+    for (const post of posts) { if (ctx.isFull()) return; await harvestPost(ctx, post, "keyword_engagement", `a post about "${keyword}"`); }
   }
 };

@@ -36,6 +36,8 @@ export interface SourceRunContext {
   emitForTarget(targetId: string, signal: EmittedSignal): EmitResult;
   /** A company-level signal; fans out to known contacts at that company. */
   emitForCompany(company: { name: string; domain?: string | null; website?: string | null }, signal: EmittedSignal): EmitResult;
+  /** True once a preview run has collected enough leads; runners should stop early. */
+  isFull(): boolean;
   /** Persisted per-source state between runs. */
   cursor: Record<string, unknown>;
 }

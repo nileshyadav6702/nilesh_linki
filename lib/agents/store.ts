@@ -10,6 +10,8 @@ export interface Agent {
   linkedin_account_id: string | null; email_account_id: string | null;
   autopilot_delay_minutes: number; daily_lead_cap: number; enrich_emails: number;
   booking_url: string | null; last_run_at: string | null; last_error: string | null;
+  outreach_enabled: number; goal: "conversations" | "meetings"; tone: "professional" | "conversational" | "direct";
+  channel: "linkedin" | "multi" | "email"; exclude_first_degree: number;
   created_at: string; updated_at: string;
 }
 
@@ -25,6 +27,7 @@ export const sourceConfigSchema = z.object({
   boards: z.array(z.object({ ats: z.enum(["greenhouse", "lever", "ashby"]), slug: z.string().trim().min(1).max(120), company: z.string().trim().max(160).optional() })).max(40).default([]),
   role_keywords: z.array(z.string().trim().min(2).max(80)).max(20).default([]),
   feeds: z.array(z.string().trim().url().max(400)).max(10).default([]),
+  list_ids: z.array(z.string().trim().min(1).max(100)).max(20).default([]),
   posts_per_entity: z.number().int().min(1).max(10).default(3),
   max_engagers_per_post: z.number().int().min(5).max(100).default(40),
 });
@@ -43,6 +46,10 @@ export const agentInputSchema = z.object({
   daily_lead_cap: z.number().int().min(1).max(500).default(25),
   enrich_emails: z.boolean().default(true),
   booking_url: z.string().trim().url().max(400).nullish(),
+  goal: z.enum(["conversations", "meetings"]).default("conversations"),
+  tone: z.enum(["professional", "conversational", "direct"]).default("professional"),
+  channel: z.enum(["linkedin", "multi", "email"]).default("multi"),
+  exclude_first_degree: z.boolean().default(true),
 });
 export type AgentInput = z.infer<typeof agentInputSchema>;
 
@@ -72,20 +79,21 @@ export function createAgent(workspaceId: string, input: AgentInput): Agent {
     db.prepare("INSERT INTO lists (id, workspace_id, name, description) VALUES (?, ?, ?, ?)")
       .run(listId, workspaceId, `Agent · ${input.name}`, "Leads found and qualified by this AI agent");
     db.prepare(`INSERT INTO agents (id, workspace_id, name, icp_id, mode, min_score, fit_weight, workflow_id, list_id, linkedin_account_id,
-        email_account_id, autopilot_delay_minutes, daily_lead_cap, enrich_emails, booking_url)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        email_account_id, autopilot_delay_minutes, daily_lead_cap, enrich_emails, booking_url, goal, tone, channel, exclude_first_degree)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(id, workspaceId, input.name, input.icp_id ?? null, input.mode, input.min_score, input.fit_weight, input.workflow_id ?? null, listId,
-        input.linkedin_account_id ?? null, input.email_account_id ?? null, input.autopilot_delay_minutes, input.daily_lead_cap, input.enrich_emails ? 1 : 0, input.booking_url ?? null);
+        input.linkedin_account_id ?? null, input.email_account_id ?? null, input.autopilot_delay_minutes, input.daily_lead_cap, input.enrich_emails ? 1 : 0, input.booking_url ?? null,
+        input.goal ?? "conversations", input.tone ?? "professional", input.channel ?? "multi", input.exclude_first_degree === false ? 0 : 1);
   })();
   return getAgent(id, workspaceId)!;
 }
 
-const PATCHABLE = ["name", "icp_id", "mode", "min_score", "fit_weight", "workflow_id", "linkedin_account_id", "email_account_id", "autopilot_delay_minutes", "daily_lead_cap", "enrich_emails", "booking_url", "status"] as const;
+const PATCHABLE = ["name", "icp_id", "mode", "min_score", "fit_weight", "workflow_id", "linkedin_account_id", "email_account_id", "autopilot_delay_minutes", "daily_lead_cap", "enrich_emails", "booking_url", "status", "goal", "tone", "channel", "exclude_first_degree", "outreach_enabled"] as const;
 
 export function updateAgent(id: string, workspaceId: string, patch: Record<string, unknown>): Agent | null {
   const fields = PATCHABLE.filter((f) => patch[f] !== undefined);
   if (!fields.length) return getAgent(id, workspaceId);
-  const values = fields.map((f) => (f === "enrich_emails" ? (patch[f] ? 1 : 0) : patch[f] ?? null));
+  const values = fields.map((f) => (["enrich_emails", "exclude_first_degree", "outreach_enabled"].includes(f) ? (patch[f] ? 1 : 0) : patch[f] ?? null));
   getDb().prepare(`UPDATE agents SET ${fields.map((f) => `${f} = ?`).join(", ")}, updated_at = datetime('now') WHERE id = ? AND workspace_id = ?`).run(...values, id, workspaceId);
   return getAgent(id, workspaceId);
 }

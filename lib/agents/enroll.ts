@@ -31,7 +31,8 @@ export function enrollLead(db: Database.Database, agent: Agent, targetId: string
     let run = db.prepare(`SELECT id, status FROM runs WHERE workspace_id = ? AND workflow_id = ? AND list_id IS ? AND status IN ('pending','running','paused')
       ORDER BY created_at DESC LIMIT 1`).get(agent.workspace_id, agent.workflow_id, listId) as { id: string; status: string } | undefined;
     if (!run) {
-      const status = agent.status === "active" ? "running" : "pending";
+      // Leads can be queued while outreach is off; the run starts when outreach is switched on.
+      const status = agent.outreach_enabled ? "running" : "pending";
       run = { id: randomUUID(), status };
       db.prepare(`INSERT INTO runs (id, workspace_id, workflow_id, list_id, account_id, email_account_id, status, started_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(run.id, agent.workspace_id, agent.workflow_id, listId, agent.linkedin_account_id, agent.email_account_id, status, status === "running" ? new Date().toISOString() : null);
@@ -52,8 +53,14 @@ export function enrollLead(db: Database.Database, agent: Agent, targetId: string
   })();
 }
 
-/** When an agent is switched on, start its pending run so enrolled leads begin moving. */
+/** Outreach switched on: start the agent's pending or paused run so enrolled leads begin moving. */
 export function activateAgentRuns(db: Database.Database, agent: Agent): void {
-  db.prepare("UPDATE runs SET status = 'running', started_at = COALESCE(started_at, ?) WHERE workspace_id = ? AND workflow_id = ? AND list_id IS ? AND status = 'pending'")
+  db.prepare("UPDATE runs SET status = 'running', started_at = COALESCE(started_at, ?) WHERE workspace_id = ? AND workflow_id = ? AND list_id IS ? AND status IN ('pending','paused')")
     .run(new Date().toISOString(), agent.workspace_id, agent.workflow_id, agent.list_id);
+}
+
+/** Outreach switched off: hold the agent's running campaign. Lead finding keeps going. */
+export function pauseAgentRuns(db: Database.Database, agent: Agent): void {
+  db.prepare("UPDATE runs SET status = 'paused' WHERE workspace_id = ? AND workflow_id IS ? AND list_id IS ? AND status = 'running'")
+    .run(agent.workspace_id, agent.workflow_id, agent.list_id);
 }
