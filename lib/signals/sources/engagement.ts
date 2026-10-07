@@ -26,7 +26,7 @@ async function harvestPost(ctx: SourceRunContext, post: PostRef, type: SignalTyp
   seen[post.activityUrn] = firstSeen ?? new Date().toISOString();
   ctx.cursor.posts = seen;
 
-  const engagers = await fetchPostEngagers(ctx.voyager!, post.activityUrn, { reactions: ctx.config.max_engagers_per_post, comments: ctx.config.max_engagers_per_post });
+  const engagers = await fetchPostEngagers(ctx.voyager!, post.activityUrn, { reactions: ctx.config.max_engagers_per_post });
   const excerpt = post.text ? `"${post.text.slice(0, 160)}${post.text.length > 160 ? "…" : ""}"` : null;
   for (const e of engagers) {
     if (ctx.isFull()) return;

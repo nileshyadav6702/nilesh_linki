@@ -6,7 +6,12 @@
  * companyFeedByUniversalName / voyagerSocialDashReactions / feed/comments routes.
  */
 
-export interface VoyagerLike { get(path: string, opts?: { normalized?: boolean; kind?: "voyager_read" | "search" | "profile_view" }): Promise<unknown | null> }
+type BudgetKind = "voyager_read" | "search" | "profile_view";
+export interface VoyagerLike {
+  get(path: string, opts?: { normalized?: boolean; kind?: BudgetKind }): Promise<unknown | null>;
+  /** Load a LinkedIn page and return the bodies of matching responses (see VoyagerClient). */
+  capturePage?(url: string, opts: { match: RegExp; scrolls?: number; kind?: BudgetKind }): Promise<string[]>;
+}
 
 export interface PostRef { activityUrn: string; text: string; postedAt: string | null; url: string }
 
@@ -186,28 +191,43 @@ export async function fetchRecentPosts(client: VoyagerLike, entity: EntityRef, c
   return json ? parseFeedUpdates(json).slice(0, count) : [];
 }
 
-export async function fetchPostEngagers(client: VoyagerLike, activityUrn: string, opts: { reactions?: number; comments?: number } = {}): Promise<Engager[]> {
+/**
+ * People who reacted to a post. (LinkedIn retired the feed/comments endpoint in 2026 — it
+ * answers 400 — so commenters are no longer fetched separately; most commenters also react.)
+ */
+export async function fetchPostEngagers(client: VoyagerLike, activityUrn: string, opts: { reactions?: number } = {}): Promise<Engager[]> {
   const id = activityIdOf(activityUrn);
   if (!id) return [];
-  const all: Engager[] = [];
-  const comments = await client.get(`/voyager/api/feed/comments?count=${opts.comments ?? 40}&start=0&q=comments&sortOrder=RELEVANCE&updateId=activity:${id}`);
-  if (comments) all.push(...parseComments(comments));
   const reactions = await client.get(`/voyager/api/voyagerSocialDashReactions?decorationId=com.linkedin.voyager.dash.deco.social.ReactionsByTypeWithProfileActions-13&count=${opts.reactions ?? 40}&q=reactionType&start=0&threadUrn=${encodeURIComponent(`urn:li:activity:${id}`)}`);
-  if (reactions) all.push(...parseReactions(reactions));
-  return dedupeEngagers(all);
+  return reactions ? dedupeEngagers(parseReactions(reactions)) : [];
 }
 
-/** Activity URNs of recent posts matching a keyword (content search). */
+/** Distinct post URNs in raw response text, in order of appearance. */
+export function activityUrnsIn(bodies: string[]): string[] {
+  const seen = new Set<string>();
+  for (const b of bodies) for (const m of b.match(/urn:li:activity:\d{15,}/g) ?? []) seen.add(m);
+  return [...seen];
+}
+
+/**
+ * Recent posts matching a keyword. LinkedIn now renders content search server-side: the
+ * search/dash/clusters API returns result wrappers without the posts, so the search page is
+ * loaded and post URNs are read from its own response stream (first page + one scroll).
+ */
 export async function searchPostsByKeyword(client: VoyagerLike, keyword: string, count = 5): Promise<PostRef[]> {
   const q = encodeURIComponent(keyword.replace(/[(),:]/g, " ").trim());
-  const json = await client.get(
-    `/voyager/api/search/dash/clusters?decorationId=com.linkedin.voyager.dash.deco.search.SearchClusterCollection-175&origin=GLOBAL_SEARCH_HEADER&q=all&query=(keywords:${q},flagshipSearchIntent:SEARCH_SRP,queryParameters:(resultType:List(CONTENT),sortBy:List(date_posted)))&start=0&count=${count}`,
-    { normalized: true, kind: "search" },
-  );
-  if (!json) return [];
-  const posts = parseFeedUpdates(json);
-  if (posts.length) return posts.slice(0, count);
-  // Fallback: search results reference posts by URN even when the update shape differs.
-  const urns = [...new Set((JSON.stringify(json).match(/urn:li:activity:\d{15,}/g) ?? []))].slice(0, count);
-  return urns.map((u) => ({ activityUrn: u, text: "", postedAt: timeFromActivityUrn(u), url: `https://www.linkedin.com/feed/update/${u}/` }));
+  let urns: string[] = [];
+  if (client.capturePage) {
+    const bodies = await client.capturePage(`https://www.linkedin.com/search/results/content/?keywords=${q}&origin=GLOBAL_SEARCH_HEADER&sortBy=%22date_posted%22`,
+      { match: /\/search\/results\/content\/|contentSearchResults/, scrolls: 1, kind: "search" });
+    urns = activityUrnsIn(bodies);
+  } else {
+    // Clients without a browser page (tests, API-only providers) try the JSON endpoint.
+    const json = await client.get(`/voyager/api/search/dash/clusters?decorationId=com.linkedin.voyager.dash.deco.search.SearchClusterCollection-175&origin=GLOBAL_SEARCH_HEADER&q=all&query=(keywords:${q},flagshipSearchIntent:SEARCH_SRP,queryParameters:(resultType:List(CONTENT),sortBy:List(date_posted)))&start=0&count=${count}`, { normalized: true, kind: "search" });
+    if (!json) return [];
+    const posts = parseFeedUpdates(json);
+    if (posts.length) return posts.slice(0, count);
+    urns = activityUrnsIn([JSON.stringify(json)]);
+  }
+  return urns.slice(0, count).map((u) => ({ activityUrn: u, text: "", postedAt: timeFromActivityUrn(u), url: `https://www.linkedin.com/feed/update/${u}/` }));
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { intentScore, leadScore } from "@/lib/signals/scoring";
-import { parseComments, parseReactions, parseFeedUpdates, parseEntityUrl, dedupeEngagers, activityIdOf, type Engager } from "@/lib/linkedin/engagers";
+import { parseComments, parseReactions, parseFeedUpdates, parseEntityUrl, dedupeEngagers, activityIdOf, activityUrnsIn, searchPostsByKeyword, fetchPostEngagers, type Engager } from "@/lib/linkedin/engagers";
 import { prefilterLead, splitHeadline, normalizeProfileUrl } from "@/lib/signals/leads";
 import { htmlToText, extractInterestingLinks, isPrivateAddress, normalizeWebsiteUrl, UnsafeUrlError } from "@/lib/icp/site";
 import { parseBoard, matchesRoles, isoWeek } from "@/lib/signals/sources/hiring";
@@ -89,6 +89,32 @@ describe("engager parsers", () => {
     expect(parseEntityUrl("https://linkedin.com/in/jane-doe?x=1")).toEqual({ kind: "profile", publicId: "jane-doe" });
     expect(parseEntityUrl("https://example.com")).toBeNull();
     expect(activityIdOf("urn:li:activity:7300000000000000000")).toBe("7300000000000000000");
+  });
+});
+
+describe("keyword search (server-rendered results)", () => {
+  it("reads post URNs from the search page stream, not the empty JSON wrappers", async () => {
+    const calls: string[] = [];
+    const client = {
+      get: async (p: string) => { calls.push(p); return null; },
+      capturePage: async (url: string) => {
+        calls.push(url);
+        return ["<html>…urn:li:activity:7300000000000000001…urn:li:activity:7300000000000000001…</html>", "0:[\"urn:li:activity:7300000000000000002\"]"];
+      },
+    };
+    const posts = await searchPostsByKeyword(client, "front end (react)", 5);
+    expect(posts.map((p) => p.activityUrn)).toEqual(["urn:li:activity:7300000000000000001", "urn:li:activity:7300000000000000002"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("/search/results/content/?keywords=front%20end%20%20react");
+  });
+  it("dedupes URNs across bodies", () => {
+    expect(activityUrnsIn(["urn:li:activity:7300000000000000009 x", "urn:li:activity:7300000000000000009"])).toEqual(["urn:li:activity:7300000000000000009"]);
+  });
+  it("fetches engagers from reactions only (the comments endpoint is retired)", async () => {
+    const paths: string[] = [];
+    await fetchPostEngagers({ get: async (p: string) => { paths.push(p); return { elements: [] }; } }, "urn:li:activity:7300000000000000001");
+    expect(paths).toHaveLength(1);
+    expect(paths[0]).toContain("voyagerSocialDashReactions");
   });
 });
 
