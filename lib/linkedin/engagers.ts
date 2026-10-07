@@ -213,12 +213,13 @@ export function activityUrnsIn(bodies: string[]): string[] {
  * Recent posts matching a keyword. LinkedIn now renders content search server-side: the
  * search/dash/clusters API returns result wrappers without the posts, so the search page is
  * loaded and post URNs are read from its own response stream (first page + one scroll).
+ * Past-week posts by relevance, not newest first: brand-new posts have no reactions yet.
  */
 export async function searchPostsByKeyword(client: VoyagerLike, keyword: string, count = 5): Promise<PostRef[]> {
   const q = encodeURIComponent(keyword.replace(/[(),:]/g, " ").trim());
   let urns: string[] = [];
   if (client.capturePage) {
-    const bodies = await client.capturePage(`https://www.linkedin.com/search/results/content/?keywords=${q}&origin=GLOBAL_SEARCH_HEADER&sortBy=%22date_posted%22`,
+    const bodies = await client.capturePage(`https://www.linkedin.com/search/results/content/?keywords=${q}&origin=GLOBAL_SEARCH_HEADER&datePosted=%22past-week%22`,
       { match: /\/search\/results\/content\/|contentSearchResults/, scrolls: 1, kind: "search" });
     urns = activityUrnsIn(bodies);
   } else {

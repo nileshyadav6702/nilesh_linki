@@ -8,6 +8,8 @@ interface PreviewLead {
   lead_score: number | null; fit_verdict: string | null; fit_reason: string | null; industry: string | null; employee_count: number | null; signal_title: string | null; signal_type: string | null;
 }
 
+interface Summary { found: number; not_a_fit: number; filtered: number; reasons: string[] }
+
 const LINKEDIN_NOTE: Record<string, string> = {
   no_account: "LinkedIn signals will run once a LinkedIn account is connected and selected in the next step.",
   paused: "LinkedIn discovery is paused for this account after LinkedIn pushed back; it resumes automatically.",
@@ -17,6 +19,7 @@ const LINKEDIN_NOTE: Record<string, string> = {
 export default function PreviewStep({ agentId }: { agentId: string }) {
   const [leads, setLeads] = useState<PreviewLead[] | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [running, setRunning] = useState(false);
   const started = useRef<string | null>(null);
 
@@ -27,6 +30,7 @@ export default function PreviewStep({ agentId }: { agentId: string }) {
       const r = await fetch(`/api/agents/${agentId}/preview`, { method: "POST" });
       const d = await r.json();
       setLeads(d.leads ?? []);
+      setSummary(d.summary ?? null);
       setNote([LINKEDIN_NOTE[d.linkedin as string], ...(d.errors ?? [])].filter(Boolean).join(" · ") || null);
       if (!r.ok) toast.error(d.error ?? "Preview failed");
     } finally { setRunning(false); }
@@ -65,10 +69,29 @@ export default function PreviewStep({ agentId }: { agentId: string }) {
       </div>
       <p className="flex items-start gap-2 rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning"><RiSparkling2Line size={16} className="mt-0.5 shrink-0" />Nothing is sent from here. These leads are scored and wait for outreach to be switched on.</p>
       {note && <p className="text-xs text-base-content/50">{note}</p>}
+      {summary && summary.found > 0 && (
+        <p className="text-xs text-base-content/55">
+          Found {summary.found} {summary.found === 1 ? "person" : "people"} engaging with your signals
+          {summary.not_a_fit > 0 ? ` · ${summary.not_a_fit} didn't match your ICP` : ""}
+          {summary.filtered > 0 ? ` · ${summary.filtered} filtered out (competitors' staff, excluded titles)` : ""}.
+        </p>
+      )}
       {leads.length === 0 ? (
-        <Card className="text-center text-sm text-base-content/55">
-          No leads yet — sources may need a LinkedIn account, or signals have little activity right now. Your agent keeps searching after launch.
-          <div className="mt-3"><button className={secondaryBtn} onClick={run}>Search again</button></div>
+        <Card className="space-y-3 text-sm text-base-content/60">
+          {summary && summary.not_a_fit > 0 ? (
+            <>
+              <p className="font-medium text-base-content">The people engaging with your signals don&apos;t match your ICP yet.</p>
+              {summary.reasons.length > 0 && (
+                <ul className="list-disc space-y-1 pl-5 text-xs text-base-content/55">{summary.reasons.map((r) => <li key={r}>{r}</li>)}</ul>
+              )}
+              <p className="text-xs">Go back to <b>Sources</b> and track topics your buyers post about (use &ldquo;Generate with AI&rdquo; for keywords from your ICP), or loosen <b>Target</b>.</p>
+            </>
+          ) : summary && summary.found === 0 ? (
+            <p>No one engaged with your signals in the last week yet — try broader topics or add competitor pages. Your agent keeps searching after launch.</p>
+          ) : (
+            <p>No leads yet — sources may need a LinkedIn account, or signals have little activity right now. Your agent keeps searching after launch.</p>
+          )}
+          <div><button className={secondaryBtn} onClick={run}>Search again</button></div>
         </Card>
       ) : leads.map((l) => (
         <Card key={l.id} className="!py-4">

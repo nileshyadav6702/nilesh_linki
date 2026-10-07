@@ -31,19 +31,38 @@ export function previewLeads(db: Database.Database, agentId: string, limit = 5):
     ORDER BY (t.agent_status = 'qualified') DESC, COALESCE(t.lead_score, t.intent_score) DESC LIMIT ?`).all(agentId, limit) as PreviewLead[];
 }
 
-export interface PreviewResult { leads: PreviewLead[]; ran: string[]; errors: string[]; linkedin: "ok" | "no_account" | "paused" | "skipped" }
+export interface PreviewSummary {
+  /** People found by this agent so far (any status). */
+  found: number;
+  /** Scored and rejected by the ICP. */
+  not_a_fit: number;
+  /** Dropped before scoring (competitor staff, excluded titles...). */
+  filtered: number;
+  /** A few fit reasons from rejected leads, so the user can see what to change. */
+  reasons: string[];
+}
+
+export interface PreviewResult { leads: PreviewLead[]; ran: string[]; errors: string[]; linkedin: "ok" | "no_account" | "paused" | "skipped"; summary: PreviewSummary }
+
+export function previewSummary(db: Database.Database, agentId: string, filtered: number): PreviewSummary {
+  const counts = db.prepare("SELECT COUNT(*) found, SUM(agent_status = 'disqualified') not_a_fit FROM targets WHERE agent_id = ?").get(agentId) as { found: number; not_a_fit: number | null };
+  const reasons = (db.prepare("SELECT DISTINCT fit_reason FROM targets WHERE agent_id = ? AND agent_status = 'disqualified' AND fit_reason IS NOT NULL ORDER BY scored_at DESC LIMIT 3").all(agentId) as Array<{ fit_reason: string }>).map((r) => r.fit_reason);
+  return { found: counts.found, not_a_fit: counts.not_a_fit ?? 0, filtered, reasons };
+}
 
 export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<PreviewResult> {
   const db = getDb();
   const deadline = Date.now() + budgetMs;
   const have = () => (db.prepare("SELECT COUNT(*) n FROM targets WHERE agent_id = ? AND agent_status IN ('new','qualified')").get(agent.id) as { n: number }).n;
   const sources = listSources(agent.id, agent.workspace_id).filter((s) => s.enabled);
-  const result: PreviewResult = { leads: [], ran: [], errors: [], linkedin: "skipped" };
+  const result: PreviewResult = { leads: [], ran: [], errors: [], linkedin: "skipped", summary: { found: 0, not_a_fit: 0, filtered: 0, reasons: [] } };
+  let filtered = 0;
 
   // Cheap sources first: existing lists, job boards, news.
   for (const s of sources.filter((x) => !SOURCE_TYPES[x.source_type].needsLinkedIn)) {
     if (have() >= POOL || Date.now() > deadline) break;
     const r = await runSource(s, { maxNew: POOL - have() });
+    filtered += r.filtered;
     result.ran.push(s.source_type);
     if (r.error) result.errors.push(`${s.source_type}: ${r.error}`);
   }
@@ -65,6 +84,7 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
           if (have() >= POOL || Date.now() > deadline) break;
           try {
             const r = await runSource(s, { voyager: client, browser: ctx, maxNew: POOL - have() });
+            filtered += r.filtered;
             result.ran.push(s.source_type);
             if (r.error) result.errors.push(`${s.source_type}: ${r.error}`);
           } catch (err) {
@@ -82,6 +102,7 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
   const icp = agent.icp_id ? getIcp(agent.icp_id, agent.workspace_id) : getLatestIcp(agent.workspace_id);
   await scoreNewLeads(db, agent, icp?.data ?? null, icp?.id ?? null, POOL);
   result.leads = previewLeads(db, agent.id);
+  result.summary = previewSummary(db, agent.id, filtered);
   return result;
 }
 
