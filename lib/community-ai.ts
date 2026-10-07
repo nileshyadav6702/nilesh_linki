@@ -57,6 +57,7 @@ function buildPrompt(params: CommunityAiParams): string {
     "Write concise, natural B2B outreach that sounds like a thoughtful human.",
     "Use only facts supplied in the contact and company context; never invent achievements, events, or relationships.",
     "Avoid hype, generic compliments, fake familiarity, and unsupported claims.",
+    "If contact.buying_signals is present, you may open with the most relevant one in a natural way; never say you were tracking the person.",
     `Write in ${params.language || "English"}.`,
     params.maxWords ? `Keep the body at or below ${params.maxWords} words.` : "Keep the body brief.",
     `Return only valid JSON matching ${outputShape}.`,
@@ -181,6 +182,11 @@ export const communityAi = {
     const company = companyId
       ? db.prepare("SELECT * FROM companies WHERE id = ?").get(companyId) as Record<string, unknown> | undefined
       : null;
+    // Recent buying signals (what they engaged with, job change, hiring...) give the writer
+    // a real reason to reach out. Internal scoring columns are not useful to it.
+    const signals = db.prepare("SELECT title, snippet, occurred_at FROM signals WHERE target_id = ? ORDER BY occurred_at DESC LIMIT 3").all(targetId) as Array<Record<string, unknown>>;
+    for (const k of ["fit_score", "fit_verdict", "fit_reason", "fit_confidence", "lead_score", "intent_score", "scored_icp_id", "agent_id", "agent_status", "agent_status_at", "skip_reason"]) delete contact[k];
+    if (signals.length) contact.buying_signals = signals;
     return { contact, company: company ?? null };
   },
 

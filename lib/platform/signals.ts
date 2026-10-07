@@ -2,19 +2,42 @@ import { randomUUID } from "crypto";
 import { getDb } from "@/lib/db";
 import { emitDomainEvent } from "@/lib/platform/events";
 import { ensureGlobalRunnerStarted } from "@/lib/linkedin/runner";
+import { isSignalType, signalWeight } from "@/lib/signals/types";
+import { recomputeIntent } from "@/lib/signals/scoring";
 
-export function ingestSignal(input: { workspaceId: string; targetId?: string; companyId?: string; type: string; title: string; description?: string; score?: number; source?: string; occurredAt?: string; metadata?: unknown }) {
+export interface SignalInput {
+  workspaceId: string; targetId?: string; companyId?: string; type: string; title: string;
+  description?: string; score?: number; source?: string; occurredAt?: string; metadata?: unknown;
+  agentId?: string; sourceUrl?: string; snippet?: string; detectorRunId?: string;
+  /** Stable key for idempotent ingestion (e.g. `post:<urn>:<member>`). A repeat is ignored. */
+  dedupeKey?: string;
+}
+
+export function ingestSignal(input: SignalInput) {
   const db = getDb();
-  const id = randomUUID();
-  db.prepare(`INSERT INTO signals (id, workspace_id, target_id, company_id, type, title, description, score, source, occurred_at, metadata_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(id, input.workspaceId, input.targetId ?? null, input.companyId ?? null, input.type, input.title, input.description ?? null, input.score ?? 0, input.source ?? "api", input.occurredAt ?? new Date().toISOString(), JSON.stringify(input.metadata ?? {}));
-  if (input.targetId) {
-    db.prepare("UPDATE targets SET intent_score = MIN(100, MAX(intent_score, ?) + ?) WHERE id = ? AND workspace_id = ?")
-      .run(input.score ?? 0, Math.max(0, Number(input.score ?? 0) * 0.1), input.targetId, input.workspaceId);
-    applySignalRules(input.workspaceId, input.targetId, input.type, input.score ?? 0);
+  if (input.dedupeKey) {
+    const existing = db.prepare("SELECT * FROM signals WHERE workspace_id = ? AND dedupe_key = ?").get(input.workspaceId, input.dedupeKey);
+    if (existing) return existing;
   }
-  emitDomainEvent({ workspaceId: input.workspaceId, type: "signal.received", entityType: "signal", entityId: id, payload: input });
+  const id = randomUUID();
+  // Unknown types are kept as 'custom' with the original name in metadata, rather than rejected.
+  const type = isSignalType(input.type) ? input.type : "custom";
+  const metadata = type === input.type
+    ? input.metadata ?? {}
+    : { ...(typeof input.metadata === "object" && input.metadata ? input.metadata : {}), original_type: input.type };
+  // An explicit score (API callers) is the signal's weight; detectors use the type default.
+  const weight = Number(input.score ?? 0) > 0 ? Math.min(100, Number(input.score)) : signalWeight(type);
+  db.prepare(`INSERT INTO signals (id, workspace_id, target_id, company_id, type, title, description, score, source, occurred_at, metadata_json,
+      agent_id, source_url, snippet, weight, detector_run_id, dedupe_key)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(id, input.workspaceId, input.targetId ?? null, input.companyId ?? null, type, input.title, input.description ?? null,
+      input.score ?? weight, input.source ?? "api", input.occurredAt ?? new Date().toISOString(), JSON.stringify(metadata),
+      input.agentId ?? null, input.sourceUrl ?? null, input.snippet ?? null, weight, input.detectorRunId ?? null, input.dedupeKey ?? null);
+  if (input.targetId) {
+    recomputeIntent(db, input.targetId);
+    applySignalRules(input.workspaceId, input.targetId, type, input.score ?? weight);
+  }
+  emitDomainEvent({ workspaceId: input.workspaceId, type: "signal.received", entityType: "signal", entityId: id, payload: { ...input, type } });
   return db.prepare("SELECT * FROM signals WHERE id = ?").get(id);
 }
 

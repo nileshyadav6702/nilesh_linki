@@ -92,6 +92,11 @@ function extractSavedSearchId(url: string): string | null {
   return match ? match[1] : null;
 }
 
+/** An unsaved Sales Nav people search (e.g. a keyword query built by an AI agent). */
+function isAdHocSearchUrl(url: string): boolean {
+  return /linkedin\.com\/sales\/search\/people\?/.test(url) && /[?&]query=/.test(url);
+}
+
 function urnToSalesNavUrl(urn: string): string {
   const match = urn.match(/\(([^)]+)\)/);
   if (!match) return "";
@@ -356,13 +361,17 @@ export async function scrapeSavedSearch(
 ): Promise<WindowedScrapeResult> {
   const { startPage = 1, maxPages = 50, onProgress, isCanceled } = opts;
   const savedSearchId = extractSavedSearchId(savedSearchUrl);
-  if (!savedSearchId) throw new Error(`Invalid Sales Navigator saved search URL: ${savedSearchUrl}`);
+  if (!savedSearchId && !isAdHocSearchUrl(savedSearchUrl)) throw new Error(`Invalid Sales Navigator saved search URL: ${savedSearchUrl}`);
 
   const allElements: SalesProfile[] = [];
   const seen = new Set<string>();
   const PAGE_SIZE = 25;
-  const buildUrl = (n: number) =>
-    `https://www.linkedin.com/sales/search/people?savedSearchId=${savedSearchId}${n > 1 ? `&page=${n}` : ""}`;
+  const buildUrl = (n: number) => {
+    if (savedSearchId) return `https://www.linkedin.com/sales/search/people?savedSearchId=${savedSearchId}${n > 1 ? `&page=${n}` : ""}`;
+    const u = new URL(savedSearchUrl);
+    if (n > 1) u.searchParams.set("page", String(n)); else u.searchParams.delete("page");
+    return u.toString();
+  };
 
   const page = await ctx.newPage();
   let knownTotal = 0;
@@ -443,7 +452,7 @@ export async function scrapeNavigatorUrl(
   url: string,
   opts: ScrapeOptions = {}
 ): Promise<WindowedScrapeResult> {
-  if (extractSavedSearchId(url)) {
+  if (extractSavedSearchId(url) || isAdHocSearchUrl(url)) {
     return scrapeSavedSearch(ctx, url, opts);
   }
   if (extractListId(url)) {

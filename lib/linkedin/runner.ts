@@ -23,6 +23,7 @@ import { processWarmupEngagement } from "@/lib/email/warmup-engagement";
 import { syncDueConnections } from "@/lib/platform/connectors";
 import { renderOutreachTemplate } from "@/lib/outreach/render";
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
+import { takeApprovedDraft } from "@/lib/agents/drafts";
 
 // Minimum gap between Sales Nav profile enrichment calls per account (ms)
 const SALES_NAV_ENRICH_MIN_GAP_MS = 5 * 60 * 1000;
@@ -49,6 +50,9 @@ const REPLY_SYNC_TIMEOUT_MS = 60_000;
 const ACCEPTED_SYNC_TIMEOUT_MS = 180_000;
 const CONNECTION_SYNC_TIMEOUT_MS = 120_000;
 const EXECUTE_STEP_TIMEOUT_MS = 300_000;
+// Discovery stops starting new sources after DISCOVERY_BUDGET_MS; the timeout is the backstop.
+const DISCOVERY_BUDGET_MS = 4 * 60_000;
+const DISCOVERY_TIMEOUT_MS = 8 * 60_000;
 
 // How long a tick may keep starting new profiles. Checked BETWEEN profiles, so the tick
 // always ends on a clean boundary and the remainder simply stays due for the next pass.
@@ -697,7 +701,12 @@ async function executeStep(
       }
 
       let messageText = "";
-      if (step.ai_enabled) {
+      // An AI agent's approved first touch replaces the step's own content, once.
+      const approvedDraft = (step.message_position ?? 1) === 1 ? takeApprovedDraft(db, target.id, "linkedin_message") : null;
+      if (approvedDraft) {
+        messageText = approvedDraft.body;
+        log(db, runId, target.id, "info", `Using the approved agent draft for ${name}`);
+      } else if (step.ai_enabled) {
         if (!premium?.ai) {
           log(db, runId, target.id, "warn", `AI writer is unavailable in this build. Skipping ${name}`);
           trAdvance(db, tr, steps);
@@ -950,7 +959,12 @@ async function executeStep(
       let emailSubject = "";
       let emailBody = "";
       let emailVariantId: string | null = null;
-      if (step.ai_enabled) {
+      const approvedEmail = (step.email_position ?? 1) === 1 ? takeApprovedDraft(db, target.id, "email") : null;
+      if (approvedEmail) {
+        emailSubject = approvedEmail.subject ?? "";
+        emailBody = approvedEmail.body;
+        log(db, runId, target.id, "info", `Using the approved agent email for ${name}`);
+      } else if (step.ai_enabled) {
         if (!premium?.ai) {
           log(db, runId, target.id, "warn", `AI writer is unavailable in this build. Skipping ${name}`);
           trAdvance(db, tr, steps);
@@ -1165,6 +1179,14 @@ export function ensureGlobalRunnerStarted(): void {
     if (verified > 0) console.log(`[runner] Email verification — processed ${verified}`);
   });
   startLoop("Webhook delivery", "webhook-runner", async () => { await processWebhookDeliveries(); });
+  // AI agents: non-LinkedIn signal sources (job boards, news), then scoring, enrichment,
+  // drafting and auto-approval. HTTP + DB only — never touches the LinkedIn session.
+  startLoop("AI agents", "agents-runner", async () => {
+    const { runDueHttpSources } = await import("@/lib/signals/engine");
+    const { runActiveAgents } = await import("@/lib/agents/loop");
+    await runDueHttpSources();
+    await runActiveAgents();
+  });
   startLoop("Import scheduler", "imports-runner", async () => {
     const { processScheduledImports } = await import("@/lib/import-jobs");
     await processScheduledImports(db);
@@ -1224,6 +1246,12 @@ async function linkedinLoop(): Promise<void> {
     // Connection-acceptance sync also touches the LinkedIn session, so it stays in this
     // loop — sequential with tick, never concurrent.
     await guard("Connection sync", CONNECTION_SYNC_TIMEOUT_MS, () => syncDueConnections());
+    // AI-agent signal discovery reads LinkedIn through the same browser session, so it runs
+    // here — after outreach, sequential with it, under its own time budget and request quotas.
+    await guard("Signal discovery", DISCOVERY_TIMEOUT_MS, async () => {
+      const { runLinkedInDiscovery } = await import("@/lib/signals/linkedin-discovery");
+      await runLinkedInDiscovery(DISCOVERY_BUDGET_MS);
+    });
     await sleep(POLL_INTERVAL_MS);
   }
 }
