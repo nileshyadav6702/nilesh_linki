@@ -95,7 +95,7 @@ function Avatar({ name, src }: { name: string; src: string | null }) {
 
 export function LaunchingStep() {
   return (
-    <div className="py-10 text-center">
+    <div className="onboard-title py-10">
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary"><RiRocket2Line size={22} /></div>
       <h2 className="text-[26px] leading-[1.2]">Launching your agent...</h2>
       <p className="mt-2 text-sm text-base-content/55">Creating your agent and first campaign</p>

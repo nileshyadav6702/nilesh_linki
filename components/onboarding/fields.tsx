@@ -43,7 +43,7 @@ export function withTitles(icp: Icp, titles: string[]): Icp {
 
 export function Title({ title, text }: { title: string; text?: string }) {
   return (
-    <div className="mb-6 text-center">
+    <div className="onboard-title mb-6">
       <h2 className="text-[26px] leading-[1.2]">{title}</h2>
       {text && <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-base-content/55">{text}</p>}
     </div>

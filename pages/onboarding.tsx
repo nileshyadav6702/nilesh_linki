@@ -326,7 +326,7 @@ function LinkedInStep({ connected, email, password, stage, code, message, liAt, 
   const label = busy ? "Connecting…" : stage === "code" ? "Verify code" : stage === "approve" ? "I approved it" : stage === "cookies" ? "Save session" : "Connect LinkedIn";
   return (
     <div>
-      <div className="mb-6 text-center">
+      <div className="onboard-title mb-6">
         <h2 className="text-[26px] leading-[1.2]">Automate your outreach in minutes</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-base-content/55">Connect your LinkedIn account to reach leads. You approve every message before it is sent.</p>
       </div>

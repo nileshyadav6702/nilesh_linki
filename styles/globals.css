@@ -139,6 +139,13 @@ h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
+.onboard-title,
+.onboard-title h2,
+.onboard-title p {
+  width: 100%;
+  text-align: center;
+}
+
 code, kbd, pre, .font-mono {
   font-family: var(--font-mono);
   letter-spacing: var(--ls-normal);
