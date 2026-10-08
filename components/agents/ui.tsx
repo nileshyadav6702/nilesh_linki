@@ -99,14 +99,16 @@ export function SignalChip({ type }: { type: string }) {
 const STATUS: Record<string, string> = {
   new: "text-base-content/60", qualified: "text-info", drafted: "text-warning", approved: "text-info",
   enrolled: "text-success", disqualified: "text-base-content/35", skipped: "text-base-content/35",
+  needs_data: "text-warning",
   active: "text-success", paused: "text-warning", draft: "text-base-content/50",
 };
+const STATUS_TEXT: Record<string, string> = { needs_data: "Needs profile data" };
 
 export function StatusDot({ status }: { status: string | null | undefined }) {
   const s = status ?? "new";
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium capitalize ${STATUS[s] ?? "text-base-content/60"}`}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current" />{s}
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${STATUS_TEXT[s] ? "" : "capitalize"} ${STATUS[s] ?? "text-base-content/60"}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />{STATUS_TEXT[s] ?? s}
     </span>
   );
 }

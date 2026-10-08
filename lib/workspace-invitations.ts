@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { getDb } from "@/lib/db";
-import type { WorkspaceRole } from "@/lib/workspace";
+import { invalidateMembershipCache, type WorkspaceRole } from "@/lib/workspace";
 
 const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60_000;
 
@@ -85,6 +85,8 @@ export function acceptWorkspaceInvitation(token: string, userId: string, userEma
     db.prepare(`INSERT INTO audit_logs (id,workspace_id,user_id,action,entity_type,entity_id,metadata_json)
       VALUES (?,?,?,?,?,?,?)`).run(randomUUID(), invitation.workspace_id, userId, "workspace.invitation_accepted", "workspace_invitation", invitation.id, JSON.stringify({ email: invitation.email, role: invitation.role }));
   })();
+  // The user may have a cached "not a member" (or an old role) for this workspace.
+  invalidateMembershipCache(userId);
   return getInvitationById(invitation.id, invitation.workspace_id)!;
 }
 

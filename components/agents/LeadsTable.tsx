@@ -15,8 +15,8 @@ interface Row {
 
 const STEP: Record<string, string> = { visit: "Visit", connect: "Connect", message: "Message", sales_inmail: "InMail", delay: "Wait", email: "Email" };
 
-const STATUS: Record<string, string> = { new: "Scoring", qualified: "Qualified", drafted: "To review", approved: "Approved", enrolled: "In sequence", skipped: "Rejected", disqualified: "Not a fit" };
-const FILTERS = [["", "Active"], ["drafted", "To review"], ["qualified", "Qualified"], ["enrolled", "In sequence"], ["disqualified", "Not a fit"], ["all", "All"]] as const;
+const STATUS: Record<string, string> = { new: "Scoring", qualified: "Qualified", drafted: "To review", approved: "Approved", enrolled: "In sequence", skipped: "Rejected", disqualified: "Not a fit", needs_data: "Needs profile data" };
+const FILTERS = [["", "Active"], ["drafted", "To review"], ["qualified", "Qualified"], ["enrolled", "In sequence"], ["needs_data", "Needs data"], ["disqualified", "Not a fit"], ["all", "All"]] as const;
 
 /** Agent leads as a table: contact, signal, AI score, email, outreach state. Rows open the lead drawer. */
 export default function LeadsTable({ agentId, showAgent = !agentId, initialAgentId, openLeadId }: { agentId?: string; showAgent?: boolean; initialAgentId?: string; openLeadId?: string }) {
@@ -138,7 +138,9 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
                   {showPhone && <td className="max-w-[120px] truncate py-3 pr-3 text-xs">{r.phone}</td>}
                   <td className="py-3 text-xs">{STEP[r.outreach_step ?? ""] ?? <span className="text-base-content/30">—</span>}</td>
                   <td className="py-3 text-xs text-base-content/60" onClick={(e) => e.stopPropagation()}>
-                    {STATUS[r.agent_status ?? ""] ?? "—"}
+                    {r.agent_status === "needs_data"
+                      ? <span className="rounded-full bg-warning/10 px-2 py-0.5 text-warning" title="Missing headline and about — scored once the profile is enriched">{STATUS.needs_data}</span>
+                      : STATUS[r.agent_status ?? ""] ?? "—"}
                     {r.agent_status && !["skipped", "disqualified"].includes(r.agent_status) && <button className="ml-2 text-error" onClick={() => act(r.id, "skip")}>Reject</button>}
                   </td>
                   {showAgent && <td className="max-w-[160px] truncate py-3 text-xs text-base-content/50">{r.agent_name}</td>}

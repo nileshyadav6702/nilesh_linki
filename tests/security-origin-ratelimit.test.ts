@@ -2,17 +2,15 @@ import { describe, it, expect, vi } from "vitest";
 import { canonicalOrigin, internalApiOrigin, mcpResourceUrl, requestOrigin } from "@/lib/mcp/auth";
 import { validateEnv } from "@/lib/env";
 import { clientIp } from "@/lib/rate-limit";
-import type { NextApiRequest } from "next";
 
-const spoofed = { headers: { host: "evil.example", "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" } } as unknown as NextApiRequest;
 
 describe("canonical origin (MCP / OAuth)", () => {
-  it("ignores Host and X-Forwarded-Host entirely", () => {
+  it("derives the origin from NEXTAUTH_URL only (no request input at all)", () => {
     const prev = process.env.NEXTAUTH_URL;
     process.env.NEXTAUTH_URL = "https://linki.example.com/some/path";
     try {
-      expect(requestOrigin(spoofed)).toBe("https://linki.example.com");
-      expect(mcpResourceUrl(spoofed)).toBe("https://linki.example.com/api/mcp");
+      expect(requestOrigin()).toBe("https://linki.example.com");
+      expect(mcpResourceUrl()).toBe("https://linki.example.com/api/mcp");
     } finally {
       if (prev === undefined) delete process.env.NEXTAUTH_URL; else process.env.NEXTAUTH_URL = prev;
     }

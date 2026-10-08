@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { MCP_SCOPES, requestOrigin } from "@/lib/mcp/auth";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  const origin = requestOrigin(req);
+  const origin = requestOrigin();
   res.setHeader("Cache-Control", "public, max-age=3600");
   return res.json({
     issuer: origin,

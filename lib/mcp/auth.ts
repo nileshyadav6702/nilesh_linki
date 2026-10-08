@@ -1,5 +1,4 @@
 import { createHash, randomBytes, randomUUID } from "crypto";
-import type { NextApiRequest } from "next";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { getDb } from "@/lib/db";
 
@@ -42,12 +41,12 @@ export function internalApiOrigin(env: NodeJS.ProcessEnv = process.env): string 
   return `http://127.0.0.1:${env.PORT || 3000}`;
 }
 
-// The request parameter is kept for call-site compatibility and deliberately ignored.
-export function requestOrigin(_req?: NextApiRequest): string {
+// Always the configured canonical origin: request headers (Host, X-Forwarded-*) are never trusted.
+export function requestOrigin(): string {
   return canonicalOrigin();
 }
 
-export function mcpResourceUrl(_req?: NextApiRequest): string {
+export function mcpResourceUrl(): string {
   return `${canonicalOrigin()}/api/mcp`;
 }
 

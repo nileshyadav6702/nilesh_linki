@@ -13,7 +13,7 @@ export const config = { api: { bodyParser: { sizeLimit: "4mb" } } };
 const DEFAULT_CLIENT_ORIGINS = ["https://claude.ai", "https://claude.com"];
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const origin = requestOrigin(req);
+  const origin = requestOrigin();
   const requestOriginHeader = req.headers.origin;
   const clientOrigin = requestOriginHeader ? allowedClientOrigin(requestOriginHeader, origin) : null;
   if (requestOriginHeader && !clientOrigin) return res.status(403).json(mcpError(-32000, "Invalid Origin header"));
@@ -53,7 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 function authenticate(req: NextApiRequest): AuthInfo | null {
   const header = req.headers.authorization;
   if (!header?.startsWith("Bearer ")) return null;
-  return verifyAccessToken(header.slice(7).trim(), mcpResourceUrl(req));
+  return verifyAccessToken(header.slice(7).trim(), mcpResourceUrl());
 }
 
 function allowedClientOrigin(value: string, serverOrigin: string): string | null {

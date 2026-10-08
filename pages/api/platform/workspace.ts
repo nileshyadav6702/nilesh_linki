@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
-import { getMemberships, requireWorkspace, recordAudit, type WorkspaceRole } from "@/lib/workspace";
+import { getMemberships, invalidateMembershipCache, requireWorkspace, recordAudit, type WorkspaceRole } from "@/lib/workspace";
 
 const ROLES = new Set<WorkspaceRole>(["owner", "admin", "manager", "member", "viewer"]);
 
@@ -23,6 +23,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (!user) return res.status(404).json({ error: "User must create an account before being added" });
     db.prepare("INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = excluded.role")
       .run(ctx.workspaceId, user.id, role);
+    invalidateMembershipCache(user.id);
     recordAudit(ctx, "workspace.member_upserted", "user", user.id, { role });
     return res.status(201).json({ ok: true });
   }
@@ -41,6 +42,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (member?.role === "owner" && ctx.role !== "owner") return res.status(403).json({ error: "Only an owner can remove another owner" });
     if (member?.role === "owner" && owners <= 1) return res.status(400).json({ error: "Cannot remove the last owner" });
     db.prepare("DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?").run(ctx.workspaceId, userId);
+    invalidateMembershipCache(userId);
     recordAudit(ctx, "workspace.member_removed", "user", userId);
     return res.status(204).end();
   }

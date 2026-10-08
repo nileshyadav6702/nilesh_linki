@@ -15,7 +15,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (body.response_type !== "code" || body.code_challenge_method !== "S256" || !body.code_challenge) {
     return redirectError(res, body.redirect_uri, body.state, "invalid_request", "OAuth PKCE with S256 is required");
   }
-  const expectedResource = mcpResourceUrl(req);
+  const expectedResource = mcpResourceUrl();
   if (body.resource && body.resource !== expectedResource) {
     return redirectError(res, body.redirect_uri, body.state, "invalid_target", "Unknown MCP resource");
   }

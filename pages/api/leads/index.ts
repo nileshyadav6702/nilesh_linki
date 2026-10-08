@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { requireWorkspace } from "@/lib/workspace";
 
-const STATUSES = new Set(["new", "qualified", "disqualified", "drafted", "approved", "enrolled", "skipped"]);
+const STATUSES = new Set(["new", "qualified", "disqualified", "needs_data", "drafted", "approved", "enrolled", "skipped"]);
 
 // GET /api/leads?agent_id=&status=&signal_type=&verdict=&q=&limit=&offset=
 // The Leads feed: agent-sourced contacts ranked by lead score, each with its signals,

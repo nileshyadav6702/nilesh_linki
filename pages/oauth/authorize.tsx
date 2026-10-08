@@ -54,7 +54,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
   const redirectUri = typeof q.redirect_uri === "string" ? q.redirect_uri : "";
   const client = getOAuthClient(clientId);
   if (!client || !clientRedirectAllowed(client, redirectUri) || q.response_type !== "code" || q.code_challenge_method !== "S256" || typeof q.code_challenge !== "string") return { notFound: true };
-  const resource = typeof q.resource === "string" ? q.resource : mcpResourceUrl(ctx.req as never);
+  const resource = typeof q.resource === "string" ? q.resource : mcpResourceUrl();
   const scopes = normalizeScopes(q.scope);
   const params: Record<string, string> = {
     client_id: clientId, redirect_uri: redirectUri, response_type: "code",
