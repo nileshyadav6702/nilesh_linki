@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { getDb } from "@/lib/db";
-import { openRouterChat, assertWithinSpendCap } from "@/lib/ai/client";
+import { openRouterChat, assertWithinSpendCap, recordAiUsage } from "@/lib/ai/client";
 
 type Channel = "message" | "email" | "sales_inmail";
 
@@ -136,9 +136,17 @@ export async function generateCommunityContent(params: CommunityAiParams): Promi
     temperature: 0.7,
   }, "Linki Community");
 
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) throw new Error("OpenRouter returned no content");
-  const parsed = parseModelJson(content, params.stepType);
+  let parsed: { subject?: string; body: string };
+  try {
+    const content = payload.choices?.[0]?.message?.content;
+    if (!content) throw new Error("OpenRouter returned no content");
+    parsed = parseModelJson(content, params.stepType);
+  } catch (err) {
+    // A rejected answer was still paid for: record it so it counts toward the spend cap.
+    // (Successful calls are recorded in agent_sessions below, which the cap also sums.)
+    if (workspaceId) recordAiUsage(workspaceId, "sequence_write", params.model, payload.usage, false, err instanceof Error ? err.message : String(err));
+    throw err;
+  }
   const inputTokens = payload.usage?.prompt_tokens ?? 0;
   const outputTokens = payload.usage?.completion_tokens ?? 0;
   const cost = typeof payload.usage?.cost === "number" ? payload.usage.cost : null;

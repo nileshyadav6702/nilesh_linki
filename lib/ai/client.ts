@@ -52,7 +52,7 @@ export function isAiBlockingError(err: unknown): err is AiNotConfiguredError | A
 
 export interface AiConfig { apiKey: string; model: string }
 
-export type AiPurpose = "icp_extract" | "fit_score" | "first_touch" | "reply_draft" | "funding_extract" | "lookalike_query" | "hiring_match";
+export type AiPurpose = "icp_extract" | "fit_score" | "first_touch" | "reply_draft" | "reply_classify" | "sequence_write" | "funding_extract" | "lookalike_query" | "hiring_match";
 
 export function getWorkspaceAi(workspaceId: string, modelOverride?: string | null): AiConfig {
   const db = getDb();
@@ -92,7 +92,15 @@ export function stripFences(content: string): string {
   return content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
 }
 
-function logUsage(workspaceId: string, purpose: string, model: string, usage: OpenRouterResponse["usage"] | undefined, ok: boolean, error?: string) {
+export type AiUsage = OpenRouterResponse["usage"];
+
+/**
+ * Records one model call in ai_usage, which is what the daily spend cap (assertWithinSpendCap)
+ * sums. Any direct openRouterChat caller not already recorded elsewhere (aiJson does it here;
+ * the sequence writer records into agent_sessions, also summed by the cap) must call this on
+ * success and failure. Never throws.
+ */
+export function recordAiUsage(workspaceId: string, purpose: AiPurpose, model: string, usage: AiUsage | undefined, ok: boolean, error?: string): void {
   try {
     getDb().prepare(`INSERT INTO ai_usage (id, workspace_id, purpose, model, input_tokens, output_tokens, cost_usd, ok, error)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
@@ -193,19 +201,19 @@ export async function aiJson<T>(req: AiJsonRequest<T>): Promise<T> {
       ({ content, usage } = await callOnce(cfg, req as AiJsonRequest<unknown>, retryNote));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logUsage(req.workspaceId, req.purpose, cfg.model, undefined, false, message);
+      recordAiUsage(req.workspaceId, req.purpose, cfg.model, undefined, false, message);
       throw err;
     }
     let parsed: unknown;
     try { parsed = JSON.parse(stripFences(content)); } catch { parsed = undefined; }
     const result = req.schema.safeParse(parsed);
     if (result.success) {
-      logUsage(req.workspaceId, req.purpose, cfg.model, usage, true);
+      recordAiUsage(req.workspaceId, req.purpose, cfg.model, usage, true);
       return result.data;
     }
     const issue = result.error.issues[0];
     retryNote = `Your previous answer was invalid (${issue ? `${issue.path.join(".")}: ${issue.message}` : "not JSON"}). Fix it.`;
-    logUsage(req.workspaceId, req.purpose, cfg.model, usage, false, retryNote);
+    recordAiUsage(req.workspaceId, req.purpose, cfg.model, usage, false, retryNote);
   }
   throw new Error(`The model did not return valid ${req.purpose} output`);
 }

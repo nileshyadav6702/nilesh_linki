@@ -36,7 +36,13 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
   const query = useMemo(() => new URLSearchParams(Object.entries({ agent_id: agent, status, signal_type: signal, q, limit: String(limit), offset: String(page * limit) }).filter(([, v]) => v)).toString(), [agent, status, signal, q, page]);
   const load = useCallback(() => fetch(`/api/leads?${query}`).then((r) => r.json()).then((d) => { setRows(d.leads ?? []); setTotal(d.total ?? 0); }), [query]);
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [load]);
-  useEffect(() => { if (openLeadId) setOpen(openLeadId); }, [openLeadId]);
+  // Open the drawer when the parent asks for a different lead (adjusting state on a prop change
+  // during render, per React docs, instead of a setState-in-effect round trip).
+  const [prevOpenLeadId, setPrevOpenLeadId] = useState(openLeadId);
+  if (openLeadId !== prevOpenLeadId) {
+    setPrevOpenLeadId(openLeadId);
+    if (openLeadId) setOpen(openLeadId);
+  }
 
   async function bulk(action: "find_email" | "skip") {
     const ids = [...selected];
