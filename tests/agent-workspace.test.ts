@@ -1,0 +1,66 @@
+import { beforeAll, describe, expect, it } from "vitest";
+import { getDb } from "@/lib/db";
+import { agentPerformance, dueToday, stepOccupancy } from "@/lib/agents/analytics";
+import { addSource, createAgent, duplicateAgent, getAgent, listSources } from "@/lib/agents/store";
+import { createDefaultCampaign } from "@/lib/agents/default-campaign";
+
+const WS = "ws-agent-workspace";
+
+beforeAll(() => {
+  getDb().prepare("INSERT INTO workspaces (id, name, slug) VALUES (?, ?, ?)").run(WS, "Workspace", "agent-workspace");
+});
+
+describe("agent workspace", () => {
+  it("counts lifetime performance for the agent's own leads", () => {
+    const db = getDb();
+    const workflowId = createDefaultCampaign(db, WS, "Perf", "multi");
+    const agent = createAgent(WS, { name: "Perf agent", workflow_id: workflowId, mode: "copilot", min_score: 55, fit_weight: 0.6, autopilot_delay_minutes: 60, daily_lead_cap: 25, enrich_emails: false });
+    db.prepare(`INSERT INTO targets (id, workspace_id, agent_id, linkedin_url, full_name, connection_requested_at, connected_at, reply_kind, last_replied_at)
+      VALUES ('t-perf', ?, ?, 'https://www.linkedin.com/in/perf', 'Pat', datetime('now'), datetime('now'), 'interested', datetime('now'))`).run(WS, agent.id);
+    db.prepare(`INSERT INTO targets (id, workspace_id, agent_id, linkedin_url, full_name) VALUES ('t-perf-2', ?, ?, 'https://www.linkedin.com/in/perf-2', 'Sam')`).run(WS, agent.id);
+    expect(agentPerformance(db, agent.id)).toMatchObject({ found: 2, contacted: 1, accepted: 1, replied: 1, interested: 1 });
+  });
+
+  it("duplicates the campaign and sources without copying leads", () => {
+    const db = getDb();
+    const workflowId = createDefaultCampaign(db, WS, "Copy me", "linkedin");
+    const agent = createAgent(WS, { name: "Original", workflow_id: workflowId, mode: "autopilot", min_score: 40, fit_weight: 0.5, autopilot_delay_minutes: 30, daily_lead_cap: 10, enrich_emails: true, goal: "meetings", tone: "direct", channel: "linkedin" });
+    addSource(agent.id, WS, "hiring", { keywords: ["sdr"] });
+    db.prepare("UPDATE agents SET status = 'active', outreach_enabled = 1 WHERE id = ?").run(agent.id);
+    db.prepare("INSERT INTO targets (id, workspace_id, agent_id, linkedin_url, full_name) VALUES ('t-keep', ?, ?, 'https://www.linkedin.com/in/keep', 'Keep')").run(WS, agent.id);
+
+    const copy = duplicateAgent(agent.id, WS);
+    expect(copy).toBeTruthy();
+    expect(copy!.id).not.toBe(agent.id);
+    expect(copy!.name).toBe("Original (copy)");
+    expect(copy!.status).toBe("draft");
+    expect(copy!.outreach_enabled).toBe(0);
+    expect(copy!.workflow_id).toBeTruthy();
+    expect(copy!.workflow_id).not.toBe(workflowId);
+    expect(copy!.mode).toBe("autopilot");
+    expect(copy!.goal).toBe("meetings");
+
+    const originalSteps = db.prepare("SELECT COUNT(*) n FROM workflow_steps WHERE workflow_id = ?").get(workflowId) as { n: number };
+    const copySteps = db.prepare("SELECT COUNT(*) n FROM workflow_steps WHERE workflow_id = ?").get(copy!.workflow_id) as { n: number };
+    expect(copySteps.n).toBe(originalSteps.n);
+    expect(copySteps.n).toBeGreaterThan(0);
+    expect(listSources(copy!.id, WS)).toHaveLength(1);
+    expect((db.prepare("SELECT COUNT(*) n FROM targets WHERE agent_id = ?").get(copy!.id) as { n: number }).n).toBe(0);
+    expect(getAgent(agent.id, WS)!.status).toBe("active");
+    expect((db.prepare("SELECT COUNT(*) n FROM targets WHERE agent_id = ?").get(agent.id) as { n: number }).n).toBe(1);
+  });
+
+  it("counts contacts sitting on the current step", () => {
+    const db = getDb();
+    const workflowId = createDefaultCampaign(db, WS, "Occupancy", "linkedin");
+    const agent = createAgent(WS, { name: "Occ", workflow_id: workflowId, mode: "copilot", min_score: 55, fit_weight: 0.6, autopilot_delay_minutes: 60, daily_lead_cap: 25, enrich_emails: false });
+    const runId = "run-occ";
+    db.prepare("INSERT INTO runs (id, workspace_id, workflow_id, list_id, status, started_at) VALUES (?, ?, ?, ?, 'running', datetime('now'))").run(runId, WS, workflowId, agent.list_id);
+    db.prepare("INSERT INTO targets (id, workspace_id, agent_id, linkedin_url) VALUES ('t-occ', ?, ?, 'https://www.linkedin.com/in/occ')").run(WS, agent.id);
+    db.prepare("INSERT INTO run_profiles (id, run_id, target_id) VALUES ('rp-occ', ?, 't-occ')").run(runId);
+    db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step, next_step_at) VALUES ('tr-occ', 'rp-occ', 'linkedin', 'in_progress', 0, datetime('now'))").run();
+    const steps = stepOccupancy(db, workflowId);
+    expect(steps.find((s) => s.track === "linkedin" && s.step_order === 1)?.contacts).toBe(1);
+    expect(dueToday(db, workflowId)).toBe(1);
+  });
+});

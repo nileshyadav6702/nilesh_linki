@@ -102,6 +102,60 @@ export function deleteAgent(id: string, workspaceId: string): void {
   getDb().prepare("DELETE FROM agents WHERE id = ? AND workspace_id = ?").run(id, workspaceId);
 }
 
+function cloneWorkflow(db: ReturnType<typeof getDb>, workspaceId: string, workflowId: string, name: string): string | null {
+  const row = db.prepare("SELECT description, prompt FROM workflows WHERE id = ? AND workspace_id = ?").get(workflowId, workspaceId) as { description: string | null; prompt: string | null } | undefined;
+  if (!row) return null;
+  const id = randomUUID();
+  db.prepare("INSERT INTO workflows (id, workspace_id, name, description, prompt) VALUES (?, ?, ?, ?, ?)").run(id, workspaceId, name, row.description, row.prompt);
+  const steps = db.prepare("SELECT * FROM workflow_steps WHERE workflow_id = ?").all(workflowId) as Array<Record<string, unknown>>;
+  for (const step of steps) {
+    const copy: Record<string, unknown> = { ...step, id: randomUUID(), workflow_id: id };
+    const cols = Object.keys(copy);
+    db.prepare(`INSERT INTO workflow_steps (${cols.join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`).run(...cols.map((c) => copy[c]));
+  }
+  return id;
+}
+
+/** A new draft agent with the same ICP, sources, and steps. Leads stay on the original. */
+export function duplicateAgent(id: string, workspaceId: string): Agent | null {
+  const src = getAgent(id, workspaceId);
+  if (!src) return null;
+  const db = getDb();
+  const copy = db.transaction(() => {
+    let icpId = src.icp_id;
+    if (icpId) {
+      const icp = db.prepare("SELECT website_url, data_json FROM icps WHERE id = ? AND workspace_id = ?").get(icpId, workspaceId) as { website_url: string | null; data_json: string } | undefined;
+      if (icp) {
+        icpId = randomUUID();
+        const version = ((db.prepare("SELECT MAX(version) v FROM icps WHERE workspace_id = ?").get(workspaceId) as { v: number | null }).v ?? 0) + 1;
+        db.prepare("INSERT INTO icps (id, workspace_id, version, website_url, data_json) VALUES (?, ?, ?, ?, ?)").run(icpId, workspaceId, version, icp.website_url, icp.data_json);
+      }
+    }
+    const workflowId = src.workflow_id ? cloneWorkflow(db, workspaceId, src.workflow_id, `${src.name} (copy)`) : null;
+    const created = createAgent(workspaceId, {
+      name: `${src.name} (copy)`.slice(0, 120),
+      icp_id: icpId,
+      mode: src.mode,
+      min_score: src.min_score,
+      fit_weight: src.fit_weight,
+      workflow_id: workflowId,
+      linkedin_account_id: src.linkedin_account_id,
+      email_account_id: src.email_account_id,
+      autopilot_delay_minutes: src.autopilot_delay_minutes,
+      daily_lead_cap: src.daily_lead_cap,
+      enrich_emails: !!src.enrich_emails,
+      booking_url: src.booking_url,
+      goal: src.goal,
+      tone: src.tone,
+      channel: src.channel,
+      exclude_first_degree: !!src.exclude_first_degree,
+    });
+    for (const source of listSources(id, workspaceId)) addSource(created.id, workspaceId, source.source_type, parseSourceConfig(source.config_json), source.interval_hours);
+    return created;
+  })();
+  return copy;
+}
+
 export function listSources(agentId: string, workspaceId: string): AgentSource[] {
   return getDb().prepare("SELECT * FROM agent_sources WHERE agent_id = ? AND workspace_id = ? ORDER BY created_at").all(agentId, workspaceId) as AgentSource[];
 }

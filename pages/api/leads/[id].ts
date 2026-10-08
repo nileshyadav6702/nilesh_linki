@@ -40,6 +40,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     recordAudit(ctx, "lead.enrolled", "contact", id);
     return res.json({ ok: true });
   }
+  if (action === "remove") {
+    db.transaction(() => {
+      db.prepare("UPDATE targets SET agent_id = NULL, agent_status = NULL, skip_reason = 'Removed from campaign', agent_status_at = datetime('now') WHERE id = ?").run(id);
+      if (agent?.list_id) db.prepare("DELETE FROM list_targets WHERE list_id = ? AND target_id = ?").run(agent.list_id, id);
+      db.prepare(`UPDATE run_profile_tracks SET state = 'skipped', error_message = 'Removed from campaign'
+        WHERE run_profile_id IN (SELECT rp.id FROM run_profiles rp JOIN runs r ON r.id = rp.run_id WHERE rp.target_id = ? AND r.workspace_id = ?)
+          AND state NOT IN ('completed','failed','skipped')`).run(id, ctx.workspaceId);
+      db.prepare("UPDATE approval_queue SET status = 'rejected', decided_at = datetime('now') WHERE target_id = ? AND status = 'pending'").run(id);
+    })();
+    recordAudit(ctx, "lead.removed", "contact", id);
+    return res.json({ ok: true });
+  }
   if (action === "find_email") {
     const r = await enrichTargetEmail(db, ctx.workspaceId, id);
     return res.json({ found: !!r, ...r });

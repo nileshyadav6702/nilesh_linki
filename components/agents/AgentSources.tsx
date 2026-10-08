@@ -19,7 +19,7 @@ function describe(s: AgentSourceRow): string {
 }
 
 /** "Who this agent targets" + "How this agent finds leads", with per-source counts, Launch now and toggles. */
-export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChanged }: { agentId: string; icp: Icp; rows: AgentSourceRow[]; hasLinkedIn: boolean; onChanged: () => void }) {
+export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChanged, onEditTargeting }: { agentId: string; icp: Icp; rows: AgentSourceRow[]; hasLinkedIn: boolean; onChanged: () => void; onEditTargeting?: () => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<SourceDraft[]>(() => rows.map((s) => ({ source_type: s.source_type, enabled: !!s.enabled, config: JSON.parse(s.config_json || "{}") })));
   const [busy, setBusy] = useState(false);
@@ -58,7 +58,8 @@ export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChange
         <Card className="flex flex-wrap items-center gap-2 !py-3">
           {chips.slice(0, 6).map((c) => <span key={c} className="rounded-full border border-[var(--border-subtle)] px-3 py-1 text-sm">{c}</span>)}
           {chips.length > 6 && <span className="rounded-full border border-[var(--border-subtle)] px-3 py-1 text-sm text-base-content/50">+{chips.length - 6}</span>}
-          {!chips.length && <span className="text-sm text-base-content/45">No ICP yet — set one in the ICP tab.</span>}
+          {!chips.length && <span className="text-sm text-base-content/45">No targeting yet.</span>}
+          {onEditTargeting && <button className={`${secondaryBtn} ml-auto`} onClick={onEditTargeting}><RiEditLine size={15} /> Edit targeting</button>}
         </Card>
       </div>
 

@@ -3,27 +3,34 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
-import { RiDeleteBinLine, RiPauseLine, RiPlayLine, RiRefreshLine, RiSendPlaneLine } from "react-icons/ri";
-import AgentOverview, { type Budget, type DetectorRun, type FunnelRow } from "@/components/agents/AgentOverview";
+import { RiDeleteBinLine, RiLinkedinBoxFill, RiMailLine, RiPauseLine, RiPlayLine, RiRefreshLine } from "react-icons/ri";
+import AgentOverview, { ActivityList, type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
 import AgentSettings, { type AgentForm } from "@/components/agents/AgentSettings";
 import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSources";
 import IcpEditor, { EMPTY_ICP } from "@/components/agents/IcpEditor";
 import LeadsTable from "@/components/agents/LeadsTable";
-import SequenceEditor, { type Step } from "@/components/agents/SequenceEditor";
-import { Card, ghostBtn, primaryBtn, secondaryBtn, timeAgo } from "@/components/agents/ui";
+import type { Step } from "@/components/agents/SequenceEditor";
+import { Card, ghostBtn, primaryBtn, secondaryBtn, timeUntil } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 import type { Icp } from "@/lib/icp/schema";
 
 export const getServerSideProps = requireSignedIn;
 
+interface StepRow { id: string; track: string; step_type: string; step_order: number; delay_seconds: number; contacts: number }
 interface Detail {
   agent: AgentForm & { id: string; status: string; outreach_enabled: number; icp_id: string | null; last_run_at: string | null; last_error: string | null; list_id: string | null; channel: string };
-  sources: AgentSourceRow[]; runs: DetectorRun[]; funnel: FunnelRow[]; linkedin_budget: Budget | null;
+  sources: AgentSourceRow[]; linkedin_budget: Budget | null;
   counts: { by_status: Record<string, number>; today: Record<string, number>; ai_cost_30d_usd: number };
   sequence: Array<Omit<Step, "draft">>; workflow: { id: string; name: string } | null;
+  performance: Performance; series: DayPoint[]; activity: ActivityItem[]; next_run_at: string | null; due_today: number; steps: StepRow[];
+  senders: {
+    linkedin: { name: string | null; email: string | null; daily_connection_limit: number | null; daily_message_limit: number | null; is_authenticated: number } | null;
+    email: { from_email: string | null; from_name: string | null; daily_email_limit: number | null; ramp_up_enabled: number | null; ramp_start_date: string | null } | null;
+  };
 }
 
-const TABS = ["Overview", "Leads", "Sources", "Campaign", "ICP", "Settings"] as const;
+const TABS = ["Overview", "Leads", "Sources", "Campaign", "Activity", "Settings"] as const;
+const STEP_LABEL: Record<string, string> = { visit: "Visit profile", connect: "Connection request", message: "Message", sales_inmail: "Sales InMail", delay: "Wait", email: "Email" };
 
 export default function AgentDetail() {
   const router = useRouter();
@@ -32,6 +39,8 @@ export default function AgentDetail() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
   const [icp, setIcp] = useState<Icp>(EMPTY_ICP);
   const [icpKey, setIcpKey] = useState(0);
+  const [editingIcp, setEditingIcp] = useState(false);
+  const [activityFilter, setActivityFilter] = useState<"all" | "discovery" | "campaign" | "setup">("all");
   const [busy, setBusy] = useState(false);
 
   const fetchDetail = useCallback(async (): Promise<{ data: Detail; icp: Icp | null } | null> => {
@@ -89,6 +98,8 @@ export default function AgentDetail() {
   const a = d.agent;
   const finding = a.status === "active";
   const sending = !!a.outreach_enabled;
+  const leadCount = Object.values(d.counts.by_status).reduce((x, y) => x + y, 0);
+  const senderName = d.senders.linkedin?.name || d.senders.email?.from_email || "No sender";
 
   return (
     <>
@@ -98,23 +109,20 @@ export default function AgentDetail() {
           <div className="min-w-0">
             <p className="mb-2 text-[13px] font-medium text-base-content/45"><Link href="/agents" className="hover:underline">Agents</Link></p>
             <h1 className="truncate text-[28px] font-semibold leading-tight tracking-[-.03em]">{a.name}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium ${finding ? "bg-info/10 text-info" : "bg-base-200 text-base-content/55"}`}>
-                <span className={`h-1.5 w-1.5 rounded-full bg-current ${finding ? "animate-pulse" : ""}`} />{finding ? "Finding leads" : "Lead finding paused"}
-              </span>
-              <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 font-medium ${sending ? "bg-success/10 text-success" : "bg-base-200 text-base-content/55"}`}>{sending ? "Outreach on" : "Outreach paused"}</span>
-              <span className="capitalize text-base-content/50">{a.mode}</span>
-              <span className="text-base-content/45">Last run {timeAgo(a.last_run_at)}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/60">
+              {d.senders.linkedin && <RiLinkedinBoxFill className="text-[#0a66c2]" size={16} />}
+              {d.senders.email && <RiMailLine className="text-error" size={16} />}
+              <span>{senderName}</span>
+              <span className="text-base-content/40">Next launch {timeUntil(d.next_run_at)}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${finding ? "bg-info/10 text-info" : "bg-base-200"}`}>{finding ? "Finding leads" : "Sourcing paused"}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${sending ? "bg-success/10 text-success" : "bg-base-200"}`}>{sending ? "Outreach on" : "Outreach paused"}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 rounded-[10px] border border-[var(--border-subtle)] px-3 py-2 text-sm">
-              <input type="checkbox" className="toggle toggle-sm" checked={finding} onChange={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead finding paused" : "Finding leads")} /> Finding leads
-            </label>
-            <button className={secondaryBtn} disabled={busy} onClick={runNow}><RiRefreshLine size={16} /> Run now</button>
+            <button className={secondaryBtn} disabled={busy} onClick={runNow}><RiRefreshLine size={16} /> Launch now</button>
             {sending
               ? <button className={secondaryBtn} onClick={() => patch({ outreach_enabled: false }, "Outreach paused")}><RiPauseLine size={16} /> Pause outreach</button>
-              : <button className={primaryBtn} onClick={() => patch({ outreach_enabled: true }, "Outreach started")}><RiSendPlaneLine size={16} /> Start outreach</button>}
+              : <button className={primaryBtn} onClick={() => patch({ outreach_enabled: true }, "Outreach started")}><RiPlayLine size={16} /> Start outreach</button>}
             <button className={ghostBtn} onClick={remove} aria-label="Delete agent"><RiDeleteBinLine size={16} /></button>
           </div>
         </div>
@@ -129,30 +137,86 @@ export default function AgentDetail() {
         <div className="flex gap-1 overflow-x-auto border-b border-[var(--border-subtle)]">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium ${tab === t ? "border-primary text-base-content" : "border-transparent text-base-content/45 hover:text-base-content/70"}`}>
-              {t}{t === "Leads" ? <span className="ml-1.5 rounded bg-base-200 px-1.5 text-xs">{Object.values(d.counts.by_status).reduce((x, y) => x + y, 0)}</span> : null}
+              {t}{t === "Leads" ? <span className="ml-1.5 rounded bg-base-200 px-1.5 text-xs">{leadCount}</span> : null}
             </button>
           ))}
         </div>
 
-        {tab === "Overview" && <AgentOverview counts={d.counts} funnel={d.funnel} runs={d.runs} budget={d.linkedin_budget} />}
+        {tab === "Overview" && (
+          <AgentOverview performance={d.performance} series={d.series} activity={d.activity} dueToday={d.due_today} budget={d.linkedin_budget} onReview={() => setTab("Leads")} onActivity={() => setTab("Activity")} />
+        )}
         {tab === "Leads" && <LeadsTable agentId={a.id} showAgent={false} />}
-        {tab === "Sources" && <AgentSources key={d.sources.map((s) => `${s.id}:${s.enabled}`).join()} agentId={a.id} icp={icp} rows={d.sources} hasLinkedIn={!!a.linkedin_account_id} onChanged={load} />}
+        {tab === "Sources" && (
+          <div className="space-y-4">
+            {editingIcp && (
+              <Card className="space-y-4">
+                <IcpEditor key={icpKey} value={icp} onChange={setIcp} />
+                <div className="flex gap-2">
+                  <button className={primaryBtn} onClick={async () => { await saveIcp(); setEditingIcp(false); }}>Save targeting</button>
+                  <button className={secondaryBtn} onClick={() => setEditingIcp(false)}>Cancel</button>
+                </div>
+              </Card>
+            )}
+            <AgentSources key={d.sources.map((s) => `${s.id}:${s.enabled}`).join()} agentId={a.id} icp={icp} rows={d.sources} hasLinkedIn={!!a.linkedin_account_id} onChanged={load} onEditTargeting={() => setEditingIcp(true)} />
+          </div>
+        )}
         {tab === "Campaign" && (
-          <Card className="space-y-4">
+          <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><div className="font-semibold">{d.workflow?.name ?? "No campaign"}</div><div className="text-sm text-base-content/50">{d.sequence.length} steps · qualified leads enter this campaign once approved. Every message step is drafted per lead in Copilot.</div></div>
-              {d.workflow && <Link href={`/workflows/${d.workflow.id}`} className={secondaryBtn}>Edit campaign</Link>}
+              <div><div className="font-semibold">{d.workflow?.name ?? "No campaign yet"}</div><div className="text-sm text-base-content/50">This agent owns the campaign. Leads enter it once they are approved.</div></div>
+              {d.workflow && <Link href={`/workflows/${d.workflow.id}`} className={secondaryBtn}>Edit steps</Link>}
             </div>
-            <SequenceEditor steps={d.sequence.map((s) => ({ ...s, draft: null }))} />
-          </Card>
+            {!d.steps.length && <Card><p className="text-sm text-base-content/55">No steps yet. Open Edit steps to add the LinkedIn and email sequence.</p></Card>}
+            {(["linkedin", "email"] as const).map((track) => {
+              const steps = d.steps.filter((s) => s.track === track);
+              if (!steps.length) return null;
+              return (
+                <div key={track} className="space-y-2">
+                  <h2 className="text-sm font-semibold capitalize">{track}</h2>
+                  {steps.map((s, i) => (
+                    <Card key={s.id} className="flex items-center justify-between !py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-base-200 text-xs font-semibold">{i + 1}</span>
+                        <div>
+                          <div className="font-medium">{STEP_LABEL[s.step_type] ?? s.step_type}</div>
+                          {s.step_type === "delay" && <div className="text-xs text-base-content/50">{Math.round(s.delay_seconds / 86400) || 1} day wait</div>}
+                        </div>
+                      </div>
+                      <div className="text-sm tabular-nums text-base-content/55">{s.contacts} contact{s.contacts === 1 ? "" : "s"}</div>
+                    </Card>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
         )}
-        {tab === "ICP" && (
-          <Card className="space-y-4">
-            <IcpEditor key={icpKey} value={icp} onChange={setIcp} />
-            <button className={primaryBtn} onClick={saveIcp}>Save as new ICP version</button>
-          </Card>
+        {tab === "Activity" && (
+          <div className="space-y-3">
+            <div className="flex gap-1 rounded-[10px] bg-base-200 p-1 w-fit">
+              {(["all", "discovery", "campaign", "setup"] as const).map((f) => (
+                <button key={f} onClick={() => setActivityFilter(f)} className={`rounded-[7px] px-3 py-1.5 text-xs font-medium capitalize ${activityFilter === f ? "bg-base-100 shadow-[var(--shadow-raised)]" : "text-base-content/50"}`}>{f}</button>
+              ))}
+            </div>
+            <ActivityList items={d.activity} filter={activityFilter} />
+          </div>
         )}
-        {tab === "Settings" && <AgentSettings agentId={a.id} initial={a} onSaved={load} />}
+        {tab === "Settings" && (
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Card>
+                <div className="text-xs uppercase tracking-wide text-base-content/40">LinkedIn sender</div>
+                <div className="mt-1 font-medium">{d.senders.linkedin?.name || d.senders.linkedin?.email || "Not connected"}</div>
+                {d.senders.linkedin && <div className="mt-1 text-xs text-base-content/50">{d.senders.linkedin.daily_connection_limit ?? 20} connections / day · {d.senders.linkedin.daily_message_limit ?? 40} messages / day · {d.senders.linkedin.is_authenticated ? "signed in" : "logged out"}</div>}
+              </Card>
+              <Card>
+                <div className="text-xs uppercase tracking-wide text-base-content/40">Email sender</div>
+                <div className="mt-1 font-medium">{d.senders.email?.from_email || "No mailbox"}</div>
+                {d.senders.email && <div className="mt-1 text-xs text-base-content/50">{d.senders.email.daily_email_limit ?? 50} emails / day · warmup {d.senders.email.ramp_up_enabled ? "on" : "off"}</div>}
+              </Card>
+            </div>
+            <AgentSettings agentId={a.id} initial={a} onSaved={load} />
+          </div>
+        )}
       </div>
     </>
   );

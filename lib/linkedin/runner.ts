@@ -58,6 +58,9 @@ const DISCOVERY_TIMEOUT_MS = 8 * 60_000;
 // always ends on a clean boundary and the remainder simply stays due for the next pass.
 // This is the mechanism that bounds a normal, busy tick.
 const TICK_SOFT_BUDGET_MS = 8 * 60_000;
+// Email has no browser delay. The budget only yields the loop between steps so one
+// mailbox's verification probe cannot pin the email worker for the whole poll.
+const EMAIL_TICK_SOFT_BUDGET_MS = 2 * 60_000;
 // Hard backstop, and only that. It must stay well clear of a legitimate tick
 // (TICK_SOFT_BUDGET_MS plus the one step that may still be running under its own deadline),
 // because aborting here does NOT cancel the work: withTimeout stops the caller waiting while
@@ -1158,6 +1161,10 @@ export function ensureGlobalRunnerStarted(): void {
   // two places at once. Its pacing / daily-limits / active-hours are unchanged.
   linkedinLoop().catch(err => console.error("[runner] LinkedIn loop crashed:", err));
 
+  // Email campaign steps used to run inside the LinkedIn tick, so a logged-out or busy
+  // browser stopped the mailbox too. This loop claims email tracks on its own.
+  startLoop("Email campaigns", "email-campaign-runner", async () => { await emailCampaignTick(getDb()); });
+
   // Every other background process gets its OWN independent loop, lease and cadence, so a
   // slow or hung one can never starve the others. These are all safe SMTP/IMAP/HTTP/DB
   // work; they interleave cooperatively in this single Node process (no SQLite write
@@ -1274,15 +1281,294 @@ function heartbeat(db: ReturnType<typeof getDb>, runs: Array<{ run_id: string }>
   }
 }
 
-async function tick(db: ReturnType<typeof getDb>): Promise<void> {
-  const activeRuns = db.prepare(`
+export interface CampaignRunRef {
+  run_id: string;
+  workflow_id: string;
+  account_id: string | null;
+  email_account_id: string | null;
+}
+
+/** Runs the LinkedIn loop will drive. A logged-out session is invisible here on purpose. */
+export function linkedInCampaignRuns(db: ReturnType<typeof getDb>): Array<CampaignRunRef & AccountLimits> {
+  return db.prepare(`
     SELECT r.id as run_id, r.workflow_id, r.account_id, r.email_account_id,
            a.daily_connection_limit, a.daily_message_limit, a.daily_inmail_limit, a.daily_visit_limit,
            a.active_hours_start, a.active_hours_end, a.timezone, a.working_days
     FROM runs r
     JOIN accounts a ON a.id = r.account_id
     WHERE r.status = 'running' AND a.is_authenticated = 1
-  `).all() as Array<{ run_id: string; workflow_id: string; account_id: string; email_account_id: string | null } & AccountLimits>;
+  `).all() as Array<CampaignRunRef & AccountLimits>;
+}
+
+/**
+ * Runs the email loop will drive. Any open email track qualifies, including a run
+ * with no LinkedIn account and a run whose LinkedIn session is logged out.
+ */
+export function emailCampaignRuns(db: ReturnType<typeof getDb>): CampaignRunRef[] {
+  return db.prepare(`
+    SELECT DISTINCT r.id as run_id, r.workflow_id, r.account_id, r.email_account_id
+    FROM runs r
+    JOIN run_profiles rp ON rp.run_id = r.id
+    JOIN run_profile_tracks rt ON rt.run_profile_id = rp.id
+    WHERE r.status = 'running'
+      AND rt.track = 'email'
+      AND rt.state NOT IN ('completed', 'failed', 'skipped')
+  `).all() as CampaignRunRef[];
+}
+
+function dueTracks(db: ReturnType<typeof getDb>, runIds: string[], track: "linkedin" | "email"): TrackRun[] {
+  if (runIds.length === 0) return [];
+  const placeholders = runIds.map(() => "?").join(",");
+  return db.prepare(
+    `SELECT rt.id, rt.run_profile_id, rt.track, rt.state, rt.current_step, rt.next_step_at,
+            rt.error_message, rt.last_email_subject, rt.last_email_body, rt.last_linkedin_message,
+            rt.pending_reply_context,
+            rp.run_id, rp.target_id, rp.email_account_id,
+            r.account_id, r.workflow_id,
+            t.connection_requested_at
+     FROM run_profile_tracks rt
+     JOIN run_profiles rp ON rp.id = rt.run_profile_id
+     JOIN runs r ON r.id = rp.run_id
+     JOIN targets t ON t.id = rp.target_id
+     WHERE rp.run_id IN (${placeholders})
+       AND rt.track = ?
+       AND rt.state = 'in_progress'
+       AND (rt.next_step_at IS NULL OR datetime(rt.next_step_at) <= datetime('now'))
+     ORDER BY rt.next_step_at ASC`
+  ).all(...runIds, track) as TrackRun[];
+}
+
+function completeFinishedRuns(db: ReturnType<typeof getDb>, runIds: string[]): void {
+  for (const runId of runIds) {
+    const remaining = (db.prepare(
+      `SELECT COUNT(*) as c FROM run_profile_tracks rt
+       JOIN run_profiles rp ON rp.id = rt.run_profile_id
+       WHERE rp.run_id = ? AND rt.state NOT IN ('completed', 'failed', 'skipped')`
+    ).get(runId) as { c: number }).c;
+    if (remaining !== 0) continue;
+    const profiles = (db.prepare("SELECT COUNT(*) as c FROM run_profiles WHERE run_id = ?").get(runId) as { c: number }).c;
+    if (profiles === 0) continue;
+    const updated = db.prepare("UPDATE runs SET status = 'completed', completed_at = datetime('now') WHERE id = ? AND status = 'running'").run(runId);
+    if (updated.changes === 0) continue;
+    const completedRun = db.prepare("SELECT workspace_id, workflow_id FROM runs WHERE id = ?").get(runId) as { workspace_id: string; workflow_id: string } | undefined;
+    if (completedRun) emitDomainEvent({ workspaceId: completedRun.workspace_id, type: "workflow.completed", entityType: "run", entityId: runId, payload: { workflow_id: completedRun.workflow_id } });
+    log(db, runId, null, "info", "All profiles processed — run completed");
+  }
+}
+
+/** Running runs whose every track is already terminal. Closes a run the worker that finished the last step did not get to mark. */
+function strandedRunningRunIds(db: ReturnType<typeof getDb>): string[] {
+  return (db.prepare(`
+    SELECT r.id FROM runs r
+    WHERE r.status = 'running'
+      AND EXISTS (SELECT 1 FROM run_profiles rp WHERE rp.run_id = r.id)
+      AND NOT EXISTS (
+        SELECT 1 FROM run_profile_tracks rt
+        JOIN run_profiles rp ON rp.id = rt.run_profile_id
+        WHERE rp.run_id = r.id AND rt.state NOT IN ('completed', 'failed', 'skipped')
+      )
+  `).all() as Array<{ id: string }>).map((row) => row.id);
+}
+
+function emailAccountsForRuns(db: ReturnType<typeof getDb>, runIds: string[]): Map<string, EmailAccountLimits> {
+  const limits = new Map<string, EmailAccountLimits>();
+  if (runIds.length === 0) return limits;
+  const placeholders = runIds.map(() => "?").join(",");
+  const ids = (db.prepare(
+    `SELECT DISTINCT rp.email_account_id FROM run_profiles rp
+     WHERE rp.run_id IN (${placeholders}) AND rp.email_account_id IS NOT NULL`
+  ).all(...runIds) as Array<{ email_account_id: string }>).map((row) => row.email_account_id);
+  for (const emailAccountId of ids) {
+    const account = db.prepare(
+      "SELECT daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, ramp_up_enabled, ramp_start_date FROM email_accounts WHERE id = ?"
+    ).get(emailAccountId) as EmailAccountLimits | undefined;
+    if (account) limits.set(emailAccountId, account);
+  }
+  return limits;
+}
+
+function emailsSentTodayFor(db: ReturnType<typeof getDb>, emailAccountId: string, timezone: string): number {
+  const day = localDayBoundsUtc(timezone);
+  return (db.prepare(
+    `SELECT COUNT(*) as c FROM logs l
+     WHERE l.message LIKE 'Email sent%'
+     AND l.created_at >= ? AND l.created_at < ?
+     AND EXISTS (
+       SELECT 1 FROM run_profiles rp
+       WHERE rp.run_id = l.run_id AND rp.target_id = l.target_id
+       AND rp.email_account_id = ?
+     )`
+  ).get(day.start, day.end, emailAccountId) as { c: number }).c;
+}
+
+function enrollPendingEmailTracks(
+  db: ReturnType<typeof getDb>,
+  runId: string,
+  emailAccountId: string,
+  limits: EmailAccountLimits,
+  sentToday: number,
+): void {
+  const emailsLeft = Math.max(0, effectiveEmailLimit(limits) - sentToday);
+  const scheduledToday = (db.prepare(
+    `SELECT COUNT(*) as c FROM run_profile_tracks rt
+     JOIN run_profiles rp ON rp.id = rt.run_profile_id
+     WHERE rp.email_account_id = ? AND rt.track = 'email' AND rt.state = 'in_progress'
+     AND date(datetime(rt.next_step_at)) = date('now')`
+  ).get(emailAccountId) as { c: number }).c;
+  const slotsLeft = Math.max(0, emailsLeft - scheduledToday);
+  if (slotsLeft <= 0) return;
+  const pending = db.prepare(
+    `SELECT rt.id, rt.run_profile_id, rt.track FROM run_profile_tracks rt
+     JOIN run_profiles rp ON rp.id = rt.run_profile_id
+     WHERE rp.run_id = ? AND rp.email_account_id = ? AND rt.track = 'email' AND rt.state = 'pending'
+     ORDER BY rt.id LIMIT ?`
+  ).all(runId, emailAccountId, Math.min(slotsLeft, 5)) as Array<{ id: string; run_profile_id: string; track: string }>;
+  spreadEnrollBatch(db, runId, pending, limits, "email");
+}
+
+function emailFallbackLimits(emailLimits: EmailAccountLimits | null): AccountLimits {
+  return {
+    daily_connection_limit: 0,
+    daily_message_limit: 0,
+    daily_inmail_limit: 0,
+    daily_visit_limit: 0,
+    active_hours_start: emailLimits?.active_hours_start ?? 9,
+    active_hours_end: emailLimits?.active_hours_end ?? 18,
+    timezone: emailLimits?.timezone || "UTC",
+    working_days: emailLimits?.working_days || "1,2,3,4,5",
+  };
+}
+
+/**
+ * Drive email tracks without a LinkedIn session. Sends stay on the durable email job
+ * path inside executeStep; this loop only decides which email step is due. It does not
+ * open a browser and does not wait the 8–20s gap the LinkedIn loop leaves between profiles.
+ */
+export async function emailCampaignTick(db: ReturnType<typeof getDb>): Promise<void> {
+  completeFinishedRuns(db, strandedRunningRunIds(db));
+  const activeRuns = emailCampaignRuns(db);
+  if (activeRuns.length === 0) return;
+
+  heartbeat(db, activeRuns);
+
+  const runIds = activeRuns.map((run) => run.run_id);
+  const emailLimitsByAccount = emailAccountsForRuns(db, runIds);
+  const sentToday = new Map<string, number>();
+  for (const [emailAccountId, limits] of emailLimitsByAccount) {
+    sentToday.set(emailAccountId, emailsSentTodayFor(db, emailAccountId, limits.timezone || "UTC"));
+  }
+
+  const stepsCache = new Map<string, WorkflowStep[]>();
+  const getSteps = (workflowId: string, track: string): WorkflowStep[] => {
+    const key = `${workflowId}|${track}`;
+    if (!stepsCache.has(key)) {
+      stepsCache.set(key, db.prepare(
+        "SELECT * FROM workflow_steps WHERE workflow_id = ? AND track = ? ORDER BY step_order"
+      ).all(workflowId, track) as WorkflowStep[]);
+    }
+    return stepsCache.get(key)!;
+  };
+  const workflowPromptCache = new Map<string, string | null>();
+  const getWorkflowPrompt = (workflowId: string): string | null => {
+    if (!workflowPromptCache.has(workflowId)) {
+      const row = db.prepare("SELECT prompt FROM workflows WHERE id = ?").get(workflowId) as { prompt: string | null } | undefined;
+      workflowPromptCache.set(workflowId, row?.prompt ?? null);
+    }
+    return workflowPromptCache.get(workflowId) ?? null;
+  };
+
+  const enrolled = new Set<string>();
+  for (const run of activeRuns) {
+    const accountIds = (db.prepare(
+      `SELECT DISTINCT rp.email_account_id FROM run_profiles rp
+       WHERE rp.run_id = ? AND rp.email_account_id IS NOT NULL`
+    ).all(run.run_id) as Array<{ email_account_id: string }>).map((row) => row.email_account_id);
+    for (const emailAccountId of accountIds) {
+      const key = `${run.run_id}|${emailAccountId}`;
+      if (enrolled.has(key)) continue;
+      enrolled.add(key);
+      const limits = emailLimitsByAccount.get(emailAccountId);
+      if (limits) enrollPendingEmailTracks(db, run.run_id, emailAccountId, limits, sentToday.get(emailAccountId) ?? 0);
+    }
+  }
+
+  const due = dueTracks(db, runIds, "email");
+  const toExecute: TrackRun[] = [];
+  const toReschedule: Array<{ tr: TrackRun; schedule: ScheduleConfig }> = [];
+  const planned = new Map<string, number>();
+
+  for (const tr of due) {
+    const steps = getSteps(tr.workflow_id, tr.track);
+    const step = steps[tr.current_step];
+    if (!step || step.step_type !== "email") {
+      toExecute.push(tr);
+      continue;
+    }
+    const emailAccountId = tr.email_account_id;
+    if (!emailAccountId) {
+      toExecute.push(tr);
+      continue;
+    }
+    const limits = emailLimitsByAccount.get(emailAccountId);
+    const already = (sentToday.get(emailAccountId) ?? 0) + (planned.get(emailAccountId) ?? 0);
+    const cap = limits ? effectiveEmailLimit(limits) : 50;
+    if (already >= cap) {
+      toReschedule.push({ tr, schedule: limits ?? emailFallbackLimits(null) });
+    } else {
+      planned.set(emailAccountId, (planned.get(emailAccountId) ?? 0) + 1);
+      toExecute.push(tr);
+    }
+  }
+
+  for (const { tr, schedule } of toReschedule) {
+    const slot = rescheduleToTomorrow(schedule);
+    db.prepare("UPDATE run_profile_tracks SET next_step_at = ? WHERE id = ?").run(slot, tr.id);
+    log(db, tr.run_id, tr.target_id, "warn", `Daily email limit reached — rescheduled to ${slot}`);
+  }
+
+  const deadline = Date.now() + EMAIL_TICK_SOFT_BUDGET_MS;
+  let executed = 0;
+  for (const tr of toExecute) {
+    if (Date.now() > deadline) {
+      console.log(`[runner] Email tick soft budget reached — ${executed}/${toExecute.length} steps done, remainder stays due`);
+      break;
+    }
+    const runStatus = db.prepare("SELECT status FROM runs WHERE id = ?").get(tr.run_id) as { status: string } | undefined;
+    if (!runStatus || runStatus.status !== "running") continue;
+
+    const steps = getSteps(tr.workflow_id, tr.track);
+    const step = steps[tr.current_step];
+    if (step && step.step_type !== "email" && step.step_type !== "delay") {
+      log(db, tr.run_id, tr.target_id, "error", `Email worker refused a ${step.step_type} step on the email track`);
+      trFail(db, tr, `Email track cannot run a ${step.step_type} step`);
+      continue;
+    }
+
+    const emailAccountId = tr.email_account_id ?? null;
+    const emailLimits = emailAccountId ? (emailLimitsByAccount.get(emailAccountId) ?? null) : null;
+    const target = db.prepare("SELECT * FROM targets WHERE id = ?").get(tr.target_id) as Target;
+    await guard(
+      `Email step for target ${tr.target_id}`,
+      EXECUTE_STEP_TIMEOUT_MS,
+      () => executeStep(
+        db, tr.run_id, tr, target, steps,
+        tr.account_id || "",
+        emailFallbackLimits(emailLimits),
+        emailAccountId,
+        emailLimits,
+        getWorkflowPrompt(tr.workflow_id),
+      ),
+      (err) => log(db, tr.run_id, tr.target_id, "error", `Email step aborted: ${err.message}`),
+    );
+    executed += 1;
+    heartbeat(db, activeRuns);
+  }
+
+  completeFinishedRuns(db, runIds);
+}
+
+async function tick(db: ReturnType<typeof getDb>): Promise<void> {
+  const activeRuns = linkedInCampaignRuns(db);
 
   if (activeRuns.length === 0) return;
 
@@ -1297,7 +1583,7 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
 
   const seenAccounts = new Set<string>();
   for (const run of activeRuns) {
-    if (seenAccounts.has(run.account_id)) continue;
+    if (!run.account_id || seenAccounts.has(run.account_id)) continue;
     seenAccounts.add(run.account_id);
   }
 
@@ -1337,20 +1623,7 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
     }
   }
 
-  // Auto-complete runs where ALL track-runs across all profiles are terminal
-  for (const run of activeRuns) {
-    const remaining = (db.prepare(
-      `SELECT COUNT(*) as c FROM run_profile_tracks rt
-       JOIN run_profiles rp ON rp.id = rt.run_profile_id
-       WHERE rp.run_id = ? AND rt.state NOT IN ('completed', 'failed', 'skipped')`
-    ).get(run.run_id) as { c: number }).c;
-    if (remaining === 0) {
-      db.prepare("UPDATE runs SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(run.run_id);
-      const completedRun = db.prepare("SELECT workspace_id, workflow_id FROM runs WHERE id = ?").get(run.run_id) as { workspace_id: string; workflow_id: string } | undefined;
-      if (completedRun) emitDomainEvent({ workspaceId: completedRun.workspace_id, type: "workflow.completed", entityType: "run", entityId: run.run_id, payload: { workflow_id: completedRun.workflow_id } });
-      log(db, run.run_id, null, "info", "All profiles processed — run completed");
-    }
-  }
+  completeFinishedRuns(db, activeRuns.map((run) => run.run_id));
 
   // Re-load active runs after potential completions
   const stillActive = db.prepare(`
@@ -1367,23 +1640,6 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
   const accountLimitsMap = new Map<string, AccountLimits>();
   for (const run of stillActive) {
     if (!accountLimitsMap.has(run.account_id)) accountLimitsMap.set(run.account_id, run);
-  }
-
-  // Build email account limits map
-  const stillActiveRunIds = stillActive.map(r => r.run_id);
-  const emailAccountIds: string[] = stillActiveRunIds.length > 0
-    ? [...new Set(
-        (db.prepare(
-          `SELECT DISTINCT rp.email_account_id FROM run_profiles rp
-           WHERE rp.run_id IN (${stillActiveRunIds.map(() => "?").join(",")})
-           AND rp.email_account_id IS NOT NULL`
-        ).all(...stillActiveRunIds) as { email_account_id: string }[]).map(r => r.email_account_id)
-      )]
-    : [];
-  const emailAccountLimitsMap = new Map<string, EmailAccountLimits>();
-  for (const emailAccountId of emailAccountIds) {
-    const ea = db.prepare("SELECT daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, ramp_up_enabled, ramp_start_date FROM email_accounts WHERE id = ?").get(emailAccountId) as EmailAccountLimits | undefined;
-    if (ea) emailAccountLimitsMap.set(emailAccountId, ea);
   }
 
   // Count actions already done today per LinkedIn account — messages and InMail are
@@ -1419,26 +1675,6 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
     visitsSentToday.set(accountId, v);
   }
 
-  // Count emails sent today per email account — match by run_profiles.email_account_id
-  // (the actual sending account), not runs.email_account_id (which may differ when accounts rotate)
-  const emailsSentToday = new Map<string, number>();
-  for (const emailAccountId of emailAccountIds) {
-    // Falls back to UTC only when the account row is missing, which also means it has no
-    // window to be inconsistent with.
-    const day = localDayBoundsUtc(emailAccountLimitsMap.get(emailAccountId)?.timezone ?? "UTC");
-    const e = (db.prepare(
-      `SELECT COUNT(*) as c FROM logs l
-       WHERE l.message LIKE 'Email sent%'
-       AND l.created_at >= ? AND l.created_at < ?
-       AND EXISTS (
-         SELECT 1 FROM run_profiles rp
-         WHERE rp.run_id = l.run_id AND rp.target_id = l.target_id
-         AND rp.email_account_id = ?
-       )`
-    ).get(day.start, day.end, emailAccountId) as { c: number }).c;
-    emailsSentToday.set(emailAccountId, e);
-  }
-
   // Steps cache: (workflow_id, track) → steps filtered by that track
   const stepsCache = new Map<string, WorkflowStep[]>();
   const getSteps = (workflowId: string, track: string): WorkflowStep[] => {
@@ -1461,25 +1697,9 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
     return workflowPromptCache.get(workflowId) ?? null;
   };
 
-  // Collect ALL due track-runs across all active runs, oldest-due first
-  const runIds = stillActive.map(r => r.run_id);
-  const placeholders = runIds.map(() => "?").join(",");
-  const dueTrackRuns = db.prepare(
-    `SELECT rt.id, rt.run_profile_id, rt.track, rt.state, rt.current_step, rt.next_step_at,
-            rt.error_message, rt.last_email_subject, rt.last_email_body, rt.last_linkedin_message,
-            rt.pending_reply_context,
-            rp.run_id, rp.target_id, rp.email_account_id,
-            r.account_id, r.workflow_id,
-            t.connection_requested_at
-     FROM run_profile_tracks rt
-     JOIN run_profiles rp ON rp.id = rt.run_profile_id
-     JOIN runs r ON r.id = rp.run_id
-     JOIN targets t ON t.id = rp.target_id
-     WHERE rp.run_id IN (${placeholders})
-       AND rt.state = 'in_progress'
-       AND (rt.next_step_at IS NULL OR datetime(rt.next_step_at) <= datetime('now'))
-     ORDER BY rt.next_step_at ASC`
-  ).all(...runIds) as TrackRun[];
+  // Email tracks are claimed by emailCampaignTick, never here. A due email step must
+  // not wait on this browser loop, and this loop must not send it twice.
+  const dueTrackRuns = dueTracks(db, stillActive.map(r => r.run_id), "linkedin");
 
   // Enroll new pending track-runs — track remaining slots per account across runs.
   // Enrollment (pending -> in_progress) happens exactly once per track-run, on its
@@ -1498,7 +1718,6 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
     }
     return firstLinkedinStepCache.get(workflowId);
   };
-  const enrolledEmailPairs = new Set<string>();
   for (const run of stillActive) {
     const limits = accountLimitsMap.get(run.account_id)!;
     const firstStepType = getFirstLinkedinStepType(run.workflow_id);
@@ -1537,41 +1756,6 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
       spreadEnrollBatch(db, run.run_id, pending, limits, "linkedin");
       slotsRemaining.set(run.account_id, slotsLeft - pending.length);
     }
-
-    // Email track enrollment — iterate per actual sending account used by this run's profiles
-    // (run_profiles.email_account_id may differ from runs.email_account_id when accounts are rotated)
-    const runEmailAccountIds = (db.prepare(
-      `SELECT DISTINCT rp.email_account_id FROM run_profiles rp
-       WHERE rp.run_id = ? AND rp.email_account_id IS NOT NULL`
-    ).all(run.run_id) as { email_account_id: string }[]).map(r => r.email_account_id);
-
-    for (const emailAccId of runEmailAccountIds) {
-      const emailKey = `${run.run_id}|${emailAccId}|email`;
-      if (!enrolledEmailPairs.has(emailKey)) {
-        enrolledEmailPairs.add(emailKey);
-        const emailLimits = emailAccountLimitsMap.get(emailAccId);
-        if (emailLimits) {
-          const effectiveLimit = effectiveEmailLimit(emailLimits);
-          const emailsLeft = Math.max(0, effectiveLimit - (emailsSentToday.get(emailAccId) ?? 0));
-          const emailScheduledToday = (db.prepare(
-            `SELECT COUNT(*) as c FROM run_profile_tracks rt
-             JOIN run_profiles rp ON rp.id = rt.run_profile_id
-             WHERE rp.email_account_id = ? AND rt.track = 'email' AND rt.state = 'in_progress'
-             AND date(datetime(rt.next_step_at)) = date('now')`
-          ).get(emailAccId) as { c: number }).c;
-          const emailSlotsLeft = Math.max(0, emailsLeft - emailScheduledToday);
-          if (emailSlotsLeft > 0) {
-            const pendingEmail = db.prepare(
-              `SELECT rt.id, rt.run_profile_id, rt.track FROM run_profile_tracks rt
-               JOIN run_profiles rp ON rp.id = rt.run_profile_id
-               WHERE rp.run_id = ? AND rp.email_account_id = ? AND rt.track = 'email' AND rt.state = 'pending'
-               ORDER BY rt.id LIMIT ?`
-            ).all(run.run_id, emailAccId, Math.min(emailSlotsLeft, 5)) as Array<{ id: string; run_profile_id: string; track: string }>;
-            spreadEnrollBatch(db, run.run_id, pendingEmail, emailLimits, "email");
-          }
-        }
-      }
-    }
   }
 
   if (dueTrackRuns.length === 0) return;
@@ -1589,7 +1773,6 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
   const messagesPlanned = new Map<string, number>(Array.from(accountLimitsMap.keys()).map(id => [id, 0]));
   const inmailsPlanned = new Map<string, number>(Array.from(accountLimitsMap.keys()).map(id => [id, 0]));
   const visitsPlanned = new Map<string, number>(Array.from(accountLimitsMap.keys()).map(id => [id, 0]));
-  const emailsPlanned = new Map<string, number>(emailAccountIds.map(id => [id, 0]));
 
   for (const tr of dueTrackRuns) {
     const steps = getSteps(tr.workflow_id, tr.track);
@@ -1635,21 +1818,8 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
         toExecute.push(tr);
       }
     } else if (step.step_type === "email") {
-      const profileEmailAccountId = tr.email_account_id;
-      if (!profileEmailAccountId) {
-        toExecute.push(tr);
-      } else {
-        const emailLimits = emailAccountLimitsMap.get(profileEmailAccountId);
-        const sentToday = emailsSentToday.get(profileEmailAccountId) ?? 0;
-        const planned = emailsPlanned.get(profileEmailAccountId) ?? 0;
-        const effectiveLimit = emailLimits ? effectiveEmailLimit(emailLimits) : 50;
-        if (sentToday + planned >= effectiveLimit) {
-          toReschedule.push({ tr, schedule: emailLimits ?? limits, channel: "email" });
-        } else {
-          emailsPlanned.set(profileEmailAccountId, planned + 1);
-          toExecute.push(tr);
-        }
-      }
+      // Belongs to emailCampaignTick. Leaving it due here would send it from the browser loop.
+      continue;
     } else if (step.step_type === "visit") {
       const sentToday = visitsSentToday.get(tr.account_id) ?? 0;
       const planned = visitsPlanned.get(tr.account_id) ?? 0;
@@ -1689,10 +1859,10 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
       console.log(`[runner] Tick soft budget reached — ${executed}/${toExecute.length} profiles done, remainder stays due`);
       break;
     }
+    if (tr.track === "email") continue;
     const steps = getSteps(tr.workflow_id, tr.track);
     const limits = accountLimitsMap.get(tr.account_id)!;
     const emailAccountId = tr.email_account_id ?? null;
-    const emailLimits = emailAccountId ? (emailAccountLimitsMap.get(emailAccountId) ?? null) : null;
 
     const runStatus = db.prepare("SELECT status FROM runs WHERE id = ?").get(tr.run_id) as { status: string } | undefined;
     if (!runStatus || runStatus.status !== "running") continue;
@@ -1704,7 +1874,7 @@ async function tick(db: ReturnType<typeof getDb>): Promise<void> {
     await guard(
       `Step for target ${tr.target_id}`,
       EXECUTE_STEP_TIMEOUT_MS,
-      () => executeStep(db, tr.run_id, tr, target, steps, tr.account_id, limits, emailAccountId, emailLimits, getWorkflowPrompt(tr.workflow_id)),
+      () => executeStep(db, tr.run_id, tr, target, steps, tr.account_id, limits, emailAccountId, null, getWorkflowPrompt(tr.workflow_id)),
       (err) => log(db, tr.run_id, tr.target_id, "error", `Step aborted: ${err.message}`),
     );
     // Progress through a long tick is liveness too — without this the indicator flags a

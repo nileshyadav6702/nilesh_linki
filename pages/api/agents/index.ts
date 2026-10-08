@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { addSource, agentInputSchema, checkAgentRefs, createAgent, listAgents } from "@/lib/agents/store";
-import { agentCounts } from "@/lib/agents/analytics";
+import { agentCounts, agentPerformance, nextSourceRun } from "@/lib/agents/analytics";
 import { createDefaultCampaign } from "@/lib/agents/default-campaign";
 import { isSourceType } from "@/lib/signals/types";
 import { firstIssue } from "@/lib/validation";
@@ -14,9 +14,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!ctx) return;
   const db = getDb();
   if (req.method === "GET") {
+    const linkedin = db.prepare("SELECT id, name, email FROM accounts WHERE id = ?");
+    const mailbox = db.prepare("SELECT id, from_email, from_name FROM email_accounts WHERE id = ?");
     return res.json(listAgents(ctx.workspaceId).map((a) => ({
       ...a,
       counts: agentCounts(db, a.id),
+      performance: agentPerformance(db, a.id),
+      next_run_at: nextSourceRun(db, a.id),
+      senders: {
+        linkedin: a.linkedin_account_id ? linkedin.get(a.linkedin_account_id) ?? null : null,
+        email: a.email_account_id ? mailbox.get(a.email_account_id) ?? null : null,
+      },
       sources: (db.prepare("SELECT source_type, enabled FROM agent_sources WHERE agent_id = ?").all(a.id) as Array<{ source_type: string; enabled: number }>),
     })));
   }

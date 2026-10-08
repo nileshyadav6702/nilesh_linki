@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { agentInputSchema, checkAgentRefs, deleteAgent, getAgent, listSources, updateAgent } from "@/lib/agents/store";
 import { activateAgentRuns, pauseAgentRuns } from "@/lib/agents/enroll";
-import { agentCounts, signalFunnel } from "@/lib/agents/analytics";
+import { agentActivity, agentCounts, agentPerformance, agentSeries, dueToday, nextSourceRun, signalFunnel, stepOccupancy } from "@/lib/agents/analytics";
 import { budgetSnapshot } from "@/lib/linkedin/budget";
 import { createDefaultCampaign } from "@/lib/agents/default-campaign";
 import { sequenceSteps } from "@/lib/agents/drafts";
@@ -29,6 +29,16 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       funnel: signalFunnel(db, ctx.workspaceId, id), sequence: sequenceSteps(db, agent.workflow_id),
       workflow: agent.workflow_id ? db.prepare("SELECT id, name FROM workflows WHERE id = ?").get(agent.workflow_id) ?? null : null,
       linkedin_budget: agent.linkedin_account_id ? budgetSnapshot(agent.linkedin_account_id) : null,
+      performance: agentPerformance(db, id),
+      series: agentSeries(db, id),
+      activity: agentActivity(db, id, agent.workflow_id),
+      next_run_at: nextSourceRun(db, id),
+      due_today: dueToday(db, agent.workflow_id),
+      steps: stepOccupancy(db, agent.workflow_id),
+      senders: {
+        linkedin: agent.linkedin_account_id ? db.prepare("SELECT id, name, email, daily_connection_limit, daily_message_limit, is_authenticated FROM accounts WHERE id = ?").get(agent.linkedin_account_id) ?? null : null,
+        email: agent.email_account_id ? db.prepare("SELECT id, from_email, from_name, daily_email_limit, ramp_up_enabled, ramp_start_date FROM email_accounts WHERE id = ?").get(agent.email_account_id) ?? null : null,
+      },
     });
   }
   if (req.method === "PATCH") {

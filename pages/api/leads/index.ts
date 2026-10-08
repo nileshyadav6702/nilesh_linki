@@ -27,9 +27,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const limit = Math.min(100, Math.max(1, Number(q.limit ?? 50)));
   const offset = Math.max(0, Number(q.offset ?? 0));
   const total = (db.prepare(`SELECT COUNT(*) n FROM targets t WHERE ${where.join(" AND ")}`).get(...params) as { n: number }).n;
-  const leads = db.prepare(`SELECT t.id, t.full_name, t.first_name, t.headline, t.title, t.company, t.location, t.linkedin_url, t.email, t.email_status,
+  const leads = db.prepare(`SELECT t.id, t.full_name, t.first_name, t.headline, t.title, t.company, t.location, t.linkedin_url, t.email, t.email_status, t.phone,
         t.profile_image_url, t.fit_score, t.fit_verdict, t.fit_reason, t.fit_confidence, t.intent_score, t.lead_score, t.agent_id,
-        t.agent_status, t.agent_status_at, t.skip_reason, t.lead_source, t.created_at, a.name agent_name
+        t.agent_status, t.agent_status_at, t.skip_reason, t.lead_source, t.created_at, a.name agent_name,
+        (SELECT ws.step_type FROM run_profile_tracks rt
+          JOIN run_profiles rp ON rp.id = rt.run_profile_id
+          JOIN runs r ON r.id = rp.run_id
+          JOIN workflow_steps ws ON ws.workflow_id = r.workflow_id AND ws.track = rt.track AND ws.step_order = rt.current_step + 1
+          WHERE rp.target_id = t.id AND rt.state = 'in_progress'
+          ORDER BY rt.next_step_at LIMIT 1) outreach_step
       FROM targets t LEFT JOIN agents a ON a.id = t.agent_id
      WHERE ${where.join(" AND ")}
      ORDER BY COALESCE(t.lead_score, t.intent_score) DESC, t.created_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset) as Array<Record<string, unknown>>;
