@@ -198,7 +198,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
           )}
         </Panel>
       )}
-      <LeadDrawer targetId={open} onClose={() => setOpen(null)} onChanged={load} />
+      <LeadDrawer targetId={open} onClose={() => setOpen(null)} onChanged={load} siblings={rows?.map((r) => r.id)} onOpen={setOpen} />
     </div>
   );
 }

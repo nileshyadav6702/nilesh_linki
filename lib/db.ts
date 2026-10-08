@@ -326,6 +326,12 @@ function runMigrations(db: Database.Database) {
     "ALTER TABLE targets ADD COLUMN email_status TEXT",
     // Manual fields
     "ALTER TABLE targets ADD COLUMN notes TEXT",
+    // Company logo and page captured with the profile (Sales Nav / profile reads)
+    "ALTER TABLE targets ADD COLUMN company_logo_url TEXT",
+    "ALTER TABLE targets ADD COLUMN company_linkedin_url TEXT",
+    // Company profile read from Sales Navigator, once per workspace
+    "ALTER TABLE companies ADD COLUMN employee_range TEXT",
+    "ALTER TABLE companies ADD COLUMN profile_fetched_at TEXT",
     // Apollo extra person fields
     "ALTER TABLE targets ADD COLUMN city TEXT",
     "ALTER TABLE targets ADD COLUMN country TEXT",
@@ -574,6 +580,7 @@ function runMigrations(db: Database.Database) {
     "ALTER TABLE accounts ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)",
     "ALTER TABLE targets ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)",
     "ALTER TABLE companies ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)",
+    "CREATE INDEX IF NOT EXISTS idx_companies_ws_linkedin ON companies(workspace_id, linkedin_url)",
     "ALTER TABLE lists ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)",
     "ALTER TABLE templates ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)",
     "ALTER TABLE workflows ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)",

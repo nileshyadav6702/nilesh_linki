@@ -14,6 +14,7 @@
  * See docs/linkedin-api-learnings.md for the full investigation.
  */
 import type { BrowserContext, Page } from "playwright";
+import { companyUrlFromUrn, linkedInImageUrl } from "@/lib/linkedin/images";
 
 /**
  * Why a Sales Navigator page yielded no data. Only a redirect to login/checkpoint/authwall
@@ -48,6 +49,9 @@ export interface ScrapedProfile {
   companyLocation: string | null; // company HQ location
   tenureMonths: number | null;    // months in current role
   spotlightBadges: string | null; // JSON array of badge displayValues
+  profileImageUrl: string | null;
+  companyLogoUrl: string | null;
+  companyLinkedinUrl: string | null;
 }
 
 interface SalesProfile {
@@ -77,8 +81,10 @@ interface SalesProfile {
       industry?: string;
       location?: string;
       entityUrn?: string;
+      companyPictureDisplayImage?: unknown;
     };
   }>;
+  profilePictureDisplayImage?: unknown;
   leadAssociatedAccount?: { name?: string } | null;
   spotlightBadges?: Array<{ displayValue?: string; id?: string }>;
 }
@@ -159,6 +165,9 @@ function profileToResult(el: SalesProfile, linkedinUrl: string | null): ScrapedP
     companyLocation: company?.location ?? null,
     tenureMonths,
     spotlightBadges: badges.length > 0 ? JSON.stringify(badges) : null,
+    profileImageUrl: linkedInImageUrl(el.profilePictureDisplayImage),
+    companyLogoUrl: linkedInImageUrl(company?.companyPictureDisplayImage, 100),
+    companyLinkedinUrl: companyUrlFromUrn(currentPos?.companyUrn ?? company?.entityUrn),
   };
 }
 

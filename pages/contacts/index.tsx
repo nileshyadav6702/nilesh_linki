@@ -595,7 +595,7 @@ export default function ContactsPage({ lists, total: initialTotal }: { lists: Li
           <div className="modal-backdrop" onClick={() => !deleteLoading && setShowDeleteConfirm(false)} />
         </div>
       )}
-      <LeadDrawer targetId={drawer} onClose={() => setDrawer(null)} onChanged={() => fetch_(page, listId, debouncedSearch, filters)} />
+      <LeadDrawer targetId={drawer} onClose={() => setDrawer(null)} onChanged={() => fetch_(page, listId, debouncedSearch, filters)} siblings={contacts.map((c) => c.id)} onOpen={setDrawer} />
     </>
   );
 }

@@ -13,6 +13,7 @@ export interface LeadCandidate {
   company?: string | null;
   location?: string | null;
   salesNavUrl?: string | null;
+  profileImageUrl?: string | null;
 }
 
 export function normalizeProfileUrl(url: string | null | undefined): string | null {
@@ -76,8 +77,9 @@ export function upsertLead(db: Database.Database, workspaceId: string, agentId: 
     db.prepare(`UPDATE targets SET
         headline = COALESCE(headline, ?), title = COALESCE(title, ?), company = COALESCE(company, ?),
         linkedin_member_urn = COALESCE(linkedin_member_urn, ?), linkedin_url = COALESCE(linkedin_url, ?),
+        profile_image_url = COALESCE(?, profile_image_url),
         agent_id = COALESCE(agent_id, ?), agent_status = COALESCE(agent_status, CASE WHEN ? IS NOT NULL THEN 'new' END)
-      WHERE id = ?`).run(c.headline ?? null, c.title ?? parsed.title, c.company ?? parsed.company, urn, url, agentId, agentId, existing.id);
+      WHERE id = ?`).run(c.headline ?? null, c.title ?? parsed.title, c.company ?? parsed.company, urn, url, c.profileImageUrl ?? null, agentId, agentId, existing.id);
     return { targetId: existing.id, created: false };
   }
 
@@ -85,9 +87,9 @@ export function upsertLead(db: Database.Database, workspaceId: string, agentId: 
   const first = c.firstName ?? c.name.split(/\s+/)[0] ?? null;
   const last = c.lastName ?? (c.name.split(/\s+/).slice(1).join(" ") || null);
   db.prepare(`INSERT INTO targets (id, workspace_id, linkedin_url, sales_nav_url, first_name, last_name, full_name, title, company, location,
-      headline, linkedin_member_urn, lead_source, agent_id, agent_status, agent_status_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`)
+      headline, linkedin_member_urn, lead_source, agent_id, agent_status, agent_status_at, profile_image_url)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)`)
     .run(id, workspaceId, url, c.salesNavUrl ?? null, first, last, c.name, c.title ?? parsed.title, c.company ?? parsed.company, c.location ?? null,
-      c.headline ?? null, urn, source, agentId, agentId ? "new" : null);
+      c.headline ?? null, urn, source, agentId, agentId ? "new" : null, c.profileImageUrl ?? null);
   return { targetId: id, created: true };
 }

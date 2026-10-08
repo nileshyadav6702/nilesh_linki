@@ -5,6 +5,7 @@
  * already proven in profile-scrape.ts (memberShareFeed) and the long-stable
  * companyFeedByUniversalName / voyagerSocialDashReactions / feed/comments routes.
  */
+import { linkedInImageUrl } from "@/lib/linkedin/images";
 
 type BudgetKind = "voyager_read" | "search" | "profile_view";
 export interface VoyagerLike {
@@ -22,6 +23,7 @@ export interface Engager {
   headline: string | null;
   profileUrl: string | null;
   memberUrn: string | null;
+  imageUrl: string | null;
   kind: "reaction" | "comment";
   reactionType: string | null;
   commentText: string | null;
@@ -85,21 +87,21 @@ function splitName(name: string): { firstName: string | null; lastName: string |
   return { firstName: parts[0] ?? null, lastName: parts.length > 1 ? parts.slice(1).join(" ") : null };
 }
 
-function profileFromMini(mini: Obj): Pick<Engager, "name" | "firstName" | "lastName" | "headline" | "profileUrl" | "memberUrn"> | null {
+function profileFromMini(mini: Obj): Pick<Engager, "name" | "firstName" | "lastName" | "headline" | "profileUrl" | "memberUrn" | "imageUrl"> | null {
   const first = typeof mini.firstName === "string" ? mini.firstName : null;
   const last = typeof mini.lastName === "string" ? mini.lastName : null;
   const name = [first, last].filter(Boolean).join(" ").trim();
   if (!name) return null;
   const pid = typeof mini.publicIdentifier === "string" ? mini.publicIdentifier : null;
   const urn = typeof mini.objectUrn === "string" ? mini.objectUrn : typeof mini.entityUrn === "string" ? mini.entityUrn : null;
-  return { name, firstName: first, lastName: last, headline: typeof mini.occupation === "string" ? mini.occupation : typeof mini.headline === "string" ? mini.headline : null, profileUrl: pid ? `https://www.linkedin.com/in/${pid}` : null, memberUrn: urn };
+  return { name, firstName: first, lastName: last, headline: typeof mini.occupation === "string" ? mini.occupation : typeof mini.headline === "string" ? mini.headline : null, profileUrl: pid ? `https://www.linkedin.com/in/${pid}` : null, memberUrn: urn, imageUrl: linkedInImageUrl(mini.picture ?? mini.profilePicture, 100) };
 }
 
-function profileFromLockup(lockup: Obj, actorUrn: string | null): Pick<Engager, "name" | "firstName" | "lastName" | "headline" | "profileUrl" | "memberUrn"> | null {
+function profileFromLockup(lockup: Obj, actorUrn: string | null): Pick<Engager, "name" | "firstName" | "lastName" | "headline" | "profileUrl" | "memberUrn" | "imageUrl"> | null {
   const name = textOf(lockup.title)?.trim();
   if (!name) return null;
   const nav = typeof lockup.navigationUrl === "string" ? lockup.navigationUrl.split("?")[0] : null;
-  return { name, ...splitName(name), headline: textOf(lockup.subtitle) ?? textOf(lockup.caption), profileUrl: nav && nav.includes("/in/") ? nav : null, memberUrn: actorUrn };
+  return { name, ...splitName(name), headline: textOf(lockup.subtitle) ?? textOf(lockup.caption), profileUrl: nav && nav.includes("/in/") ? nav : null, memberUrn: actorUrn, imageUrl: linkedInImageUrl(lockup.image, 100) };
 }
 
 /** Only people: company pages and showcase pages that react are not leads. */

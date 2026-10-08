@@ -10,9 +10,11 @@
  * after import — do not await in API routes. Bulk runs charge the account's
  * profile_view discovery budget and stop on a checkpoint/authwall/login redirect.
  */
-import type { BrowserContext } from "playwright";
+import type { BrowserContext, Page } from "playwright";
 import { getDb } from "@/lib/db";
 import { consume, discoveryPausedUntil, pauseDiscovery } from "@/lib/linkedin/budget";
+import { companyUrlFromUrn, linkedInImageUrl } from "@/lib/linkedin/images";
+import { companyIdOf, fetchSalesCompany, hasCompanyProfile, linkKnownCompany, saveCompanyForTarget } from "@/lib/linkedin/company-profile";
 
 interface EnrichedPosition {
   title: string;
@@ -34,8 +36,9 @@ interface SalesNavProfileData {
   degree?: number;
   flagshipProfileUrl?: string;
   objectUrn?: string;
-  positions?: EnrichedPosition[];
+  positions?: Array<EnrichedPosition & { companyUrn?: string; companyUrnResolutionResult?: { entityUrn?: string; companyPictureDisplayImage?: unknown } }>;
   skills?: Array<{ name?: string }>;
+  profilePictureDisplayImage?: unknown;
 }
 
 /** ok: stored; empty: profile had no headline/about (retry later); no_data: nothing intercepted; blocked: LinkedIn challenge. */
@@ -117,6 +120,10 @@ export async function enrichProfileDetailed(
 
     const headline = intercepted.headline?.trim() || null;
     const summary = intercepted.summary?.trim() || null;
+    const current = intercepted.positions?.find((p) => p.current) ?? intercepted.positions?.[0];
+    const photo = linkedInImageUrl(intercepted.profilePictureDisplayImage);
+    const logo = linkedInImageUrl(current?.companyUrnResolutionResult?.companyPictureDisplayImage, 100);
+    const companyPage = companyUrlFromUrn(current?.companyUrn ?? current?.companyUrnResolutionResult?.entityUrn);
     // No headline and no about: keep enriched_profile_at empty so a later run retries,
     // up to MAX_EMPTY_ATTEMPTS, after which the profile is accepted as genuinely sparse.
     let markDone = !!(headline || summary);
@@ -132,6 +139,9 @@ export async function enrichProfileDetailed(
         summary             = COALESCE(?, summary),
         positions_json      = COALESCE(?, positions_json),
         skills_json         = CASE WHEN ? IS NOT NULL THEN ? ELSE skills_json END,
+        profile_image_url   = COALESCE(?, profile_image_url),
+        company_logo_url    = COALESCE(?, company_logo_url),
+        company_linkedin_url = COALESCE(?, company_linkedin_url),
         enriched_profile_at = CASE WHEN ? THEN datetime('now') ELSE enriched_profile_at END
       WHERE id = ?
     `).run(
@@ -140,9 +150,12 @@ export async function enrichProfileDetailed(
       positions.length > 0 ? JSON.stringify(positions) : null,
       skills.length > 0 ? "1" : null,
       skills.length > 0 ? JSON.stringify(skills) : null,
+      photo, logo, companyPage,
       markDone ? 1 : 0,
       target.id
     );
+
+    if (companyPage) await attachCompany(page, target.id, companyPage, current?.companyName ?? null, logo);
 
     console.log(`[enrich] ${target.full_name} — ${positions.length} positions, ${skills.length} skills, headline: ${!!headline}, about: ${!!summary}`);
     return { status: headline || summary ? "ok" : "empty" };
@@ -151,6 +164,28 @@ export async function enrichProfileDetailed(
     return { status: "error" };
   } finally {
     await page.close();
+  }
+}
+
+/**
+ * The lead's current company: reuse the workspace's stored profile when there is one, else
+ * read it once from Sales Navigator on the page that is already open. A failed read still
+ * stores the name and logo so the company is not re-requested for every colleague.
+ */
+async function attachCompany(page: Page, targetId: string, companyPage: string, companyName: string | null, logo: string | null): Promise<void> {
+  const db = getDb();
+  try {
+    const ws = (db.prepare("SELECT workspace_id FROM targets WHERE id = ?").get(targetId) as { workspace_id: string } | undefined)?.workspace_id;
+    if (!ws) return;
+    if (hasCompanyProfile(db, ws, companyPage) && linkKnownCompany(db, targetId, companyPage)) return;
+    const id = companyIdOf(companyPage);
+    await page.waitForTimeout(jitter(1500, 1500));
+    const profile = id ? await fetchSalesCompany(page, id) : null;
+    const name = profile?.name ?? companyName;
+    if (!name) return;
+    saveCompanyForTarget(db, targetId, profile ?? { name, description: null, industry: null, employeeRange: null, employeeCount: null, location: null, website: null, linkedinUrl: companyPage, logoUrl: logo });
+  } catch (err) {
+    console.warn(`[enrich] company profile skipped for ${targetId}:`, err instanceof Error ? err.message : err);
   }
 }
 

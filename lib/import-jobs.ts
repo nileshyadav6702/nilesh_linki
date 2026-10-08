@@ -367,8 +367,8 @@ function insertProfiles(db: DB, listId: string, profiles: any[]): { imported: nu
        id, workspace_id, linkedin_url, sales_nav_url, first_name, last_name, full_name,
        title, company, location, degree,
        object_urn, summary, open_link, company_industry, company_location,
-       tenure_months, spotlight_badges
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       tenure_months, spotlight_badges, profile_image_url, company_logo_url, company_linkedin_url
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(workspace_id, linkedin_url) WHERE linkedin_url IS NOT NULL DO UPDATE SET
        sales_nav_url = excluded.sales_nav_url,
        first_name = excluded.first_name,
@@ -384,7 +384,11 @@ function insertProfiles(db: DB, listId: string, profiles: any[]): { imported: nu
        company_industry = excluded.company_industry,
        company_location = excluded.company_location,
        tenure_months = excluded.tenure_months,
-       spotlight_badges = excluded.spotlight_badges`
+       spotlight_badges = excluded.spotlight_badges,
+       -- LinkedIn image URLs expire, so a fresh one replaces the stored one
+       profile_image_url = COALESCE(excluded.profile_image_url, profile_image_url),
+       company_logo_url = COALESCE(excluded.company_logo_url, company_logo_url),
+       company_linkedin_url = COALESCE(excluded.company_linkedin_url, company_linkedin_url)`
   );
   const insertLink = db.prepare("INSERT OR IGNORE INTO list_targets (list_id, target_id) VALUES (?, ?)");
   const findTarget = db.prepare("SELECT id FROM targets WHERE workspace_id = ? AND linkedin_url = ?");
@@ -400,7 +404,8 @@ function insertProfiles(db: DB, listId: string, profiles: any[]): { imported: nu
         p.title, p.company, p.location, p.degree,
         p.objectUrn, p.summary, p.openLink ? 1 : 0,
         p.companyIndustry, p.companyLocation,
-        p.tenureMonths, p.spotlightBadges
+        p.tenureMonths, p.spotlightBadges,
+        p.profileImageUrl ?? null, p.companyLogoUrl ?? null, p.companyLinkedinUrl ?? null
       );
       const target = findTarget.get(workspaceId, url) as { id: string };
       const result = insertLink.run(listId, target.id);

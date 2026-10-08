@@ -32,7 +32,7 @@ async function harvestPost(ctx: SourceRunContext, post: PostRef, type: SignalTyp
     if (ctx.isFull()) return;
     const verb = e.kind === "comment" ? "Commented on" : "Reacted to";
     ctx.emitLead(
-      { name: e.name, firstName: e.firstName, lastName: e.lastName, headline: e.headline, profileUrl: e.profileUrl, memberUrn: e.memberUrn },
+      { name: e.name, firstName: e.firstName, lastName: e.lastName, headline: e.headline, profileUrl: e.profileUrl, memberUrn: e.memberUrn, profileImageUrl: e.imageUrl },
       {
         type,
         title: `${verb} ${what}`,
