@@ -109,7 +109,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
       </div>
 
       {rows === null ? <p className="text-sm text-base-content/40">Loading…</p> : rows.length === 0 ? <Empty title="No leads here yet">Leads appear as your agents detect signals.</Empty> : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-raised)]">
+        <div className="overflow-x-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-300">
           <table className="w-full min-w-[860px] text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-base-content/45">
               <tr className="border-b border-[var(--border-subtle)]">

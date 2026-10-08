@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 
 /** Shared building blocks for the AI SDR screens, following the Linki design system. */
 
-export const inputCls = "w-full h-10 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3 text-sm outline-none focus:border-[var(--border-strong)] focus:ring-2 focus:ring-[var(--focus-ring)] transition";
-export const textareaCls = "w-full rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-sm outline-none focus:border-[var(--border-strong)] focus:ring-2 focus:ring-[var(--focus-ring)] transition";
-export const primaryBtn = "inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-[10px] text-sm font-semibold bg-primary text-primary-content hover:bg-[var(--primary-hover)] disabled:opacity-50 transition-colors shrink-0";
-export const secondaryBtn = "inline-flex items-center justify-center gap-1.5 h-10 px-4 rounded-[10px] text-sm font-medium border border-[var(--border-subtle)] bg-base-100 hover:border-[var(--border-strong)] disabled:opacity-50 transition-colors shrink-0";
+export const inputCls = "w-full h-10 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-sm text-base-content outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)] transition";
+export const textareaCls = "w-full rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-sm text-base-content outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)] transition";
+export const primaryBtn = "inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-[8px] text-sm font-medium bg-primary text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-[#e6dfd8] disabled:text-[#8e8b82] transition-colors shrink-0";
+export const secondaryBtn = "inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-[8px] text-sm font-medium border border-[var(--border-subtle)] bg-base-100 text-base-content hover:bg-base-200 disabled:opacity-50 transition-colors shrink-0";
 export const ghostBtn = "inline-flex items-center justify-center gap-1 h-8 px-2.5 rounded-[8px] text-xs font-medium text-base-content/60 hover:text-base-content hover:bg-base-200 disabled:opacity-50 transition-colors";
 
 export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow: string; title: string; subtitle?: ReactNode; actions?: ReactNode }) {
@@ -13,7 +13,7 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow: str
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div className="min-w-0">
         <p className="mb-2 text-[13px] font-medium text-base-content/45">{eyebrow}</p>
-        <h1 className="text-[30px] font-semibold leading-[1.1] tracking-[-.03em] text-base-content">{title}</h1>
+        <h1 className="font-display text-[32px] leading-[1.1] text-base-content">{title}</h1>
         {subtitle && <p className="mt-2 text-[15px] text-base-content/50">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
@@ -22,12 +22,12 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow: str
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-2xl border border-[var(--border-subtle)] bg-base-100 p-5 shadow-[var(--shadow-raised)] ${className}`}>{children}</div>;
+  return <div className={`rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-5 ${className}`}>{children}</div>;
 }
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="rounded-2xl border border-dashed border-[var(--border-subtle)] bg-base-100 px-6 py-14 text-center">
+    <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-6 py-14 text-center">
       <p className="text-sm font-medium text-base-content/70">{title}</p>
       {children && <div className="mt-2 text-sm text-base-content/45">{children}</div>}
     </div>
@@ -156,7 +156,7 @@ export function outreachLabel(on: boolean): string {
 /** One independent on/off control. The change handler should touch only this switch. */
 export function RunSwitch({ label, on, onChange }: { label: string; on: boolean; onChange: () => void }) {
   return (
-    <label className={`inline-flex h-10 items-center gap-2 rounded-[10px] border px-3 ${on ? "border-success/30 bg-success/10" : "border-[var(--border-subtle)] bg-base-100"}`}>
+    <label className={`inline-flex h-10 items-center gap-2 rounded-[8px] border px-3 ${on ? "border-success/30 bg-success/10" : "border-[var(--border-subtle)] bg-base-100"}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${on ? "bg-success" : "bg-base-content/25"}`} />
       <span className="text-sm font-medium text-base-content">{label}</span>
       <span className={`text-xs font-medium ${on ? "text-success" : "text-base-content/40"}`}>{on ? "On" : "Off"}</span>

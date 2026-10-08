@@ -112,13 +112,13 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
         href={item.href}
         data-tour={item.tour}
         aria-current={active ? "page" : undefined}
-        className={`group relative flex h-10 items-center gap-3 rounded-[10px] px-3 text-[14px] transition-colors ${
+        className={`group relative flex h-10 items-center gap-3 rounded-[8px] px-3 text-[14px] transition-colors ${
           active
-            ? "bg-primary font-semibold text-primary-content"
+            ? "bg-base-300 font-medium text-base-content"
             : "font-medium text-base-content/65 hover:bg-base-300 hover:text-base-content"
         }`}
       >
-        <item.icon size={18} className={active ? "text-primary-content" : "text-base-content/45 group-hover:text-base-content/75"} />
+        <item.icon size={18} className={active ? "text-base-content" : "text-base-content/45 group-hover:text-base-content/75"} />
         <span>{item.label}</span>
       </Link>
     );
@@ -128,10 +128,10 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col border-r border-[var(--border-subtle)] bg-base-200 md:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col border-r border-[var(--border-subtle)] bg-base-100 md:flex">
         <Link href="/agents" className="flex h-16 shrink-0 items-center gap-3 px-5">
           <Image src="/logo_linki.svg" alt="Linki" width={28} height={28} priority />
-          <span className="text-[19px] font-semibold tracking-[-0.02em] text-base-content">Linki</span>
+          <span className="font-display text-[22px] text-base-content">Linki</span>
         </Link>
 
         <div className="flex-1 overflow-y-auto px-3 py-3">
@@ -179,12 +179,12 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
             )}
           </div>
 
-          <Link href="/settings" className={`flex h-10 items-center gap-3 rounded-[10px] px-3 text-[14px] transition-colors ${isActive("/settings") ? "bg-primary font-semibold text-primary-content" : "font-medium text-base-content/65 hover:bg-base-300 hover:text-base-content"}`}>
-            <RiSettings4Line size={18} className={isActive("/settings") ? "text-primary-content" : "text-base-content/45"} /> Settings
+          <Link href="/settings" className={`flex h-10 items-center gap-3 rounded-[8px] px-3 text-[14px] transition-colors ${isActive("/settings") ? "bg-base-300 font-medium text-base-content" : "font-medium text-base-content/65 hover:bg-base-300 hover:text-base-content"}`}>
+            <RiSettings4Line size={18} className={isActive("/settings") ? "text-base-content" : "text-base-content/45"} /> Settings
           </Link>
 
-          <div className="mt-3 flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-primary text-[11px] font-semibold text-primary-content">
+          <div className="mt-3 flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-neutral text-[11px] font-semibold text-neutral-content">
               {initials(accountName)}
             </div>
             <div className="min-w-0 flex-1">
@@ -202,7 +202,7 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
         {mobilePrimary.map((item) => {
           const active = isActive(item.href);
           return (
-            <Link key={item.href} href={item.href} aria-label={item.label} aria-current={active ? "page" : undefined} className={`flex h-11 w-11 items-center justify-center rounded-[12px] transition-colors ${active ? "bg-primary text-primary-content" : "text-base-content/55"}`}>
+            <Link key={item.href} href={item.href} aria-label={item.label} aria-current={active ? "page" : undefined} className={`flex h-11 w-11 items-center justify-center rounded-[12px] transition-colors ${active ? "bg-base-300 text-base-content" : "text-base-content/55"}`}>
               <item.icon size={20} />
             </Link>
           );
@@ -231,13 +231,13 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
                 <div className="space-y-1">
                   {operatorNav.map((item) => <MobileLink key={item.href} item={item} />)}
                   {isSuperadmin && adminNav.map((item) => <MobileLink key={item.href} item={item} />)}
-                  <Link href="/settings" onClick={() => setMenuOpen(false)} className={`flex h-11 items-center gap-3 rounded-[10px] px-3 text-[15px] ${isActive("/settings") ? "bg-primary font-semibold text-primary-content" : "font-medium text-base-content/70 hover:bg-base-200"}`}>
-                    <RiSettings4Line size={19} className={isActive("/settings") ? "text-primary-content" : "text-base-content/45"} /> Settings
+                  <Link href="/settings" onClick={() => setMenuOpen(false)} className={`flex h-11 items-center gap-3 rounded-[8px] px-3 text-[15px] ${isActive("/settings") ? "bg-base-300 font-medium text-base-content" : "font-medium text-base-content/70 hover:bg-base-200"}`}>
+                    <RiSettings4Line size={19} className={isActive("/settings") ? "text-base-content" : "text-base-content/45"} /> Settings
                   </Link>
                 </div>
               </div>
               <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-200 p-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-primary text-[11px] font-semibold text-primary-content">{initials(accountName)}</div>
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-neutral text-[11px] font-semibold text-neutral-content">{initials(accountName)}</div>
                 <p className="min-w-0 flex-1 truncate text-[12px] font-semibold text-base-content/85">{accountName}</p>
                 <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-base-content/60 hover:bg-error/10 hover:text-error">
                   <RiLogoutBoxLine size={15} /> Sign out
@@ -254,8 +254,8 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
     if ("premium" in item && item.premium && !hasCrm) return null;
     const active = isActive(item.href);
     return (
-      <Link href={item.href} onClick={() => setMenuOpen(false)} aria-current={active ? "page" : undefined} className={`flex h-11 items-center gap-3 rounded-[10px] px-3 text-[15px] ${active ? "bg-primary font-semibold text-primary-content" : "font-medium text-base-content/70 hover:bg-base-200"}`}>
-        <item.icon size={19} className={active ? "text-primary-content" : "text-base-content/45"} /> <span>{item.label}</span>
+      <Link href={item.href} onClick={() => setMenuOpen(false)} aria-current={active ? "page" : undefined} className={`flex h-11 items-center gap-3 rounded-[8px] px-3 text-[15px] ${active ? "bg-base-300 font-medium text-base-content" : "font-medium text-base-content/70 hover:bg-base-200"}`}>
+        <item.icon size={19} className={active ? "text-base-content" : "text-base-content/45"} /> <span>{item.label}</span>
       </Link>
     );
   }

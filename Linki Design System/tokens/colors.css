@@ -9,36 +9,36 @@
   /* --- Warm neutral · Paper ---------------------------------
      A slightly warm off-white family. Reads as calm, human,
      premium — closer to paper than to "grey UI". */
-  --paper-0:   #FFFFFF;  /* cards, panels, menus (raised) */
-  --paper-50:  #FBFAF7;  /* subtle raised */
-  --paper-100: #F7F5F1;  /* app canvas */
-  --paper-150: #F1EEE8;  /* recessed wells, striped rows */
-  --paper-200: #E9E5DD;  /* hairline dividers */
-  --paper-300: #DDD8CE;  /* stronger borders, control outlines */
-  --paper-400: #C5BEB1;  /* disabled edges */
+  --paper-0:   #FAF9F5;  /* canvas: inputs, menus */
+  --paper-50:  #F5F0E8;  /* surface soft */
+  --paper-100: #FAF9F5;  /* app canvas */
+  --paper-150: #EFE9DE;  /* surface card */
+  --paper-200: #E6DFD8;  /* hairline */
+  --paper-300: #E6DFD8;  /* control outlines */
+  --paper-400: #E8E0D2;  /* cream strong */
 
   /* --- Ink · warm near-black → warm grey --------------------
      Warm-toned so type sits calmly on warm paper (never a cold
      blue-grey smudge). This ramp carries the whole hierarchy. */
-  --ink-950: #14110D;
-  --ink-900: #1B1712;  /* headings / primary chrome */
-  --ink-800: #2A251E;
-  --ink-700: #453E34;
-  --ink-600: #5C554C;  /* body */
-  --ink-550: #7A7267;
-  --ink-450: #938B80;  /* muted / secondary */
-  --ink-350: #B7AFA3;  /* faint / captions / placeholders */
-  --ink-250: #CFC8BC;  /* disabled text */
+  --ink-950: #141413;
+  --ink-900: #141413;  /* headlines */
+  --ink-800: #252523;  /* body strong */
+  --ink-700: #3D3D3A;  /* body */
+  --ink-600: #3D3D3A;  /* body */
+  --ink-550: #6C6A64;  /* muted */
+  --ink-450: #6C6A64;  /* muted */
+  --ink-350: #8E8B82;  /* captions */
+  --ink-250: #A09D96;  /* disabled */
 
   /* --- Status ramps (muted, warm-tuned) --------------------
      The only saturated colour allowed in chrome, and only to
      signal state. Desaturated so they still read "calm". */
   --green-50:  #EEF4EF; --green-100: #DBE8DE; --green-200: #B9D2BF;
-  --green-500: #4C8A61; --green-600: #3F7D52; --green-700: #2F5E3E;
+  --green-500: #5DB872; --green-600: #5DB872; --green-700: #3E8F56;
   --amber-50:  #F7F1E6; --amber-100: #EFE2C8; --amber-200: #E2CB98;
-  --amber-500: #C98A2A; --amber-600: #B6791F; --amber-700: #8A5C18;
+  --amber-500: #E8A55A; --amber-600: #D4A017; --amber-700: #8A5C18;
   --red-50:    #F8EEEC; --red-100: #F0D9D6; --red-200: #E2B6B0;
-  --red-500:   #CB5349; --red-600: #C2453C; --red-700: #97352E;
+  --red-500:   #C64545; --red-600: #C64545; --red-700: #97352E;
 
   /* ==========================================================
      SEMANTIC ALIASES · consume THESE in components.
@@ -55,7 +55,7 @@
   --border-subtle: var(--paper-200);
   --border:        var(--paper-300);
   --border-strong: var(--paper-400);
-  --border-focus:  var(--ink-900);
+  --border-focus:  #CC785C;
 
   /* Text */
   --text-strong:   var(--ink-900);  /* headings */
@@ -66,14 +66,14 @@
   --text-inverse:  var(--paper-0);
   --text-onbrand:  #FFFFFF;
 
-  /* Brand intent — INK is the accent */
-  --primary:        var(--ink-900);
-  --primary-hover:  var(--ink-950);
-  --primary-active: #000000;
-  --primary-subtle: var(--paper-150);
-  --primary-border: var(--paper-300);
-  --primary-text:   var(--ink-900);
-  --ring:           color-mix(in srgb, var(--ink-900) 22%, transparent);
+  /* Brand intent — coral is the accent, and only for actions */
+  --primary:        #CC785C;
+  --primary-hover:  #A9583E;
+  --primary-active: #A9583E;
+  --primary-subtle: #F5F0E8;
+  --primary-border: #E6DFD8;
+  --primary-text:   #A9583E;
+  --ring:           color-mix(in srgb, #CC785C 22%, transparent);
 
   /* Accent kept as an alias of ink so legacy "accent" usages stay calm */
   --accent:        var(--ink-800);

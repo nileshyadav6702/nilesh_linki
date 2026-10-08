@@ -75,8 +75,8 @@ export default function LoginPage() {
       <title>{mode === "signin" ? "Welcome back" : "Create your workspace"} — Linki</title>
       <meta name="robots" content="noindex, nofollow" />
     </Head>
-    <div className="grid min-h-screen bg-base-200 lg:grid-cols-[minmax(0,1.08fr)_minmax(440px,.92fr)]">
-      <section className="hidden border-r border-base-300 bg-base-100 lg:flex lg:flex-col lg:justify-between lg:p-10 xl:p-14">
+    <div className="grid min-h-screen bg-base-100 lg:grid-cols-[minmax(0,1.08fr)_minmax(440px,.92fr)]">
+      <section className="hidden border-r border-[var(--border-subtle)] bg-base-100 lg:flex lg:flex-col lg:justify-between lg:p-10 xl:p-14">
         <div className="flex items-center gap-3">
           <Image src="/linki-wordmark.svg" alt="Linki" width={110} height={32} priority />
           <span className="rounded-[5px] border border-primary/20 bg-primary/[0.07] px-2 py-1 font-mono text-[10px] font-medium text-primary">Open source</span>
@@ -93,7 +93,7 @@ export default function LoginPage() {
           <div className="mt-9 grid max-w-lg grid-cols-2 gap-x-7 gap-y-4">
             {["Multichannel sequences", "Private by design", "AI-assisted writing", "No per-seat pricing"].map((item) => (
               <div key={item} className="flex items-center gap-2.5 text-xs font-medium text-base-content/70">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary"><RiCheckLine size={12} /></span>
+                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-[var(--border-subtle)] text-base-content"><RiCheckLine size={12} /></span>
                 {item}
               </div>
             ))}
@@ -107,7 +107,7 @@ export default function LoginPage() {
       </section>
 
       <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10">
-        <div className="w-full max-w-[410px] rounded-[14px] border border-base-300 bg-base-100 p-6 shadow-[var(--shadow-raised)] sm:p-8">
+        <div className="w-full max-w-[410px] rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-6 sm:p-8">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
             <Image src="/linki-wordmark.svg" alt="Linki" width={104} height={30} priority />
           </div>

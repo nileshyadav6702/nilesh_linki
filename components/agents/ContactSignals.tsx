@@ -14,7 +14,7 @@ export default function ContactSignals({ targetId }: { targetId: string }) {
   useEffect(() => { fetch(`/api/targets/${targetId}/signals`).then((r) => r.ok ? r.json() : null).then(setD).catch(() => {}); }, [targetId]);
   if (!d || (!d.signals.length && d.score?.fit_score == null)) return null;
   return (
-    <div className="bg-base-100 border border-[var(--border-subtle)] rounded-2xl shadow-[var(--shadow-raised)] p-5 mb-4 space-y-3">
+    <div className="bg-base-300 border border-[var(--border-subtle)] rounded-[12px] p-5 mb-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] text-base-content/40 uppercase tracking-wide">Buying signals</p>
         <div className="flex items-center gap-2 text-xs text-base-content/50">

@@ -10,35 +10,34 @@
   themes: linki --default;
 }
 
-/* DaisyUI adapter for the Linki "Calm Paper" token layer.
-   Near-monochrome: ink is primary; base is warm paper. Light only. */
+/* DaisyUI adapter. Cream canvas, coral actions, ink text. Light only. */
 @plugin "daisyui/theme" {
   name: "linki";
   default: true;
   color-scheme: light;
-  --color-base-100: #ffffff;   /* surfaces / cards */
-  --color-base-200: #f7f5f1;   /* app canvas */
-  --color-base-300: #f1eee8;   /* recessed wells */
-  --color-base-content: #1b1712; /* ink */
-  --color-primary: #1b1712;    /* INK is the accent */
+  --color-base-100: #faf9f5;   /* canvas */
+  --color-base-200: #f5f0e8;   /* soft bands, sidebar */
+  --color-base-300: #efe9de;   /* selected rows, cards */
+  --color-base-content: #141413;
+  --color-primary: #cc785c;    /* coral, for actions */
   --color-primary-content: #ffffff;
-  --color-secondary: #2a251e;
-  --color-secondary-content: #ffffff;
-  --color-accent: #2a251e;
-  --color-accent-content: #ffffff;
-  --color-neutral: #1b1712;
-  --color-neutral-content: #ffffff;
-  --color-info: #5c6e8c;
-  --color-info-content: #ffffff;
-  --color-success: #3f7d52;
-  --color-success-content: #ffffff;
-  --color-warning: #b6791f;
-  --color-warning-content: #ffffff;
-  --color-error: #c2453c;
+  --color-secondary: #252523;
+  --color-secondary-content: #faf9f5;
+  --color-accent: #5db8a6;
+  --color-accent-content: #141413;
+  --color-neutral: #181715;
+  --color-neutral-content: #faf9f5;
+  --color-info: #5db8a6;
+  --color-info-content: #141413;
+  --color-success: #5db872;
+  --color-success-content: #141413;
+  --color-warning: #d4a017;
+  --color-warning-content: #141413;
+  --color-error: #c64545;
   --color-error-content: #ffffff;
-  --radius-selector: 0.4375rem; /* 7px */
-  --radius-field: 0.625rem;     /* 10px */
-  --radius-box: 1rem;           /* 16px */
+  --radius-selector: 0.5rem;   /* 8px */
+  --radius-field: 0.5rem;      /* 8px */
+  --radius-box: 0.75rem;       /* 12px */
   --size-selector: 0.25rem;
   --size-field: 0.28rem;
   --border: 1px;
@@ -114,10 +113,30 @@ button, a { -webkit-tap-highlight-color: transparent; }
   box-shadow: var(--focus-ring) !important;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1, h2, h3,
+h1.font-semibold, h2.font-semibold, h3.font-semibold,
+h1.font-bold, h2.font-bold, h3.font-bold {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink-900);
+}
+aside h3, nav h3 {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+h4, h5, h6 {
   color: var(--text-strong);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-tight);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 
 code, kbd, pre, .font-mono {
@@ -139,7 +158,7 @@ code, kbd, pre, .font-mono {
   border-radius: var(--radius-md);
   border-width: var(--border-width);
   font-size: var(--text-sm);
-  font-weight: var(--fw-semibold);
+  font-weight: var(--fw-medium);
   letter-spacing: var(--ls-normal);
   box-shadow: var(--shadow-flat);
   transition:
@@ -195,8 +214,8 @@ code, kbd, pre, .font-mono {
 .dropdown-content {
   border: var(--border-width) solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--shadow-raised);
+  background: var(--bg-subtle);
+  box-shadow: none;
 }
 .modal-box { border-radius: var(--radius-xl); box-shadow: var(--shadow-modal); }
 .dropdown-content { box-shadow: var(--shadow-popover); }

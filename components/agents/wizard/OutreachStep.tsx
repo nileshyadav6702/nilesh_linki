@@ -8,7 +8,7 @@ interface Option { id: string; name?: string; email?: string; from_email?: strin
 
 function Choice({ selected, onClick, title, text, badge, icon }: { selected: boolean; onClick: () => void; title: string; text: string; badge?: string; icon?: React.ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className={`rounded-2xl border p-4 text-left transition-colors ${selected ? "border-warning bg-warning/5" : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]"}`}>
+    <button type="button" onClick={onClick} className={`rounded-[12px] border p-4 text-left transition-colors ${selected ? "border-primary bg-primary/10" : "border-[var(--border-subtle)] bg-base-300 hover:border-[var(--border-strong)]"}`}>
       <div className="mb-2 flex items-center justify-between">{icon ?? <span />}{badge && <span className="rounded-md bg-warning px-2 py-0.5 text-[11px] font-medium text-warning-content">{badge}</span>}</div>
       <div className="text-sm font-semibold">{title}</div>
       <div className="text-xs text-base-content/55">{text}</div>

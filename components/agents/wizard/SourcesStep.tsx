@@ -43,7 +43,7 @@ export default function SourcesStep({ state, set, hasLinkedIn }: { state: Wizard
       {!state.sourceKind || state.sourceKind === null ? (
         <div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-2">
           {KINDS.map((k) => (
-            <button key={k.kind} type="button" onClick={() => set({ sourceKind: k.kind })} className="rounded-2xl border border-[var(--border-subtle)] bg-base-100 p-5 text-left transition-colors hover:border-[var(--border-strong)]">
+            <button key={k.kind} type="button" onClick={() => set({ sourceKind: k.kind })} className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-5 text-left transition-colors hover:border-[var(--border-strong)]">
               <div className="mb-3 flex items-center justify-between">
                 {"recommended" in k && k.recommended ? <span className="rounded-md bg-warning px-2 py-0.5 text-xs font-medium text-warning-content">Recommended</span> : <span />}
                 {"ai" in k && k.ai ? <span className="inline-flex items-center gap-1 text-xs text-warning"><RiSparkling2Line size={12} /> AI agent</span> : null}

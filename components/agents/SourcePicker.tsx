@@ -49,7 +49,7 @@ const linkedinUrl = (kind: "company" | "profile" | "any") => (v: string) => {
 function Group({ icon, title, subtitle, active, children, defaultOpen }: { icon: ReactNode; title: string; subtitle: string; active: number; children: ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(!!defaultOpen || active > 0);
   return (
-    <div className="rounded-2xl border border-[var(--border-subtle)] bg-base-100">
+    <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300">
       <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-base-200 text-base-content/70">{icon}</span>
         <span className="min-w-0 flex-1">
@@ -146,7 +146,7 @@ export default function SourcePicker({ value, onChange, hasLinkedIn, suggestions
         )}
       </Group>
 
-      <div className="rounded-2xl border border-[var(--border-subtle)] bg-base-100 px-4 py-3">
+      <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-4 py-3">
         <Toggle label="Smart lead finder" hint="Automatically find more warm leads that match your ICP when signals are low (Sales Navigator)" checked={get("lookalike").enabled} disabled={li} onChange={(v) => put("lookalike", {}, v)} />
       </div>
     </div>

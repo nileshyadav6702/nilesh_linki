@@ -4,4 +4,4 @@
    figures, so metrics/tables align without a second family.
    Mono is reserved for code/IDs only.
    Self-contained by design: swap this @import to change the typeface. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:ital,opsz,wght@0,14..32,400..700&family=JetBrains+Mono:wght@400;500&display=swap');

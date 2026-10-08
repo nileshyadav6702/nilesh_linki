@@ -327,7 +327,7 @@ function ReplyModal({ reply, onClose, onActionDone, hasPremium, savedReplies }: 
                   className={`rounded-xl p-3.5 ${
                     isFromContact
                       ? "bg-base-200 border border-[var(--border-subtle)]"
-                      : "bg-base-100 border border-[var(--border)] border-l-2 border-l-primary"
+                      : "bg-base-100 border border-[var(--border)] border-l-2 border-l-base-content"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">

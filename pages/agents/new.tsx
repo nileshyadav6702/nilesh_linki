@@ -121,7 +121,7 @@ export default function NewAgent() {
       <Head><title>New agent — Linki</title></Head>
       <div className="space-y-6 pb-24">
         <PageHeader eyebrow="AI SDR" title="Outreach agents" subtitle="Manage your automated outreach agents" />
-        <ol className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--border-subtle)] bg-base-100 px-5 py-4 shadow-[var(--shadow-raised)]">
+        <ol className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-5 py-4">
           {STEPS.map((label, i) => (
             <li key={label} className="flex items-center gap-2 text-sm">
               <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${i === step ? "bg-primary text-primary-content" : i < step ? "bg-warning/15 text-warning" : "bg-base-200 text-base-content/45"}`}>{i + 1}</span>

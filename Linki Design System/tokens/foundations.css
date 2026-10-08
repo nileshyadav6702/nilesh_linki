@@ -2,11 +2,11 @@
    LINKI · RADIUS, ELEVATION, BORDERS, MOTION, Z-INDEX, OPACITY
    ============================================================ */
 :root {
-  /* Radius — soft & modern. Controls 10px; cards 16px; pills full. */
+  /* Radius — controls 8px; cards 12px; pills full. */
   --radius-none: 0px;
-  --radius-sm: 7px;    /* badges, tags, inner elements */
-  --radius-md: 10px;   /* inputs, buttons, menus */
-  --radius-lg: 16px;   /* cards, popovers */
+  --radius-sm: 6px;    /* badges, tags, inner elements */
+  --radius-md: 8px;    /* inputs, buttons, menus */
+  --radius-lg: 12px;   /* cards, popovers */
   --radius-xl: 20px;   /* modals, large surfaces */
   --radius-2xl: 26px;  /* marketing panels */
   --radius-pill: 999px;
@@ -34,7 +34,7 @@
   --shadow-nav:
     0 1px 0 rgba(40,32,20,.04);
 
-  /* Focus ring — always visible ink halo */
+  /* Focus ring — coral at low alpha */
   --focus-ring: 0 0 0 3px var(--ring);
 
   /* Motion — fast, subtle, purposeful */
