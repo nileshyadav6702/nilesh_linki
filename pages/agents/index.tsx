@@ -1,10 +1,10 @@
 import Head from "next/head";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
-import { RiAddLine, RiArrowRightLine, RiDeleteBinLine, RiFileCopyLine, RiLinkedinBoxFill, RiMailLine, RiMore2Fill, RiPauseLine, RiPlayLine, RiSearchLine, RiSendPlane2Line } from "react-icons/ri";
-import { Card, Empty, outreachLabel, PageHeader, primaryBtn, secondaryBtn, senderLine, sourcingLabel, timeAgo } from "@/components/agents/ui";
+import { RiAddLine, RiArrowRightLine, RiDeleteBinLine, RiFileCopyLine, RiLinkedinBoxFill, RiMailLine, RiMore2Fill } from "react-icons/ri";
+import { Card, Empty, PageHeader, primaryBtn, RunSwitch, secondaryBtn, senderLine, timeAgo } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 
 export const getServerSideProps = requireSignedIn;
@@ -24,7 +24,6 @@ export default function AgentsPage() {
   const router = useRouter();
   const [agents, setAgents] = useState<AgentRow[] | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
-  const [statusFor, setStatusFor] = useState<string | null>(null);
   const load = () => fetch("/api/agents").then((r) => r.json()).then(setAgents).catch(() => setAgents([]));
   useEffect(() => { load(); }, []);
 
@@ -57,7 +56,7 @@ export default function AgentsPage() {
   return (
     <>
       <Head><title>Outreach Agents — Linki</title></Head>
-      <div className="space-y-8" onClick={() => { setMenu(null); setStatusFor(null); }}>
+      <div className="space-y-8" onClick={() => setMenu(null)}>
         <PageHeader eyebrow="AI SDR" title="Outreach Agents" subtitle="Each agent finds people and runs its own sequence."
           actions={
             <>
@@ -81,7 +80,6 @@ export default function AgentsPage() {
               const p = a.performance;
               const sourcing = a.status === "active";
               const outreach = !!a.outreach_enabled;
-              const live = sourcing || outreach;
               const pool = a.sender_pool ?? { linkedin: 0, email: 0 };
               const sender = senderLine(a.senders.linkedin?.name, a.senders.email?.from_email, pool);
               const attached = !!(a.senders.linkedin || a.senders.email);
@@ -90,34 +88,15 @@ export default function AgentsPage() {
                   <div className="flex items-start justify-between gap-4 px-5 pt-5">
                     <div className="min-w-0">
                       <Link href={`/agents/${a.id}`} className="block truncate text-[17px] font-semibold tracking-[-0.02em] text-base-content hover:text-primary">{a.name}</Link>
-                      <div className="relative mt-3" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="flex items-center gap-2"
-                          aria-expanded={statusFor === a.id}
-                          aria-label={`${sourcingLabel(a.status)}. ${outreachLabel(outreach)}`}
-                          onClick={() => { setStatusFor(statusFor === a.id ? null : a.id); setMenu(null); }}
-                        >
-                          <Chip on={sourcing} icon={<RiSearchLine size={13} />} label="Sourcing" />
-                          <Chip on={outreach} icon={<RiSendPlane2Line size={13} />} label="Outreach" />
-                        </button>
-                        {statusFor === a.id && (
-                          <div className="absolute left-0 z-40 mt-2 w-[320px] rounded-2xl border border-[var(--border-subtle)] bg-base-100 p-3 shadow-[var(--shadow-overlay)]">
-                            <p className="px-1 text-sm leading-5 text-base-content/70">{sourcingLabel(a.status)}. {outreachLabel(outreach)}.</p>
-                            <Toggle label="Lead sourcing" hint="Finds new leads that match this agent" on={sourcing} onChange={() => patch(a.id, { status: sourcing ? "paused" : "active" }, sourcing ? "Lead sourcing paused" : "Lead sourcing on")} />
-                            <Toggle label="Outreach" hint="Sends the sequence to approved leads" on={outreach} onChange={() => patch(a.id, { outreach_enabled: !outreach }, outreach ? "Outreach paused" : "Outreach on")} />
-                            <button type="button" className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-[var(--border-subtle)] text-xs font-medium hover:bg-base-200" onClick={() => patch(a.id, live ? { status: "paused", outreach_enabled: false } : { status: "active" }, live ? "Lead sourcing and outreach paused" : "Lead sourcing on")}>
-                              {live ? <RiPauseLine size={13} /> : <RiPlayLine size={13} />}
-                              {live ? "Pause both" : "Start sourcing"}
-                            </button>
-                          </div>
-                        )}
+                      <div className="mt-3 flex flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                        <RunSwitch label="Sourcing" on={sourcing} onChange={() => patch(a.id, { status: sourcing ? "paused" : "active" }, sourcing ? "Lead sourcing paused" : "Lead sourcing on")} />
+                        <RunSwitch label="Outreach" on={outreach} onChange={() => patch(a.id, { outreach_enabled: !outreach }, outreach ? "Outreach paused" : "Outreach on")} />
                       </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <Link href={`/agents/${a.id}`} className={secondaryBtn + " !h-9"}>Open <RiArrowRightLine size={15} /></Link>
                       <div className="relative">
-                        <button type="button" className="flex h-9 w-9 items-center justify-center rounded-[10px] text-base-content/45 hover:bg-base-200 hover:text-base-content" aria-label="Agent actions" onClick={() => { setMenu(menu === a.id ? null : a.id); setStatusFor(null); }}>
+                        <button type="button" className="flex h-9 w-9 items-center justify-center rounded-[10px] text-base-content/45 hover:bg-base-200 hover:text-base-content" aria-label="Agent actions" onClick={() => setMenu(menu === a.id ? null : a.id)}>
                           <RiMore2Fill size={18} />
                         </button>
                         {menu === a.id && (
@@ -176,24 +155,3 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Chip({ on, icon, label }: { on: boolean; icon: ReactNode; label: string }) {
-  return (
-    <span className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium ${on ? "border-success/30 bg-success/10 text-success" : "border-[var(--border-subtle)] bg-base-200/70 text-base-content/50"}`}>
-      {icon}
-      {label}
-      <span className={`h-1.5 w-1.5 rounded-full ${on ? "bg-success" : "bg-base-content/25"}`} />
-    </span>
-  );
-}
-
-function Toggle({ label, hint, on, onChange }: { label: string; hint: string; on: boolean; onChange: () => void }) {
-  return (
-    <div className="mt-2 flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] px-3 py-2.5">
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">{label} <span className={`ml-1 text-xs font-medium ${on ? "text-success" : "text-base-content/35"}`}>{on ? "On" : "Off"}</span></div>
-        <div className="text-xs text-base-content/50">{hint}</div>
-      </div>
-      <input type="checkbox" className="toggle toggle-sm toggle-success" checked={on} onChange={onChange} aria-label={label} />
-    </div>
-  );
-}

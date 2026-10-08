@@ -153,6 +153,18 @@ export function outreachLabel(on: boolean): string {
   return on ? "Outreach on" : "Outreach paused";
 }
 
+/** One independent on/off control. The change handler should touch only this switch. */
+export function RunSwitch({ label, on, onChange }: { label: string; on: boolean; onChange: () => void }) {
+  return (
+    <label className={`inline-flex h-10 items-center gap-2 rounded-[10px] border px-3 ${on ? "border-success/30 bg-success/10" : "border-[var(--border-subtle)] bg-base-100"}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${on ? "bg-success" : "bg-base-content/25"}`} />
+      <span className="text-sm font-medium text-base-content">{label}</span>
+      <span className={`text-xs font-medium ${on ? "text-success" : "text-base-content/40"}`}>{on ? "On" : "Off"}</span>
+      <input type="checkbox" className="toggle toggle-sm toggle-success" checked={on} onChange={onChange} aria-label={label} />
+    </label>
+  );
+}
+
 /** Name of the attached sender. Accounts that exist but are not on this agent are not "no sender". */
 export function senderLine(linkedinName: string | null | undefined, emailFrom: string | null | undefined, pool: { linkedin: number; email: number }): string {
   const attached = linkedinName || emailFrom;

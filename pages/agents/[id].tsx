@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
-import { RiDeleteBinLine, RiLinkedinBoxFill, RiMailLine, RiPauseLine, RiPlayLine, RiRefreshLine } from "react-icons/ri";
+import { RiDeleteBinLine, RiLinkedinBoxFill, RiMailLine, RiPlayLine, RiRefreshLine } from "react-icons/ri";
 import AgentOverview, { ActivityList, type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
 import AgentSettings, { type AgentForm } from "@/components/agents/AgentSettings";
 import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSources";
@@ -11,7 +11,7 @@ import IcpEditor, { EMPTY_ICP } from "@/components/agents/IcpEditor";
 import AgentCampaign from "@/components/agents/AgentCampaign";
 import LeadsTable from "@/components/agents/LeadsTable";
 import type { Step } from "@/components/agents/SequenceEditor";
-import { Card, ghostBtn, nextRunLabel, outreachLabel, primaryBtn, secondaryBtn, senderLine, sourcingLabel, timeUntil } from "@/components/agents/ui";
+import { Card, ghostBtn, nextRunLabel, primaryBtn, RunSwitch, secondaryBtn, senderLine, timeUntil } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 import type { Icp } from "@/lib/icp/schema";
 
@@ -126,18 +126,12 @@ export default function AgentDetail() {
                 ? <button type="button" className="text-primary" onClick={() => setTab("Settings")}>Choose a sender</button>
                 : <Link href="/settings" className="text-primary">Add a sender</Link>)}
               <span className="text-base-content/40">{launch}</span>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${finding ? "bg-info/10 text-info" : "bg-base-200"}`}>{sourcingLabel(a.status)}</span>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${sending ? "bg-success/10 text-success" : "bg-base-200"}`}>{outreachLabel(sending)}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <RunSwitch label="Sourcing" on={finding} onChange={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")} />
+            <RunSwitch label="Outreach" on={sending} onChange={() => patch({ outreach_enabled: !sending }, sending ? "Outreach paused" : "Outreach on")} />
             <button className={secondaryBtn} disabled={busy} onClick={runNow}><RiRefreshLine size={16} /> Launch now</button>
-            {finding
-              ? <button className={secondaryBtn} onClick={() => patch({ status: "paused" }, "Lead sourcing paused")}><RiPauseLine size={16} /> Pause sourcing</button>
-              : <button className={primaryBtn} onClick={() => patch({ status: "active" }, "Lead sourcing on")}><RiPlayLine size={16} /> Start sourcing</button>}
-            {sending
-              ? <button className={secondaryBtn} onClick={() => patch({ outreach_enabled: false }, "Outreach paused")}><RiPauseLine size={16} /> Pause outreach</button>
-              : <button className={primaryBtn} onClick={() => patch({ outreach_enabled: true }, "Outreach started")}><RiPlayLine size={16} /> Start outreach</button>}
             <button className={ghostBtn} onClick={remove} aria-label="Delete agent"><RiDeleteBinLine size={16} /></button>
           </div>
         </div>
