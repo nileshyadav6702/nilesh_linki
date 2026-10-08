@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
-import { acquireEnrichLock, enrichList } from "@/lib/linkedin/enrich";
+import { enqueueBulkEnrich } from "@/lib/linkedin/bulk-enrich";
 import { discoveryPausedUntil } from "@/lib/linkedin/budget";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -37,26 +37,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const paused = discoveryPausedUntil(account_id);
   if (paused) return res.status(409).json({ error: `LinkedIn is limiting this account until ${paused.until}. Try again later.` });
-  // One bulk run per list and per account: a double click must not start a second browser loop.
-  const release = acquireEnrichLock(listId, account_id);
-  if (!release) return res.status(409).json({ error: "Enrichment is already running for this list or account" });
+  // Queued, not started here: the account's LinkedIn worker reads it in bounded slices,
+  // in turn with that account's outreach and within its daily profile_view budget.
+  // A list already queued (a double click, or another account) is refused as before.
+  if (!enqueueBulkEnrich(listId, account_id, db)) {
+    return res.status(409).json({ error: "Enrichment is already running for this list or account" });
+  }
 
-  // Respond immediately — enrichment runs in background
-  res.json({ started: true, profiles: pending.c });
-
-  // Fire and forget — do not await
-  setImmediate(async () => {
-    try {
-      const { getSessionContext } = await import("@/lib/linkedin/session");
-      const ctx = await getSessionContext(account_id);
-      const r = await enrichList(ctx, listId, 2000, undefined, account_id);
-      if (r.stopped) console.warn(`[enrich] list ${listId} stopped early (${r.stopped}${r.reason ? `: ${r.reason}` : ""})`);
-    } catch (err) {
-      console.error("[enrich] background enrichment failed:", err instanceof Error ? err.message : err);
-    } finally {
-      release();
-    }
-  });
+  return res.json({ started: true, profiles: pending.c, queued: true });
 }
 
 export const config = {

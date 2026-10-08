@@ -14,13 +14,19 @@ import { completeFinishedRuns, dueTracks, heartbeat, linkedInCampaignRuns, sprea
 import { executeStep } from "./steps";
 import type { AccountLimits, ScheduleConfig, Target, TrackRun, WorkflowStep } from "./types";
 
-export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease): Promise<void> {
+/**
+ * One LinkedIn campaign pass. With `accountId` it covers only that account's runs — the
+ * per-account worker's unit of work (account-workers.ts); without it, every account in turn.
+ * All caps, counters and enrollment budgets are per account either way.
+ */
+export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, accountId?: string): Promise<void> {
   // Fencing: every phase that mutates track state first checks this pass still owns the
   // LinkedIn lease. A pass that lost it (stalled past the TTL, another process took over)
   // stops instead of racing the new holder.
   const leaseLost = () => !!lease && !lease.isHeld();
-  recoverStaleLinkedinActions(db);
-  const activeRuns = linkedInCampaignRuns(db);
+  // Account workers recover stale actions once per pass, before any of them starts.
+  if (!accountId) recoverStaleLinkedinActions(db);
+  const activeRuns = linkedInCampaignRuns(db).filter((run) => !accountId || run.account_id === accountId);
 
   if (activeRuns.length === 0) return;
 
@@ -84,8 +90,8 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease): P
            a.active_hours_start, a.active_hours_end, a.timezone, a.working_days
     FROM runs r
     JOIN accounts a ON a.id = r.account_id
-    WHERE r.status = 'running'
-  `).all() as Array<{ run_id: string; workflow_id: string; account_id: string; email_account_id: string | null } & AccountLimits>;
+    WHERE r.status = 'running' AND (? IS NULL OR r.account_id = ?)
+  `).all(accountId ?? null, accountId ?? null) as Array<{ run_id: string; workflow_id: string; account_id: string; email_account_id: string | null } & AccountLimits>;
 
   if (stillActive.length === 0) return;
 

@@ -166,8 +166,11 @@ export async function enrichProfile(
 
 // ─── bulk runs: one per list and one per account at a time ─────────────────────
 
-const runningLists = new Set<string>();
-const runningAccounts = new Set<string>();
+// On globalThis, not module scope: Next bundles API routes and instrumentation separately, so a
+// module-level Set could exist twice in one process and the lock would not exclude anything.
+const lockState = globalThis as typeof globalThis & { __linkiEnrichLists?: Set<string>; __linkiEnrichAccounts?: Set<string> };
+const runningLists = (lockState.__linkiEnrichLists ??= new Set<string>());
+const runningAccounts = (lockState.__linkiEnrichAccounts ??= new Set<string>());
 
 /** Claims the list and account for a bulk run. Returns a release function, or null when either is busy. */
 export function acquireEnrichLock(listId: string, accountId: string): (() => void) | null {

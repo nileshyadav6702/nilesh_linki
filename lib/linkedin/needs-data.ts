@@ -59,14 +59,21 @@ export interface NeedsDataDeps {
 
 export interface NeedsDataResult { attempted: number; filled: number }
 
-export async function enrichNeedsDataLeads(deps: Partial<NeedsDataDeps> = {}, perAccount = NEEDS_DATA_PER_ACCOUNT_PER_PASS): Promise<NeedsDataResult> {
+/** Limit a pass to one account (the account worker's own) and let it stop between leads. */
+export interface NeedsDataScope { accountId?: string; shouldStop?: () => boolean }
+
+export async function enrichNeedsDataLeads(
+  deps: Partial<NeedsDataDeps> = {}, perAccount = NEEDS_DATA_PER_ACCOUNT_PER_PASS, scope: NeedsDataScope = {},
+): Promise<NeedsDataResult> {
   const db = getDb();
   const getContext = deps.getContext ?? (async (id: string) => (await import("@/lib/linkedin/session")).getSessionContext(id));
   const enrich = deps.enrich ?? enrichProfileDetailed;
   const delayMs = deps.delayMs ?? 3000;
   const result: NeedsDataResult = { attempted: 0, filled: 0 };
 
-  for (const accountId of needsDataAccounts(db)) {
+  const accounts = needsDataAccounts(db).filter((id) => !scope.accountId || id === scope.accountId);
+  for (const accountId of accounts) {
+    if (scope.shouldStop?.()) break;
     if (discoveryPausedUntil(accountId)) continue;
     const candidates = needsDataCandidates(db, accountId, perAccount);
     if (candidates.length === 0) continue;
@@ -77,6 +84,7 @@ export async function enrichNeedsDataLeads(deps: Partial<NeedsDataDeps> = {}, pe
       const ctx = await getContext(accountId);
       for (let i = 0; i < candidates.length; i++) {
         const lead = candidates[i];
+        if (scope.shouldStop?.()) break;
         if (!consume(accountId, "profile_view")) break; // daily profile_view budget spent
         db.prepare("UPDATE targets SET profile_enrich_attempts = profile_enrich_attempts + 1, profile_enrich_attempted_at = datetime('now') WHERE id = ?").run(lead.id);
         result.attempted++;

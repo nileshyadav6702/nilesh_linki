@@ -38,8 +38,9 @@ Symptom: LinkedIn actions failing; logs show Playwright/Chromium errors; possibl
 Symptom: OOM kill in `dmesg` or the container restarting under load; Chromium dying.
 1. `free -h` and `docker stats` to confirm.
 2. Restart to clear: `docker compose restart linki`.
-3. If recurring, ensure no `mem_limit` is set too tightly (see DEPLOYMENT.md). Chromium plus the app can transiently need 2 to 2.5 GB.
-4. As an emergency backstop only, enable host swap. This is not a fix; reduce concurrent load and keep at least ~1 GB free.
+3. If recurring, ensure no `mem_limit` is set too tightly (see DEPLOYMENT.md). Chromium plus the app can transiently need 2 to 2.5 GB, plus roughly 150 to 300 MB for each LinkedIn account context open at once.
+4. Lower `LINKEDIN_ACCOUNT_CONCURRENCY` (default 4; `1` restores one account at a time) in `.env` and restart. Fewer accounts are then worked in parallel; no LinkedIn limit changes.
+5. As an emergency backstop only, enable host swap. This is not a fix; reduce concurrent load and keep at least ~1 GB free.
 
 ## Full disk
 
@@ -88,8 +89,14 @@ If it went out, set `status='sent'`. If it did not, send it by hand (the track h
 ### Stuck imports and track claims
 
 - A `list_imports` row in `running` whose `heartbeat_at` is older than 15 minutes (or missing) is requeued as `scheduled` at runner boot and before every import pass; one with a pending cancel is closed as `canceled`. It no longer blocks agent import sources.
-- Imports run inside the LinkedIn loop (never alongside outreach), at most 4 pages / about 6 minutes per pass; the remainder is chained as a new batch later the same day while the workspace quota lasts, else the next day. The daily import cap is per workspace (`app_settings` key `daily_import_cap:<workspace_id>`, falling back to the old global `daily_import_cap`).
+- Imports run inside the owning LinkedIn account's worker (never alongside that account's outreach), at most 4 pages / about 6 minutes per pass; the remainder is chained as a new batch later the same day while the workspace quota lasts, else the next day. The daily import cap is per workspace (`app_settings` key `daily_import_cap:<workspace_id>`, falling back to the old global `daily_import_cap`).
 - `run_profile_tracks.claimed_by/claimed_at` mark the worker executing a track. A claim older than 15 minutes is treated as abandoned and taken over automatically; no manual action is needed.
+
+### LinkedIn account workers and bulk enrichment
+
+- Each 30 s LinkedIn pass works up to `LINKEDIN_ACCOUNT_CONCURRENCY` accounts in parallel (default 4). Within one account the order is fixed and sequential: due campaign steps (8 to 20 s apart), one import pass, a few needs-data profile reads, one bulk-enrichment slice. Signal discovery and CRM connector sync run after all account workers finish.
+- If a phase hits its watchdog, the account is skipped by later passes ("still has work in flight from an earlier pass") until the abandoned browser work really ends. If it repeats for one account, check that account's session (see "Expired LinkedIn session") and Chromium health. Signal discovery is deferred while any account is in this state.
+- "Enrich list" requests are queued, not run immediately: `app_settings` keys `bulk_enrich:<account_id>:<list_id>`. The account worker reads up to 10 profiles per pass, charged to the account's daily `profile_view` budget, and removes the key when every unenriched profile has been read once. A budget stop or a LinkedIn pause keeps the list queued until it can continue. To cancel a queued list: `sqlite3 /opt/linki/data/linki.db "DELETE FROM app_settings WHERE key LIKE 'bulk_enrich:%:<list_id>';"`
 
 ## Repeated failed jobs
 

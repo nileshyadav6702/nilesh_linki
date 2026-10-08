@@ -24,7 +24,7 @@ Recommended:
 - `INTERNAL_API_SECRET` (generate with `openssl rand -base64 32`) if the MCP endpoint is used. It is only ever sent to the app's own loopback address (`http://127.0.0.1:${PORT:-3000}` inside the container).
 - `TRUST_PROXY=1` when the app sits behind the reverse proxy described above. Rate limits (login, signup, OAuth) then key on the proxy-supplied `X-Real-IP` (or the right-most `X-Forwarded-For` entry). Configure the proxy to overwrite, not append to, `X-Real-IP` — for nginx: `proxy_set_header X-Real-IP $remote_addr;`. Leave it unset when clients can reach the app directly; otherwise those headers are client-forgeable and are ignored in favour of the socket address. Without it behind a proxy, every client shares the proxy's address and one rate-limit bucket.
 
-Optional: `EMAIL_TRACKING_BASE_URL`, `EMAIL_TRACKING_SECRET`, `MCP_ALLOWED_ORIGINS`, `HEADLESS`. `LINKI_DB_PATH` is set to `/data/linki.db` by compose automatically.
+Optional: `EMAIL_TRACKING_BASE_URL`, `EMAIL_TRACKING_SECRET`, `MCP_ALLOWED_ORIGINS`, `HEADLESS`, `LINKEDIN_ACCOUNT_CONCURRENCY` (LinkedIn accounts worked in parallel, default 4, max 16; see "Resource recommendations"). `LINKI_DB_PATH` is set to `/data/linki.db` by compose automatically.
 
 Open-tracking bot filtering (both optional, both have working defaults):
 - `EMAIL_TRACKING_PREFETCH_SECONDS` — a pixel hit landing within this many seconds of the send is recorded as an automated prefetch rather than a read. Defaults to `15`. Mail security gateways (Defender Safe Links, Proofpoint, Mimecast, Barracuda) fetch every image on delivery, and Apple Mail Privacy Protection prefetches on receipt, so without this the open rate measures scanners instead of prospects. Lower it only if you see genuine reads being filtered; the campaign analytics show verified opens and raw pixel hits side by side so you can tell.
@@ -140,13 +140,13 @@ du -sh /opt/linki/data           # database size growth
 
 ## Resource recommendations for the 8 GB VPS
 
-These are grounded in the actual architecture: one Node process, one SQLite connection, and Chromium driven by a single sequential leased loop (so at most one browser context is active at a time).
+These are grounded in the actual architecture: one Node process, one SQLite connection, and one shared Chromium driven by a single leased LinkedIn loop that works up to `LINKEDIN_ACCOUNT_CONCURRENCY` accounts in parallel, each in its own browser context and strictly sequential within the account.
 
 | Resource | Recommended | Rationale |
 | --- | --- | --- |
 | App server processes | 1 (`next start`) | The app is a single Node process; workers run in-process. Do not run multiple app replicas against one SQLite file. |
 | Background worker concurrency | 1 per loop type (built in) | Each subsystem loop is leased and sequential; email dispatch handles up to 20 pending jobs per 30 s tick, sent sequentially. |
-| Max simultaneous Chromium sessions | 1 | The LinkedIn loop is single-flight by design. Do not parallelize. |
+| Max simultaneous Chromium contexts | `LINKEDIN_ACCOUNT_CONCURRENCY` (default 4) | One browser, one context per LinkedIn account. Each context costs roughly 150 to 300 MB (more on heavy Sales Navigator pages). A context unused for 20 minutes is saved and closed. One account is never driven by two workers at once. |
 | Database connection pool | N/A (1 shared connection) | better-sqlite3 is synchronous; a single connection with WAL is correct for one host. |
 | Container memory limit | 6 GB (optional, opt-in) | Leaves ~1 GB for OS + Docker daemon and ~1 GB free reserve. Chromium can spike to ~1 to 1.5 GB on heavy pages; 6 GB gives ample headroom. |
 | Minimum free memory reserve | ~1 GB | Prevents swapping and OOM under a Chromium spike. |
@@ -167,5 +167,9 @@ Resource limits are intentionally not set in the shipped `docker-compose.yml` be
     # mem_limit: 6g
     # cpus: "3.5"
 ```
+
+### Sizing `LINKEDIN_ACCOUNT_CONCURRENCY`
+
+Budget memory as: Node app (~500 MB) + Chromium browser process (~300 MB) + `LINKEDIN_ACCOUNT_CONCURRENCY` x 300 MB per context, plus ~1 GB spike headroom. The default of 4 needs about 3 GB of that headroom on top of the OS; on the 8 GB VPS keep it at 4 to 6. Contexts of accounts with no LinkedIn work are closed after 20 idle minutes, so the steady state is usually below the cap. Set `LINKEDIN_ACCOUNT_CONCURRENCY=1` to get the old one-account-at-a-time behaviour (for example while diagnosing memory pressure). Raising it does not raise any LinkedIn limit: daily caps, pacing (8 to 20 s between steps within an account), active hours and discovery budgets are all per account.
 
 Do not go below roughly 4 GB: a single Chromium session plus the Node app can transiently need 2 to 2.5 GB, and headroom absorbs page-load spikes. Swap can be enabled as an emergency backstop only; it is not a substitute for headroom and will slow the browser noticeably if hit.

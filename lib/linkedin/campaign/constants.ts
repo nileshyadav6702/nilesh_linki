@@ -57,3 +57,8 @@ export const EMAIL_GAP_JITTER_MS = 90_000;
 // that a multi-step sequence probes each address once, short enough that a mailbox closed
 // mid-campaign is caught before the later follow-ups.
 export const EMAIL_RECHECK_INTERVAL_MS = 7 * 24 * 60 * 60_000;
+
+// One slice of a queued bulk list enrichment (BULK_ENRICH_PER_SLICE profiles, ~10-15s each).
+export const BULK_ENRICH_TIMEOUT_MS = 6 * 60_000;
+// A browser context unused for this long is saved and closed (each costs ~150-300 MB).
+export const CONTEXT_IDLE_CLOSE_MS = 20 * 60_000;

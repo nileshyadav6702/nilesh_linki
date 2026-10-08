@@ -12,5 +12,12 @@ export async function register() {
     } catch (err) {
       console.error("[instrumentation] Failed to start runner:", err);
     }
+
+    try {
+      const { startRetentionSchedule } = await import("@/lib/maintenance/retention");
+      startRetentionSchedule();
+    } catch (err) {
+      console.error("[instrumentation] Failed to start retention schedule:", err);
+    }
   }
 }

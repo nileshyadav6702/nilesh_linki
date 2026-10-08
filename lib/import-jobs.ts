@@ -169,27 +169,55 @@ export const IMPORT_PAGES_PER_PASS = 4;
 /** Cooperative deadline for a pass: no new page is started after it. */
 export const IMPORT_PASS_BUDGET_MS = 6 * 60_000;
 
-let importRunning = false;
+// Keys ("*" for an unscoped pass, else the account id) with a pass in flight. On globalThis so
+// every bundle in the process shares it.
+const importState = globalThis as typeof globalThis & { __linkiImportsRunning?: Set<string> };
+const importsRunning = (importState.__linkiImportsRunning ??= new Set<string>());
+
+const DUE_IMPORT_WHERE = `status = 'scheduled' AND cancel_requested = 0
+           AND (scheduled_for IS NULL OR scheduled_for <= date('now'))`;
+
+/** LinkedIn accounts with an import batch due now — each gets a pass from its own account worker. */
+export function dueImportAccountIds(db: DB): string[] {
+  return (db.prepare(`SELECT DISTINCT account_id FROM list_imports WHERE ${DUE_IMPORT_WHERE} AND account_id IS NOT NULL`)
+    .all() as Array<{ account_id: string }>).map((r) => r.account_id);
+}
+
+/** A due import with no LinkedIn account can never run on an account worker: close it with the reason. */
+export function failAccountlessImports(db: DB): number {
+  return db.prepare(`UPDATE list_imports SET status = 'error', error = 'Import has no LinkedIn account or Sales Navigator URL', finished_at = datetime('now')
+    WHERE ${DUE_IMPORT_WHERE} AND account_id IS NULL`).run().changes;
+}
+
+export interface ImportPassOptions {
+  budgetMs?: number;
+  /** Only this account's batches — the per-account LinkedIn worker passes its own id. */
+  accountId?: string;
+  /** Checked between pages (e.g. the runner lost its lease): ends the pass like the deadline does. */
+  shouldStop?: () => boolean;
+}
 
 /**
- * Runner hook, called from the LinkedIn loop - in sequence with outreach, never alongside
- * it, because both drive the same browser session. Runs at most one bounded pass of the next
- * due batch and AWAITS it; the remainder is chained as a new batch (today while quota lasts,
- * else tomorrow). `importRunning` is reset in finally, so a crashed pass cannot wedge imports.
+ * Runner hook, called from the LinkedIn account worker - in sequence with that account's
+ * outreach, never alongside it, because both drive the same browser session. Runs at most one
+ * bounded pass of the next due batch and AWAITS it; the remainder is chained as a new batch
+ * (today while quota lasts, else tomorrow). The running flag is cleared in finally, so a
+ * crashed pass cannot wedge imports.
  */
-export async function processScheduledImports(db: DB, opts: { budgetMs?: number } = {}): Promise<void> {
-  if (importRunning) return;
-  importRunning = true;
+export async function processScheduledImports(db: DB, opts: ImportPassOptions = {}): Promise<void> {
+  const key = opts.accountId ?? "*";
+  if (importsRunning.has(key) || (key !== "*" && importsRunning.has("*"))) return;
+  importsRunning.add(key);
   try {
     recoverStaleImports(db);
     const due = db
       .prepare(
         `SELECT * FROM list_imports
-         WHERE status = 'scheduled' AND cancel_requested = 0
-           AND (scheduled_for IS NULL OR scheduled_for <= date('now'))
+         WHERE ${DUE_IMPORT_WHERE}
+           AND (? IS NULL OR account_id = ?)
          ORDER BY scheduled_for ASC, batch_index ASC LIMIT 1`
       )
-      .get() as ImportRow | undefined;
+      .get(opts.accountId ?? null, opts.accountId ?? null) as ImportRow | undefined;
     if (!due) return;
 
     // Shares the per-account lock with bulk profile enrichment (lib/linkedin/enrich.ts), so an
@@ -203,16 +231,16 @@ export async function processScheduledImports(db: DB, opts: { budgetMs?: number 
         "UPDATE list_imports SET status = 'running', started_at = datetime('now'), heartbeat_at = datetime('now') WHERE id = ? AND status = 'scheduled'"
       ).run(due.id);
       if (!claimed.changes) return;
-      await runBatch(due.id, Date.now() + (opts.budgetMs ?? IMPORT_PASS_BUDGET_MS));
+      await runBatch(due.id, Date.now() + (opts.budgetMs ?? IMPORT_PASS_BUDGET_MS), opts.shouldStop);
     } finally {
       release();
     }
   } finally {
-    importRunning = false;
+    importsRunning.delete(key);
   }
 }
 
-async function runBatch(importId: string, deadline: number): Promise<void> {
+async function runBatch(importId: string, deadline: number, shouldStop?: () => boolean): Promise<void> {
   const db = getDb();
   const job = db.prepare("SELECT * FROM list_imports WHERE id = ?").get(importId) as ImportRow | undefined;
   if (!job) return;
@@ -259,7 +287,7 @@ async function runBatch(importId: string, deadline: number): Promise<void> {
   // loop gets the session back. A deadline stop is a normal partial pass, not a cancel.
   const isCanceled = () => {
     db.prepare("UPDATE list_imports SET heartbeat_at = datetime('now') WHERE id = ?").run(importId);
-    return userCanceled() || Date.now() > deadline;
+    return userCanceled() || Date.now() > deadline || !!shouldStop?.();
   };
 
   try {
