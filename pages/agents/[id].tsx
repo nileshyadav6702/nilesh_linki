@@ -3,7 +3,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
-import { RiDeleteBinLine, RiLinkedinBoxFill, RiMailLine, RiPlayLine, RiRefreshLine } from "react-icons/ri";
+import type { ReactNode } from "react";
+import {
+  RiArrowLeftSLine, RiFlowChart, RiCheckboxCircleFill, RiDashboardLine, RiDeleteBinLine, RiErrorWarningLine, RiFocus3Line, RiHistoryLine, RiLineChartLine,
+  RiLinkedinBoxFill, RiLoader4Line, RiMailLine, RiPauseCircleLine, RiPlayLine, RiRadarLine, RiRocketLine, RiSearchEyeLine, RiSendPlaneLine, RiSettings3Line,
+  RiTeamLine, RiTimeLine, RiUserAddLine,
+} from "react-icons/ri";
 import AgentOverview, { ActivityList, type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
 import AgentSettings, { type AgentForm } from "@/components/agents/AgentSettings";
 import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSources";
@@ -11,7 +16,9 @@ import IcpEditor, { EMPTY_ICP } from "@/components/agents/IcpEditor";
 import AgentCampaign from "@/components/agents/AgentCampaign";
 import LeadsTable from "@/components/agents/LeadsTable";
 import type { Step } from "@/components/agents/SequenceEditor";
-import { Card, ghostBtn, nextRunLabel, primaryBtn, RunSwitch, secondaryBtn, senderLine, timeUntil } from "@/components/agents/ui";
+import {
+  Avatar, Callout, Card, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, RunSwitch, secondaryBtn, SectionHeading, Segmented, senderLine, TabBar, timeUntil, type Tone,
+} from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 import type { Icp } from "@/lib/icp/schema";
 
@@ -32,6 +39,28 @@ interface Detail {
 }
 
 const TABS = ["Overview", "Leads", "Sources", "Campaign", "Activity", "Settings"] as const;
+const TAB_ICONS: Partial<Record<(typeof TABS)[number], ReactNode>> = {
+  Overview: <RiDashboardLine size={15} />, Leads: <RiTeamLine size={15} />, Sources: <RiRadarLine size={15} />,
+  Campaign: <RiFlowChart size={15} />, Activity: <RiHistoryLine size={15} />, Settings: <RiSettings3Line size={15} />,
+};
+const ACTIVITY_FILTERS = ["all", "discovery", "campaign", "setup"] as const;
+
+function SenderRow({ icon, tone, name, kind, status, limits }: { icon: ReactNode; tone: Tone; name: string; kind: string; status: "connected" | "logged_out" | "none"; limits: ReactNode[] }) {
+  return (
+    <div className="flex flex-wrap items-center gap-4 rounded-[12px] border border-[var(--border-subtle)] px-4 py-3.5">
+      <IconTile icon={icon} tone={tone} size={40} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="truncate font-medium text-base-content">{name}</span>
+          {status === "connected" && <Pill tone="success"><RiCheckboxCircleFill size={12} /> Connected</Pill>}
+          {status === "logged_out" && <Pill tone="error"><RiErrorWarningLine size={12} /> Logged out</Pill>}
+        </div>
+        <div className="text-[13px] text-base-content/50">{kind}</div>
+      </div>
+      {limits.length > 0 && <div className="flex flex-wrap gap-2">{limits.map((l, i) => <Pill key={i}>{l}</Pill>)}</div>}
+    </div>
+  );
+}
 
 export default function AgentDetail() {
   const router = useRouter();
@@ -110,46 +139,66 @@ export default function AgentDetail() {
   const soonest = d.sources.filter((s) => s.enabled && s.next_run_at).sort((x, y) => String(x.next_run_at).localeCompare(String(y.next_run_at)))[0];
   const launch = !soonest ? "No source scheduled" : !soonest.last_run_at && timeUntil(soonest.next_run_at) === "due" ? "First run is scheduled now" : `Next launch ${nextRunLabel(soonest.next_run_at, soonest.last_run_at)}`;
 
+  const waiting = (d.counts.by_status.enrolled ?? 0) + (d.counts.by_status.approved ?? 0);
+  const li = d.senders.linkedin;
+  const mail = d.senders.email;
+
   return (
     <>
       <Head><title>{a.name} — Agents — Linki</title></Head>
       <div className="space-y-6">
         <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
           <div className="min-w-0">
-            <p className="mb-2 text-[13px] font-medium text-base-content/45"><Link href="/agents" className="hover:underline">Agents</Link></p>
-            <h1 className="truncate text-[28px] font-semibold leading-tight tracking-[-.03em]">{a.name}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/60">
-              {d.senders.linkedin && <RiLinkedinBoxFill className="text-[#0a66c2]" size={16} />}
-              {d.senders.email && <RiMailLine className="text-error" size={16} />}
-              <span>{senderName}</span>
+            <Link href="/agents" className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-base-content/45 hover:text-base-content"><RiArrowLeftSLine size={16} /> Agents</Link>
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
+              <IconTile icon={<RiFocus3Line size={20} />} size={40} />
+              <h1 className="min-w-0 truncate font-display text-[28px] leading-[1.15] text-base-content">{a.name}</h1>
+              <Pill tone={finding ? "success" : a.status === "draft" ? "ink" : "amber"}>
+                {finding ? <RiLoader4Line size={13} className="animate-spin" /> : <RiPauseCircleLine size={13} />}
+                {finding ? "Finding leads" : a.status === "draft" ? "Draft" : "Paused"}
+              </Pill>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-base-content/65">
+              {attached ? <Avatar name={li?.name || senderName} size={24} /> : <span className="h-1.5 w-1.5 rounded-full bg-warning" />}
+              <span className="font-medium text-base-content/80">{li?.name || senderName}</span>
+              {li && (
+                <>
+                  <Pill><RiUserAddLine size={13} /> {li.daily_connection_limit ?? 20}/day</Pill>
+                  <Pill><RiSendPlaneLine size={13} /> {li.daily_message_limit ?? 40}/day</Pill>
+                </>
+              )}
+              {mail && (
+                <>
+                  <span className="hidden h-4 w-px bg-[var(--border-subtle)] sm:block" />
+                  <span className="inline-flex min-w-0 items-center gap-1.5"><RiMailLine className="shrink-0 text-error" size={16} /><span className="truncate">{mail.from_email}</span></span>
+                  {!!mail.ramp_up_enabled && <span className="inline-flex items-center gap-1 text-xs font-medium text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Ramping up</span>}
+                </>
+              )}
               {!attached && (pool.linkedin + pool.email > 0
-                ? <button type="button" className="text-primary" onClick={() => setTab("Settings")}>Choose a sender</button>
-                : <Link href="/settings" className="text-primary">Add a sender</Link>)}
-              <span className="text-base-content/40">{launch}</span>
+                ? <button type="button" className="font-medium text-primary" onClick={() => setTab("Settings")}>Choose a sender</button>
+                : <Link href="/settings" className="font-medium text-primary">Add a sender</Link>)}
+              <span className="inline-flex items-center gap-1 text-xs text-base-content/45"><RiTimeLine size={13} />{launch}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <RunSwitch label="Sourcing" on={finding} onChange={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")} />
             <RunSwitch label="Outreach" on={sending} onChange={() => patch({ outreach_enabled: !sending }, sending ? "Outreach paused" : "Outreach on")} />
-            <button className={secondaryBtn} disabled={busy} onClick={runNow}><RiRefreshLine size={16} /> Launch now</button>
-            <button className={ghostBtn} onClick={remove} aria-label="Delete agent"><RiDeleteBinLine size={16} /></button>
+            <button className={secondaryBtn} disabled={busy} onClick={runNow}><RiRocketLine size={16} /> Launch now</button>
+            <button className={ghostBtn + " !h-10 !w-10 !px-0"} onClick={remove} aria-label="Delete agent" title="Delete agent"><RiDeleteBinLine size={17} /></button>
           </div>
         </div>
-        {a.last_error && <p className="rounded-xl bg-error/5 px-4 py-3 text-sm text-error">{a.last_error}</p>}
-        {!sending && (d.counts.by_status.enrolled ?? 0) + (d.counts.by_status.approved ?? 0) > 0 && (
-          <Card className="flex flex-wrap items-center justify-between gap-3 !py-4">
-            <div><div className="font-medium">Your outreach is paused</div><div className="text-sm text-base-content/55">{(d.counts.by_status.enrolled ?? 0) + (d.counts.by_status.approved ?? 0)} approved contact(s) are waiting to be contacted.</div></div>
+        {a.last_error && <Callout tone="error" icon={<RiErrorWarningLine size={17} />}>{a.last_error}</Callout>}
+        {!sending && waiting > 0 && (
+          <Panel className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <div className="flex items-center gap-3">
+              <IconTile icon={<RiPlayLine size={18} />} size={40} />
+              <div><div className="font-medium text-base-content">Your outreach is paused</div><div className="text-sm text-base-content/55">{waiting} approved contact(s) are waiting to be contacted.</div></div>
+            </div>
             <button className={primaryBtn} onClick={() => patch({ outreach_enabled: true }, "Outreach started")}><RiPlayLine size={16} /> Restart outreach</button>
-          </Card>
+          </Panel>
         )}
 
-        <div className="flex gap-1 overflow-x-auto border-b border-[var(--border-subtle)]">
-          {TABS.map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium ${tab === t ? "border-primary text-base-content" : "border-transparent text-base-content/45 hover:text-base-content/70"}`}>
-              {t}{t === "Leads" ? <span className="ml-1.5 rounded bg-base-200 px-1.5 text-xs">{leadCount}</span> : null}
-            </button>
-          ))}
-        </div>
+        <TabBar tabs={TABS} value={tab} onChange={setTab} counts={{ Leads: leadCount }} icons={TAB_ICONS} />
 
         {tab === "Overview" && (
           <AgentOverview performance={d.performance} series={d.series} activity={d.activity} dueToday={d.due_today} budget={d.linkedin_budget} onReview={() => setTab("Leads")} onActivity={() => setTab("Activity")} />
@@ -178,29 +227,29 @@ export default function AgentDetail() {
           />
         )}
         {tab === "Activity" && (
-          <div className="space-y-3">
-            <div className="flex gap-1 rounded-[10px] bg-base-200 p-1 w-fit">
-              {(["all", "discovery", "campaign", "setup"] as const).map((f) => (
-                <button key={f} onClick={() => setActivityFilter(f)} className={`rounded-[7px] px-3 py-1.5 text-xs font-medium capitalize ${activityFilter === f ? "bg-base-100 shadow-[var(--shadow-raised)]" : "text-base-content/50"}`}>{f}</button>
-              ))}
-            </div>
+          <div className="space-y-4">
+            <Segmented options={ACTIVITY_FILTERS} value={activityFilter} onChange={setActivityFilter} labels={{
+              all: "All",
+              discovery: <><RiSearchEyeLine size={14} /> Lead discovery</>,
+              campaign: <><RiSendPlaneLine size={14} /> Campaign</>,
+              setup: <><RiSettings3Line size={14} /> Setup</>,
+            }} />
             <ActivityList items={d.activity} filter={activityFilter} />
           </div>
         )}
         {tab === "Settings" && (
-          <div className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Card>
-                <div className="text-xs uppercase tracking-wide text-base-content/40">LinkedIn sender</div>
-                <div className="mt-1 font-medium">{d.senders.linkedin?.name || d.senders.linkedin?.email || "Not connected"}</div>
-                {d.senders.linkedin && <div className="mt-1 text-xs text-base-content/50">{d.senders.linkedin.daily_connection_limit ?? 20} connections / day · {d.senders.linkedin.daily_message_limit ?? 40} messages / day · {d.senders.linkedin.is_authenticated ? "signed in" : "logged out"}</div>}
-              </Card>
-              <Card>
-                <div className="text-xs uppercase tracking-wide text-base-content/40">Email sender</div>
-                <div className="mt-1 font-medium">{d.senders.email?.from_email || "No mailbox"}</div>
-                {d.senders.email && <div className="mt-1 text-xs text-base-content/50">{d.senders.email.daily_email_limit ?? 50} emails / day · warmup {d.senders.email.ramp_up_enabled ? "on" : "off"}</div>}
-              </Card>
-            </div>
+          <div className="space-y-6">
+            <Panel className="p-6">
+              <SectionHeading title="Senders" subtitle="The accounts this agent sends from." />
+              <div className="mt-5 space-y-3">
+                <SenderRow icon={<RiLinkedinBoxFill size={20} />} tone="linkedin" name={li?.name || li?.email || "No LinkedIn account"} kind="LinkedIn sender"
+                  status={li ? (li.is_authenticated ? "connected" : "logged_out") : "none"}
+                  limits={li ? [<><RiUserAddLine size={13} /> {li.daily_connection_limit ?? 20}/day</>, <><RiSendPlaneLine size={13} /> {li.daily_message_limit ?? 40}/day</>] : []} />
+                <SenderRow icon={<RiMailLine size={20} />} tone="error" name={mail?.from_email || "No mailbox"} kind="Email sender"
+                  status={mail ? "connected" : "none"}
+                  limits={mail ? [<><RiSendPlaneLine size={13} /> {mail.daily_email_limit ?? 50}/day</>, <><RiLineChartLine size={13} /> warmup {mail.ramp_up_enabled ? "on" : "off"}</>] : []} />
+              </div>
+            </Panel>
             <AgentSettings agentId={a.id} initial={a} onSaved={load} />
           </div>
         )}

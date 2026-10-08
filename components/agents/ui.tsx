@@ -25,6 +25,11 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
   return <div className={`rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-5 ${className}`}>{children}</div>;
 }
 
+/** Canvas card with a hairline border, for data-dense content (tables, lists, forms). Card is the cream feature card. */
+export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return <div className={`rounded-[12px] border border-[var(--border-subtle)] bg-base-100 ${className}`}>{children}</div>;
+}
+
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-6 py-14 text-center">
@@ -121,6 +126,126 @@ export function timeAgo(iso: string | null | undefined): string {
   if (s < 3600) return `${Math.round(s / 60)}m ago`;
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;
   return `${Math.round(s / 86400)}d ago`;
+}
+
+/* ─── Agents section kit: icon tiles, tabs, toggles, stat tiles, avatars ───────────────────── */
+
+export type Tone = "coral" | "teal" | "amber" | "ink" | "success" | "error" | "linkedin";
+
+const TONE: Record<Tone, string> = {
+  coral: "bg-primary/10 text-primary",
+  teal: "bg-accent/15 text-[#2f8a78]",
+  amber: "bg-[#e8a55a]/15 text-[#b8742a]",
+  ink: "bg-base-200 text-base-content/70",
+  success: "bg-success/12 text-[#3a8c4f]",
+  error: "bg-error/10 text-error",
+  linkedin: "bg-[#0a66c2]/10 text-[#0a66c2]",
+};
+
+/** A soft-tinted rounded square holding an icon — the leading mark of rows and cards. */
+export function IconTile({ icon, tone = "coral", size = 40, className = "" }: { icon: ReactNode; tone?: Tone; size?: 32 | 36 | 40 | 48; className?: string }) {
+  const dim = { 32: "h-8 w-8 rounded-[8px]", 36: "h-9 w-9 rounded-[8px]", 40: "h-10 w-10 rounded-[10px]", 48: "h-12 w-12 rounded-[12px]" }[size];
+  return <span className={`inline-flex shrink-0 items-center justify-center ${dim} ${TONE[tone]} ${className}`}>{icon}</span>;
+}
+
+/** badge-pill: small cream label. `tone` tints it for status. */
+export function Pill({ children, tone, className = "" }: { children: ReactNode; tone?: Tone; className?: string }) {
+  const cls = tone ? TONE[tone] : "bg-base-200 text-base-content/70";
+  return <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-medium ${cls} ${className}`}>{children}</span>;
+}
+
+/** Serif section heading with an optional subtitle and right-side actions. */
+export function SectionHeading({ title, subtitle, actions, className = "" }: { title: ReactNode; subtitle?: ReactNode; actions?: ReactNode; className?: string }) {
+  return (
+    <div className={`flex flex-wrap items-end justify-between gap-3 ${className}`}>
+      <div className="min-w-0">
+        <h2 className="font-display text-[22px] leading-[1.2] text-base-content">{title}</h2>
+        {subtitle && <p className="mt-1 text-sm text-base-content/55">{subtitle}</p>}
+      </div>
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+    </div>
+  );
+}
+
+/** Underlined tab row. `counts` shows a small number chip after a tab label. */
+export function TabBar<T extends string>({ tabs, value, onChange, counts = {}, icons = {} }: { tabs: readonly T[]; value: T; onChange: (t: T) => void; counts?: Partial<Record<T, number>>; icons?: Partial<Record<T, ReactNode>> }) {
+  return (
+    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-[var(--border-subtle)]">
+      {tabs.map((t) => {
+        const on = t === value;
+        return (
+          <button key={t} role="tab" aria-selected={on} type="button" onClick={() => onChange(t)}
+            className={`-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-3 text-sm font-medium transition-colors ${on ? "border-primary text-base-content" : "border-transparent text-base-content/45 hover:text-base-content/75"}`}>
+            {icons[t] && <span className={on ? "text-primary" : ""}>{icons[t]}</span>}
+            {t}
+            {counts[t] !== undefined && <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${on ? "bg-primary/10 text-primary" : "bg-base-200 text-base-content/55"}`}>{counts[t]}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Segmented filter chips (Activity filters, leads status). */
+export function Segmented<T extends string>({ options, value, onChange, counts = {}, labels = {} }: { options: readonly T[]; value: T; onChange: (v: T) => void; counts?: Partial<Record<T, number>>; labels?: Partial<Record<T, ReactNode>> }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = o === value;
+        return (
+          <button key={o} type="button" onClick={() => onChange(o)}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-[8px] border px-3 text-[13px] font-medium transition-colors ${on ? "border-primary/40 bg-primary/10 text-primary" : "border-[var(--border-subtle)] bg-base-100 text-base-content/65 hover:text-base-content"}`}>
+            {labels[o] ?? <span className="capitalize">{o}</span>}
+            {counts[o] !== undefined && <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${on ? "bg-primary/15" : "bg-base-200"}`}>{counts[o]}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Coral on/off switch. */
+export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: () => void; label: string; disabled?: boolean }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={onChange}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50 ${on ? "border-primary bg-primary" : "border-[var(--border-subtle)] bg-base-200"}`}>
+      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${on ? "translate-x-[22px]" : "translate-x-[3px]"}`} />
+    </button>
+  );
+}
+
+/** A KPI tile: label, big tabular number, optional hint and corner icon. */
+export function StatTile({ label, value, hint, icon, className = "" }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-5 ${className}`}>
+      <div className="flex items-center justify-between gap-2 text-[13px] font-medium text-base-content/55">
+        <span>{label}</span>{icon && <span className="text-base-content/35">{icon}</span>}
+      </div>
+      <div className="mt-3 font-display text-[32px] leading-none tabular-nums text-base-content">{value}</div>
+      {hint && <div className="mt-2 text-xs text-base-content/50">{hint}</div>}
+    </div>
+  );
+}
+
+/** Round avatar: the photo when there is one, otherwise initials on cream. */
+export function Avatar({ name, src, size = 36 }: { name: string | null | undefined; src?: string | null; size?: number }) {
+  const initials = (name ?? "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
+  const style = { width: size, height: size, fontSize: Math.round(size * 0.36) };
+  if (src) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt="" style={style} className="shrink-0 rounded-full object-cover ring-1 ring-[var(--border-subtle)]" />;
+  }
+  return <span style={style} className="inline-flex shrink-0 items-center justify-center rounded-full bg-[#efe9de] font-semibold text-base-content/70">{initials}</span>;
+}
+
+/** Coral-tinted note band ("Nothing is sent without your green light…"). */
+export function Callout({ icon, title, children, tone = "coral" }: { icon?: ReactNode; title?: ReactNode; children?: ReactNode; tone?: Tone }) {
+  return (
+    <div className={`flex items-start gap-3 rounded-[12px] px-4 py-3.5 text-sm ${TONE[tone]}`}>
+      {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
+      <div className="min-w-0 leading-relaxed">{title && <span className="font-semibold">{title} </span>}<span className="opacity-90">{children}</span></div>
+    </div>
+  );
 }
 
 /** Comma/line separated text ↔ string list, for simple list editing. */

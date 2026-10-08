@@ -10,7 +10,8 @@ import PreviewStep from "@/components/agents/wizard/PreviewStep";
 import OutreachStep, { outreachReady } from "@/components/agents/wizard/OutreachStep";
 import ReviewStep from "@/components/agents/wizard/ReviewStep";
 import { sourcesFor, type WizardState } from "@/components/agents/wizard/types";
-import { PageHeader, primaryBtn, secondaryBtn } from "@/components/agents/ui";
+import { PageHeader, primaryBtn } from "@/components/agents/ui";
+import { Stepper } from "@/components/agents/wizard/kit";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 
 export const getServerSideProps = requireSignedIn;
@@ -121,14 +122,7 @@ export default function NewAgent() {
       <Head><title>New agent — Linki</title></Head>
       <div className="space-y-6 pb-24">
         <PageHeader eyebrow="AI SDR" title="Outreach agents" subtitle="Manage your automated outreach agents" />
-        <ol className="flex flex-wrap items-center justify-between gap-2 rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-5 py-4">
-          {STEPS.map((label, i) => (
-            <li key={label} className="flex items-center gap-2 text-sm">
-              <span className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${i === step ? "bg-primary text-primary-content" : i < step ? "bg-warning/15 text-warning" : "bg-base-200 text-base-content/45"}`}>{i + 1}</span>
-              <span className={i === step ? "font-semibold" : i < step ? "text-warning" : "text-base-content/45"}>{label}</span>
-            </li>
-          ))}
-        </ol>
+        <Stepper steps={STEPS} current={step} />
 
         {step === 0 && <SourcesStep state={s} set={set} hasLinkedIn={hasLinkedIn} />}
         {step === 1 && <TargetStep state={s} set={set} />}
@@ -137,11 +131,14 @@ export default function NewAgent() {
         {step === 4 && <ReviewStep state={s} startOutreach={startOutreach} setStartOutreach={setStartOutreach} />}
 
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--border-subtle)] bg-base-100/95 backdrop-blur lg:left-[264px]">
-          <div className="flex items-center justify-between px-6 py-3">
-            {step > 0 ? <button className={secondaryBtn} disabled={busy} onClick={() => setStep(step - 1)}><RiArrowLeftSLine size={18} /> Previous</button> : <span className="text-xs text-base-content/45">{step === 0 && s.sourceKind === "signals" ? "Add signals to continue — we recommend at least 4." : ""}</span>}
+          <div className="flex items-center justify-between gap-4 px-6 py-3">
+            <div className="flex min-w-0 items-center gap-4">
+              {step > 0 && <button type="button" className="inline-flex h-10 items-center gap-1 text-sm font-medium text-base-content/75 hover:text-base-content disabled:opacity-50" disabled={busy} onClick={() => setStep(step - 1)}><RiArrowLeftSLine size={18} /> Previous</button>}
+              <span className="truncate text-xs text-base-content/50">{step === 0 && s.sourceKind === "signals" ? "Add signals to continue — we recommend at least 4, up to 15." : ""}</span>
+            </div>
             {step < STEPS.length - 1
               ? <button className={primaryBtn} disabled={busy} onClick={next}>{busy ? "Saving…" : "Next"} <RiArrowRightSLine size={18} /></button>
-              : <button className={primaryBtn} disabled={busy} onClick={launch}><RiRocket2Line size={16} /> {busy ? "Launching…" : "Launch now"}</button>}
+              : <button className={primaryBtn} disabled={busy} onClick={launch}>{busy ? "Launching…" : "Launch now"} <RiRocket2Line size={16} /></button>}
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiBriefcaseLine, RiCloseLine, RiEyeLine, RiMagicLine, RiMegaphoneLine, RiPriceTag3Line, RiLineChartLine } from "react-icons/ri";
-import { inputCls, ghostBtn } from "@/components/agents/ui";
+import { RiAddLine, RiArrowDownSLine, RiArrowUpSLine, RiBriefcaseLine, RiCloseLine, RiEyeLine, RiMagicLine, RiMegaphoneLine, RiPriceTag3Line, RiLineChartLine, RiSparkling2Line } from "react-icons/ri";
+import { inputCls, ghostBtn, IconTile, Pill, Toggle, type Tone } from "@/components/agents/ui";
 
 export interface SourceDraft {
   source_type: string;
@@ -25,16 +25,16 @@ export function ChipInput({ values, onChange, placeholder, validate }: { values:
       {values.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {values.map((v) => (
-            <span key={v} className="inline-flex max-w-full items-center gap-1 rounded-lg border border-[var(--border-subtle)] bg-base-100 px-2 py-1 text-xs">
+            <span key={v} className="inline-flex max-w-full items-center gap-1.5 rounded-[8px] border border-primary/30 bg-primary/5 px-2.5 py-1 text-[13px] text-primary">
               <span className="truncate">{v}</span>
-              <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} aria-label={`Remove ${v}`} className="text-base-content/40 hover:text-error"><RiCloseLine size={12} /></button>
+              <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} aria-label={`Remove ${v}`} className="text-primary/60 hover:text-error"><RiCloseLine size={13} /></button>
             </span>
           ))}
         </div>
       )}
       <div className="flex gap-2">
         <input className={inputCls} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
-        <button type="button" className={ghostBtn + " h-10 border border-[var(--border-subtle)] px-3"} onClick={add}><RiAddLine size={14} /> Add</button>
+        <button type="button" className={ghostBtn + " !h-10 border border-[var(--border-subtle)] bg-base-200 px-4 !text-sm"} disabled={!text.trim()} onClick={add}><RiAddLine size={14} /> Add</button>
       </div>
       {error && <p className="text-xs text-error">{error}</p>}
     </div>
@@ -46,29 +46,34 @@ const linkedinUrl = (kind: "company" | "profile" | "any") => (v: string) => {
   return ok.test(v) ? null : `Paste a LinkedIn ${kind === "company" ? "company page" : kind === "profile" ? "profile" : "profile or company page"} URL`;
 };
 
-function Group({ icon, title, subtitle, active, children, defaultOpen }: { icon: ReactNode; title: string; subtitle: string; active: number; children: ReactNode; defaultOpen?: boolean }) {
+function Group({ icon, tone, title, subtitle, active, children, defaultOpen, action }: { icon: ReactNode; tone: Tone; title: string; subtitle: string; active: number; children: ReactNode; defaultOpen?: boolean; action?: ReactNode }) {
   const [open, setOpen] = useState(!!defaultOpen || active > 0);
   return (
-    <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300">
-      <button type="button" className="flex w-full items-center gap-3 px-4 py-3 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-base-200 text-base-content/70">{icon}</span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 text-sm font-semibold">{title}{active > 0 && <span className="rounded-md bg-warning/10 px-1.5 text-[11px] font-medium text-warning">{active} active</span>}</span>
-          <span className="block text-xs text-base-content/50">{subtitle}</span>
-        </span>
-        {open ? <RiArrowUpSLine size={18} /> : <RiArrowDownSLine size={18} />}
-      </button>
-      {open && <div className="space-y-3 border-t border-[var(--border-subtle)] px-4 py-3">{children}</div>}
+    <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-100">
+      <div className="flex w-full items-center gap-3 px-4 py-3.5">
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <IconTile icon={icon} tone={tone} />
+          <span className="min-w-0 flex-1">
+            <span className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-base-content">{title}{active > 0 && <Pill tone="coral">{active} active</Pill>}</span>
+            <span className="block text-[13px] text-base-content/50">{subtitle}</span>
+          </span>
+        </button>
+        {open && action}
+        <button type="button" className="text-base-content/45 hover:text-base-content" onClick={() => setOpen(!open)} aria-label={open ? "Collapse" : "Expand"}>
+          {open ? <RiArrowUpSLine size={18} /> : <RiArrowDownSLine size={18} />}
+        </button>
+      </div>
+      {open && <div className="space-y-3 border-t border-[var(--border-subtle)] px-4 py-4">{children}</div>}
     </div>
   );
 }
 
-function Toggle({ label, hint, checked, onChange, disabled }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+function SwitchRow({ label, hint, checked, onChange, disabled }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <label className={`flex items-start gap-3 ${disabled ? "opacity-50" : "cursor-pointer"}`}>
-      <input type="checkbox" className="toggle toggle-sm mt-0.5" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
-      <span><span className="block text-sm font-medium">{label}</span>{hint && <span className="block text-xs text-base-content/50">{hint}</span>}</span>
-    </label>
+    <div className={`flex items-start justify-between gap-4 ${disabled ? "opacity-50" : ""}`}>
+      <span><span className="block text-sm font-medium text-base-content">{label}</span>{hint && <span className="block text-xs text-base-content/50">{hint}</span>}</span>
+      <Toggle on={checked} disabled={disabled} label={label} onChange={() => onChange(!checked)} />
+    </div>
   );
 }
 
@@ -105,22 +110,22 @@ export default function SourcePicker({ value, onChange, hasLinkedIn, suggestions
 
   return (
     <div className="space-y-3">
-      {li && <p className="rounded-xl bg-warning/10 px-3 py-2 text-xs text-warning">Connect a LinkedIn account in Settings to track LinkedIn signals. Job boards and news work without one.</p>}
+      {li && <p className="rounded-[12px] bg-[#e8a55a]/15 px-4 py-3 text-[13px] text-[#8a5a1f]">Connect a LinkedIn account in Settings to track LinkedIn signals. Job boards and news work without one.</p>}
 
-      <Group icon={<RiPriceTag3Line size={18} />} title="Keyword engagement" subtitle="People engaging with topics related to your solution" active={kw.length} defaultOpen>
-        {suggestions?.keywords?.length ? (
-          <button type="button" className={ghostBtn + " border border-warning/40 text-warning"} onClick={() => put("keyword_engagement", { keywords: [...new Set([...kw, ...suggestions.keywords!])].slice(0, 15) })}>
-            <RiMagicLine size={13} /> Generate with AI
+      <Group icon={<RiPriceTag3Line size={18} />} tone="coral" title="Keyword engagement" subtitle="People engaging with topics related to your solution" active={kw.length} defaultOpen
+        action={suggestions?.keywords?.length ? (
+          <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-primary px-3 text-xs font-medium text-primary-content hover:bg-[var(--primary-hover)]" onClick={() => put("keyword_engagement", { keywords: [...new Set([...kw, ...suggestions.keywords!])].slice(0, 15) })}>
+            <RiSparkling2Line size={14} /> Generate with AI
           </button>
-        ) : null}
+        ) : undefined}>
         <ChipInput values={kw} onChange={(v) => put("keyword_engagement", { keywords: v.slice(0, 15) })} placeholder="Add a keyword…" />
       </Group>
 
-      <Group icon={<RiMegaphoneLine size={18} />} title="People engaging with your market" subtitle="Reach people active around experts and creators in your space" active={urls("influencer_engagement").length}>
+      <Group icon={<RiMegaphoneLine size={18} />} tone="linkedin" title="People engaging with your market" subtitle="Reach people active around experts and creators in your space" active={urls("influencer_engagement").length}>
         <ChipInput values={urls("influencer_engagement")} onChange={(v) => put("influencer_engagement", { urls: v })} placeholder="https://www.linkedin.com/in/creator" validate={linkedinUrl("any")} />
       </Group>
 
-      <Group icon={<RiBriefcaseLine size={18} />} title="Companies & competitors engagement" subtitle="Find people interacting with your competitors" active={urls("competitor_engagement").length}>
+      <Group icon={<RiBriefcaseLine size={18} />} tone="amber" title="Companies & competitors engagement" subtitle="Find people interacting with your competitors" active={urls("competitor_engagement").length}>
         {suggestions?.competitorUrls?.length ? (
           <button type="button" className={ghostBtn} onClick={() => put("competitor_engagement", { urls: [...new Set([...urls("competitor_engagement"), ...suggestions.competitorUrls!])] })}><RiMagicLine size={13} /> Add competitors from your ICP</button>
         ) : null}
@@ -128,16 +133,16 @@ export default function SourcePicker({ value, onChange, hasLinkedIn, suggestions
         <p className="text-xs text-base-content/45">Competitors&apos; own employees are filtered out automatically.</p>
       </Group>
 
-      <Group icon={<RiEyeLine size={18} />} title="People aware of your brand" subtitle="Re-engage people who engage with you and your company" active={urls("own_content_engagement").length}>
+      <Group icon={<RiEyeLine size={18} />} tone="success" title="People aware of your brand" subtitle="Re-engage people who engage with you and your company" active={urls("own_content_engagement").length}>
         <ChipInput values={urls("own_content_engagement")} onChange={(v) => put("own_content_engagement", { urls: v })} placeholder="Your LinkedIn profile or company page" validate={linkedinUrl("any")} />
       </Group>
 
-      <Group icon={<RiLineChartLine size={18} />} title="Buying events" subtitle="Catch leads at the right moment" active={["job_change", "hiring", "funding"].filter((t) => get(t).enabled).length}>
-        <Toggle label="Recent job changes" hint="Contacts in this agent who start a new role" checked={get("job_change").enabled} disabled={li} onChange={(v) => put("job_change", {}, v)} />
-        <Toggle label="Recently raised funds" hint="ICP companies announcing a round in the news" checked={get("funding").enabled} onChange={(v) => put("funding", get("funding").config, v)} />
-        <Toggle label="Hiring for relevant roles" hint="Companies opening roles on Greenhouse, Lever or Ashby" checked={get("hiring").enabled} onChange={(v) => put("hiring", get("hiring").config, v)} />
+      <Group icon={<RiLineChartLine size={18} />} tone="teal" title="Buying events" subtitle="Catch leads at the right moment" active={["job_change", "hiring", "funding"].filter((t) => get(t).enabled).length}>
+        <SwitchRow label="Recent job changes" hint="Contacts in this agent who start a new role" checked={get("job_change").enabled} disabled={li} onChange={(v) => put("job_change", {}, v)} />
+        <SwitchRow label="Recently raised funds" hint="ICP companies announcing a round in the news" checked={get("funding").enabled} onChange={(v) => put("funding", get("funding").config, v)} />
+        <SwitchRow label="Hiring for relevant roles" hint="Companies opening roles on Greenhouse, Lever or Ashby" checked={get("hiring").enabled} onChange={(v) => put("hiring", get("hiring").config, v)} />
         {get("hiring").enabled && (
-          <div className="space-y-2 pl-12">
+          <div className="space-y-2 border-l-2 border-[var(--border-subtle)] pl-4">
             <ChipInput values={(get("hiring").config.boards ?? []).map((b) => `${b.ats}:${b.slug}`)} placeholder="greenhouse:acme, lever:globex, ashby:initech"
               validate={(v) => /^(greenhouse|lever|ashby):[\w.-]+$/i.test(v) ? null : "Use ats:slug, e.g. greenhouse:acme"}
               onChange={(v) => put("hiring", { ...get("hiring").config, boards: v.map((x) => { const [ats, slug] = x.split(":"); return { ats: ats.toLowerCase() as "greenhouse", slug }; }) }, true)} />
@@ -146,8 +151,9 @@ export default function SourcePicker({ value, onChange, hasLinkedIn, suggestions
         )}
       </Group>
 
-      <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-4 py-3">
-        <Toggle label="Smart lead finder" hint="Automatically find more warm leads that match your ICP when signals are low (Sales Navigator)" checked={get("lookalike").enabled} disabled={li} onChange={(v) => put("lookalike", {}, v)} />
+      <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 px-4 py-3.5">
+        <IconTile icon={<RiSparkling2Line size={18} />} tone="coral" />
+        <div className="min-w-0 flex-1"><SwitchRow label="Smart lead finder" hint="Automatically find more warm leads that match your ICP when signals are low (Sales Navigator)" checked={get("lookalike").enabled} disabled={li} onChange={(v) => put("lookalike", {}, v)} /></div>
       </div>
     </div>
   );

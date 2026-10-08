@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { RiEditLine, RiFolderLine, RiFocus3Line, RiGroupLine, RiLinkedinBoxLine, RiSparkling2Line } from "react-icons/ri";
 import SourcePicker, { countSignals } from "@/components/agents/SourcePicker";
-import { Card, Field, inputCls } from "@/components/agents/ui";
+import { Field, IconTile, inputCls, Panel, Pill } from "@/components/agents/ui";
+import { OptionCard, RecommendedBadge, StepHeading, StepSheet } from "@/components/agents/wizard/kit";
 import type { WizardState } from "@/components/agents/wizard/types";
 
 const KINDS = [
@@ -25,80 +26,80 @@ export default function SourcesStep({ state, set, hasLinkedIn }: { state: Wizard
   useEffect(() => { fetch("/api/lists").then((r) => r.json()).then((l) => setLists(Array.isArray(l) ? l : [])).catch(() => {}); }, []);
   const signals = countSignals(state.sources);
   const competitorUrls = state.icp.competitors.map((c) => c.linkedin_url).filter((u): u is string => !!u);
+  const chosen = KINDS.find((x) => x.kind === state.sourceKind);
 
   return (
-    <div className="space-y-5">
+    <StepSheet>
       <div className="flex justify-center">
-        <label className="inline-flex items-center gap-2 rounded-full border border-warning/40 px-4 py-1.5 text-sm">
-          <span className="font-semibold text-warning">AGENT NAME</span>
-          <input className="w-56 bg-transparent outline-none placeholder:italic" placeholder="Enter a name" value={state.name} onChange={(e) => set({ name: e.target.value })} aria-label="Agent name" />
-          <RiEditLine className="text-warning" size={14} />
+        <label className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/40 bg-primary/5 px-4 py-2 text-sm focus-within:ring-2 focus-within:ring-primary/20">
+          <span className="text-[12px] font-semibold uppercase tracking-[1.2px] text-primary">Agent name</span>
+          <input className="w-56 min-w-0 bg-transparent text-base-content outline-none placeholder:italic placeholder:text-primary/60" placeholder="Enter a name" value={state.name} onChange={(e) => set({ name: e.target.value })} aria-label="Agent name" />
+          <RiEditLine className="shrink-0 text-primary" size={14} />
         </label>
       </div>
-      <div className="text-center">
-        <h2 className="text-2xl font-semibold tracking-[-.02em]">Where should your agent find leads?</h2>
-        <p className="mt-1 text-sm text-base-content/55">Choose one source to get started — you can always add more later.</p>
-      </div>
+      <StepHeading title="Where should your agent find leads?" subtitle="Choose one source to get started — you can always add more later." />
 
-      {!state.sourceKind || state.sourceKind === null ? (
-        <div className="mx-auto grid max-w-3xl gap-3 sm:grid-cols-2">
+      {!chosen ? (
+        <div className="mx-auto grid max-w-3xl gap-4 sm:grid-cols-2">
           {KINDS.map((k) => (
-            <button key={k.kind} type="button" onClick={() => set({ sourceKind: k.kind })} className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-5 text-left transition-colors hover:border-[var(--border-strong)]">
-              <div className="mb-3 flex items-center justify-between">
-                {"recommended" in k && k.recommended ? <span className="rounded-md bg-warning px-2 py-0.5 text-xs font-medium text-warning-content">Recommended</span> : <span />}
-                {"ai" in k && k.ai ? <span className="inline-flex items-center gap-1 text-xs text-warning"><RiSparkling2Line size={12} /> AI agent</span> : null}
-              </div>
-              <k.icon size={22} className="mb-2 text-base-content/70" />
-              <div className="font-semibold">{k.title}</div>
-              <div className="text-sm text-base-content/55">{k.why}</div>
-            </button>
+            <OptionCard key={k.kind} selected={false} onClick={() => set({ sourceKind: k.kind })} className="!p-5"
+              icon={<IconTile icon={<k.icon size={20} />} tone={"recommended" in k && k.recommended ? "coral" : "ink"} />}
+              badge={"recommended" in k && k.recommended ? <RecommendedBadge /> : undefined}
+              corner={"ai" in k && k.ai ? <Pill tone="coral"><RiSparkling2Line size={12} /> AI agent</Pill> : undefined}
+              title={k.title} text={k.why} />
           ))}
         </div>
       ) : (
         <div className="mx-auto max-w-3xl space-y-4">
-          <Card className="flex items-center gap-4 !py-4">
-            {(() => { const k = KINDS.find((x) => x.kind === state.sourceKind)!; return <><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-warning text-warning-content"><k.icon size={20} /></span><div className="flex-1"><div className="font-semibold">{k.title}</div><div className="text-sm text-base-content/55">{k.why}</div></div></>; })()}
-            <button type="button" className="text-sm font-medium hover:underline" onClick={() => set({ sourceKind: null })}>Change source</button>
-          </Card>
+          <Panel className="flex items-center gap-4 px-5 py-4">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-primary text-primary-content"><chosen.icon size={22} /></span>
+            <div className="min-w-0 flex-1"><div className="font-semibold">{chosen.title}</div><div className="text-sm text-base-content/55">{chosen.why}</div></div>
+            <button type="button" className="text-sm font-medium text-base-content/75 hover:text-base-content hover:underline" onClick={() => set({ sourceKind: null })}>Change source</button>
+          </Panel>
 
           {state.sourceKind === "signals" && (
-            <Card className="space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div><div className="font-semibold">The signals your agent tracks</div><div className="text-sm text-base-content/55">Tracking {signals} signal{signals === 1 ? "" : "s"}. We recommend at least 4, up to 15.</div></div>
-                <span className={`rounded-lg px-2.5 py-1 text-sm font-medium ${signals >= 4 ? "bg-success text-success-content" : "bg-base-200"}`}>{signals}/15 signals</span>
+            <div className="space-y-4 rounded-[16px] border border-[var(--border-subtle)] bg-base-200 p-5">
+              <div className="flex items-start gap-3">
+                <IconTile icon={<RiSparkling2Line size={18} />} tone="coral" />
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold">The signals your agent tracks</div>
+                  <div className="text-sm text-base-content/55">Tracking {signals} signal{signals === 1 ? "" : "s"}. We recommend at least 4, up to 15.</div>
+                </div>
+                <span className={`shrink-0 rounded-[8px] px-2.5 py-1 text-sm font-medium tabular-nums ${signals >= 4 ? "bg-success text-success-content" : "bg-base-100 text-base-content/70"}`}>{signals}/15 signals</span>
               </div>
               <SourcePicker value={state.sources} onChange={(sources) => set({ sources })} hasLinkedIn={hasLinkedIn} suggestions={{ keywords: state.icp.keywords, competitorUrls }} />
-            </Card>
+            </div>
           )}
 
           {state.sourceKind === "lookalike" && (
-            <Card className="space-y-3">
-              <p className="text-sm text-base-content/60">Your agent searches Sales Navigator for people matching your ICP and imports them at a safe pace. You&apos;ll refine the targeting in the next step.</p>
-              {!hasLinkedIn && <p className="text-xs text-warning">Needs a LinkedIn account with Sales Navigator.</p>}
-            </Card>
+            <Panel className="space-y-3 p-5">
+              <p className="text-sm text-base-content/65">Your agent searches Sales Navigator for people matching your ICP and imports them at a safe pace. You&apos;ll refine the targeting in the next step.</p>
+              {!hasLinkedIn && <Pill tone="amber">Needs a LinkedIn account with Sales Navigator</Pill>}
+            </Panel>
           )}
 
           {state.sourceKind === "existing" && (
-            <Card className="space-y-2">
+            <Panel className="space-y-2 p-5">
               {lists.length === 0 && <p className="text-sm text-base-content/50">No lists yet. Import a CSV or Sales Navigator list from Lists first.</p>}
               {lists.map((l) => (
-                <label key={l.id} className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border-subtle)] px-3 py-2.5">
-                  <input type="checkbox" className="checkbox checkbox-sm" checked={state.listIds.includes(l.id)} onChange={(e) => set({ listIds: e.target.checked ? [...state.listIds, l.id] : state.listIds.filter((x) => x !== l.id) })} />
-                  <span className="flex-1 text-sm">{l.name}</span><span className="text-xs text-base-content/45">{l.target_count} contacts</span>
+                <label key={l.id} className={`flex cursor-pointer items-center gap-3 rounded-[10px] border px-3 py-2.5 transition-colors ${state.listIds.includes(l.id) ? "border-primary/50 bg-primary/5" : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]"}`}>
+                  <input type="checkbox" className="checkbox checkbox-sm checkbox-primary" checked={state.listIds.includes(l.id)} onChange={(e) => set({ listIds: e.target.checked ? [...state.listIds, l.id] : state.listIds.filter((x) => x !== l.id) })} />
+                  <RiFolderLine size={16} className="text-base-content/45" />
+                  <span className="flex-1 text-sm">{l.name}</span><span className="text-xs tabular-nums text-base-content/45">{l.target_count} contacts</span>
                 </label>
               ))}
-            </Card>
+            </Panel>
           )}
 
           {state.sourceKind === "linkedin_import" && (
-            <Card>
+            <Panel className="p-5">
               <Field label="Sales Navigator list or search URL" hint="Imported in daily batches with human-like pacing">
                 <input className={inputCls} placeholder="https://www.linkedin.com/sales/lists/people/…" value={state.importUrl} onChange={(e) => set({ importUrl: e.target.value.trim() })} />
               </Field>
-            </Card>
+            </Panel>
           )}
         </div>
       )}
-    </div>
+    </StepSheet>
   );
 }

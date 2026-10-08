@@ -1,6 +1,6 @@
-import { RiAddLine, RiDeleteBinLine } from "react-icons/ri";
+import { RiAddLine, RiDeleteBinLine, RiFocus3Line, RiUser3Line } from "react-icons/ri";
 import type { Icp } from "@/lib/icp/schema";
-import { Field, fromList, ghostBtn, inputCls, textareaCls, toList } from "@/components/agents/ui";
+import { Field, fromList, ghostBtn, IconTile, inputCls, textareaCls, toList } from "@/components/agents/ui";
 
 export const EMPTY_ICP: Icp = {
   company_name: "", company_industry: "", offer: "", value_props: [], social_proof: [], language: "English",
@@ -37,12 +37,12 @@ export default function IcpEditor({ value, onChange }: { value: Icp; onChange: (
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Buyer personas</h3>
-          <button type="button" className={ghostBtn} onClick={() => set("personas", [...value.personas, { name: "New persona", titles: [], seniority: [], departments: [], pains: [] }])}><RiAddLine size={14} /> Persona</button>
+          <h3 className="flex items-center gap-2.5 text-[15px] font-medium"><IconTile icon={<RiUser3Line size={16} />} tone="coral" size={32} />Buyer personas</h3>
+          <button type="button" className={ghostBtn + " border border-[var(--border-subtle)]"} onClick={() => set("personas", [...value.personas, { name: "New persona", titles: [], seniority: [], departments: [], pains: [] }])}><RiAddLine size={14} /> Persona</button>
         </div>
         {value.personas.length === 0 && <p className="text-sm text-base-content/45">No personas yet. Add the job titles you sell to.</p>}
         {value.personas.map((p, i) => (
-          <div key={i} className="grid gap-3 rounded-xl border border-[var(--border-subtle)] bg-base-200/50 p-3 sm:grid-cols-[1fr_2fr_1fr_auto]">
+          <div key={i} className="grid gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-3 sm:grid-cols-[1fr_2fr_1fr_auto]">
             <input className={inputCls} value={p.name} aria-label="Persona name" onChange={(e) => set("personas", value.personas.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
             <input className={inputCls} defaultValue={fromList(p.titles)} placeholder="Job titles, comma separated" aria-label="Job titles" onBlur={(e) => set("personas", value.personas.map((x, j) => j === i ? { ...x, titles: toList(e.target.value) } : x))} />
             <input className={inputCls} defaultValue={fromList(p.departments)} placeholder="Departments" aria-label="Departments" onBlur={(e) => set("personas", value.personas.map((x, j) => j === i ? { ...x, departments: toList(e.target.value) } : x))} />
@@ -53,8 +53,8 @@ export default function IcpEditor({ value, onChange }: { value: Icp; onChange: (
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Competitors</h3>
-          <button type="button" className={ghostBtn} onClick={() => set("competitors", [...value.competitors, { name: "", linkedin_url: null, website: null }])}><RiAddLine size={14} /> Competitor</button>
+          <h3 className="flex items-center gap-2.5 text-[15px] font-medium"><IconTile icon={<RiFocus3Line size={16} />} tone="amber" size={32} />Competitors</h3>
+          <button type="button" className={ghostBtn + " border border-[var(--border-subtle)]"} onClick={() => set("competitors", [...value.competitors, { name: "", linkedin_url: null, website: null }])}><RiAddLine size={14} /> Competitor</button>
         </div>
         <p className="text-xs text-base-content/45">People who engage with these companies&apos; LinkedIn posts become leads. Their own employees are filtered out.</p>
         {value.competitors.map((c, i) => (
