@@ -5,6 +5,8 @@ import Sidebar from "./Sidebar";
 import TourGate from "@/components/onboarding/TourGate";
 
 const hasNoLayout = (path: string) => path === "/login" || path === "/onboarding" || path.startsWith("/invite/");
+/** Data-dense pages (the leads table) that use the full content width instead of the 1240px column. */
+const WIDE_ROUTES = new Set(["/agents/[id]", "/leads"]);
 
 export default function Layout({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -22,7 +24,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <span className="font-display text-[20px] text-base-content">Linki</span>
       </header>
       <main className="min-h-screen px-4 pb-28 pt-6 md:ml-[264px] md:px-10 md:pb-14 md:pt-9">
-        <div className="mx-auto w-full max-w-[1240px]">{children}</div>
+        <div className={`mx-auto w-full ${WIDE_ROUTES.has(router.pathname) ? "" : "max-w-[1240px]"}`}>{children}</div>
       </main>
     </div>
   );

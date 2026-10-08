@@ -45,7 +45,7 @@ function adoptListMembers(db: Database.Database, agent: Agent): number {
 }
 
 /** Marker row in enrichment_cache recording the last waterfall attempt for a target. */
-const EMAIL_ATTEMPT_PROVIDER = "_attempt";
+export const EMAIL_ATTEMPT_PROVIDER = "_attempt";
 const EMAIL_ATTEMPT_KEY_SQL = "('target:' || targets.id)";
 
 async function enrichQualified(db: Database.Database, agent: Agent, limit = 5): Promise<number> {
