@@ -62,7 +62,7 @@ export default function LoginPage() {
     setLoading(false);
 
     if (signInRes?.ok) {
-      router.replace(callbackUrl);
+      router.replace("/onboarding");
     } else {
       setError("Account created but sign-in failed. Try signing in manually.");
       switchMode("signin");

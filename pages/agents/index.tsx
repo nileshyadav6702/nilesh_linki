@@ -72,7 +72,7 @@ export default function AgentsPage() {
         {agents === null ? <p className="text-sm text-base-content/40">Loading…</p> : agents.length === 0 ? (
           <Empty title="No agents yet">
             <p>Create an agent and it will find leads and run LinkedIn and email from one sequence.</p>
-            <Link href="/agents/new" className={`${primaryBtn} mt-4`}><RiAddLine size={16} /> Create an agent</Link>
+            <Link href="/onboarding" className={`${primaryBtn} mt-4`}><RiAddLine size={16} /> Create an agent</Link>
           </Empty>
         ) : (
           <div className="grid items-stretch gap-4 lg:grid-cols-2">
