@@ -132,6 +132,9 @@ export default function AgentDetail() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button className={secondaryBtn} disabled={busy} onClick={runNow}><RiRefreshLine size={16} /> Launch now</button>
+            {finding
+              ? <button className={secondaryBtn} onClick={() => patch({ status: "paused" }, "Lead sourcing paused")}><RiPauseLine size={16} /> Pause sourcing</button>
+              : <button className={primaryBtn} onClick={() => patch({ status: "active" }, "Lead sourcing on")}><RiPlayLine size={16} /> Start sourcing</button>}
             {sending
               ? <button className={secondaryBtn} onClick={() => patch({ outreach_enabled: false }, "Outreach paused")}><RiPauseLine size={16} /> Pause outreach</button>
               : <button className={primaryBtn} onClick={() => patch({ outreach_enabled: true }, "Outreach started")}><RiPlayLine size={16} /> Start outreach</button>}
