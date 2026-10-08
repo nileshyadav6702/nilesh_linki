@@ -1,12 +1,14 @@
 import type Database from "better-sqlite3";
 import { decryptSecret } from "@/lib/crypto";
-import { matchPerson } from "@/lib/apollo";
+import { matchPerson, ApolloError } from "@/lib/apollo";
 import { verifyEmailAddress, emailStatusFor } from "@/lib/email/verify";
 
 /**
  * Email waterfall: providers run in order and the first verified address wins. Each
- * provider is optional (it runs only when its API key is configured), results are cached
- * per person+provider, and the free pattern+SMTP probe runs last.
+ * provider is optional (it runs only when its API key is configured), genuine results
+ * (hit or miss) are cached per person+provider, provider errors are never cached, and the
+ * free pattern+SMTP probe runs last. An unverified hit is kept as a fallback while later
+ * providers are tried for a verified one.
  */
 
 export interface PersonQuery {
@@ -23,14 +25,41 @@ export interface Provider {
   find(q: PersonQuery, apiKey: string | null): Promise<ProviderHit | null>;
 }
 
+/**
+ * A provider failed (rate limit, credits, auth, 5xx, network). Distinct from "not found"
+ * (null): errors are never cached, and the waterfall moves on to the next provider.
+ */
+export class ProviderError extends Error {
+  constructor(public provider: string, message: string, public status: number | null = null) {
+    super(`${provider}: ${message}`);
+    this.name = "ProviderError";
+  }
+}
+
 const json = async (res: Response) => { try { return await res.json(); } catch { return null; } };
+const TIMEOUT_MS = 20_000;
+
+/** Body of a provider response, null for a 404 (no match), ProviderError for any other failure. */
+async function bodyOrThrow<T>(provider: string, res: Response, notFound?: (body: T | null) => boolean): Promise<T | null> {
+  const body = await json(res) as T | null;
+  if (res.status === 404 || (notFound && notFound(body))) return null;
+  if (!res.ok) throw new ProviderError(provider, `request failed (${res.status})`, res.status);
+  if (body === null) throw new ProviderError(provider, "unreadable response", res.status);
+  return body;
+}
+
+type ProspeoBody = { error?: boolean; message?: string; response?: { email?: string | { email?: string; email_status?: string }; email_status?: string } };
+const prospeoNoResult = (b: ProspeoBody | null) => !!b?.error && /NO_RESULT|NO_MATCH|not.?found/i.test(b.message ?? "");
 
 export const PROVIDERS: Provider[] = [
   {
     key: "apollo", label: "Apollo", needsKey: true,
     async find(q, key) {
       if (!q.linkedinUrl || !key) return null;
-      const m = await matchPerson(q.linkedinUrl, key);
+      let m;
+      try { m = await matchPerson(q.linkedinUrl, key); } catch (err) {
+        throw new ProviderError("apollo", err instanceof Error ? err.message : String(err), err instanceof ApolloError ? err.status : null);
+      }
       return m?.email ? { email: m.email, verified: m.email_status === "verified", raw: { status: m.email_status } } : null;
     },
   },
@@ -40,8 +69,8 @@ export const PROVIDERS: Provider[] = [
       if (!q.domain || !q.firstName || !q.lastName || !key) return null;
       const u = new URL("https://api.hunter.io/v2/email-finder");
       u.search = new URLSearchParams({ domain: q.domain, first_name: q.firstName, last_name: q.lastName, api_key: key }).toString();
-      const res = await fetch(u);
-      const body = res.ok ? await json(res) as { data?: { email?: string; score?: number; verification?: { status?: string } } } | null : null;
+      const res = await fetch(u, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+      const body = await bodyOrThrow<{ data?: { email?: string; score?: number; verification?: { status?: string } } }>("hunter", res);
       const email = body?.data?.email;
       return email ? { email, verified: body?.data?.verification?.status === "valid" || (body?.data?.score ?? 0) >= 90 } : null;
     },
@@ -53,9 +82,11 @@ export const PROVIDERS: Provider[] = [
       const res = await fetch("https://api.prospeo.io/email-finder", {
         method: "POST", headers: { "Content-Type": "application/json", "X-KEY": key },
         body: JSON.stringify({ first_name: q.firstName, last_name: q.lastName, company: q.domain || q.company }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      const body = res.ok ? await json(res) as { error?: boolean; response?: { email?: string | { email?: string; email_status?: string }; email_status?: string } } | null : null;
-      if (!body || body.error) return null;
+      const body = await bodyOrThrow<ProspeoBody>("prospeo", res, prospeoNoResult);
+      if (!body) return null;
+      if (body.error) throw new ProviderError("prospeo", body.message || "error response", res.status);
       const e = body.response?.email;
       const email = typeof e === "string" ? e : e?.email;
       const status = (typeof e === "object" ? e?.email_status : body.response?.email_status) ?? "";
@@ -69,8 +100,9 @@ export const PROVIDERS: Provider[] = [
       const res = await fetch("https://app.findymail.com/api/search/name", {
         method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
         body: JSON.stringify({ name: q.fullName, domain: q.domain || q.company }),
+        signal: AbortSignal.timeout(TIMEOUT_MS),
       });
-      const body = res.ok ? await json(res) as { contact?: { email?: string } } | null : null;
+      const body = await bodyOrThrow<{ contact?: { email?: string } | null }>("findymail", res);
       // Findymail only returns addresses it has verified.
       return body?.contact?.email ? { email: body.contact.email, verified: true } : null;
     },
@@ -78,13 +110,17 @@ export const PROVIDERS: Provider[] = [
   {
     key: "pattern", label: "Pattern + SMTP check", needsKey: false,
     async find(q) {
-      const candidates = emailPatterns(q);
-      for (const email of candidates.slice(0, 4)) {
+      const candidates = emailPatterns(q).slice(0, 4);
+      let inconclusive = 0;
+      for (const email of candidates) {
         const r = await verifyEmailAddress(email, { timeoutMs: 8000 });
         if (r.status === "valid") return { email, verified: true };
         // A catch-all domain accepts every guess, so no guess can be trusted: stop probing.
         if (r.status === "catch_all") return null;
+        if (r.status === "unknown") inconclusive++;
       }
+      // Every probe was inconclusive (DNS/SMTP unreachable): an error, not a miss, so it is not cached.
+      if (candidates.length && inconclusive === candidates.length) throw new ProviderError("pattern", "mail server unreachable");
       return null;
     },
   },
@@ -140,6 +176,15 @@ export async function enrichTargetEmail(db: Database.Database, workspaceId: stri
   const q: PersonQuery = { firstName: t.first_name, lastName: t.last_name, fullName: t.full_name, company: t.company, domain: domainFrom(t.domain) ?? domainFrom(t.website), linkedinUrl: t.linkedin_url };
   const identity = t.linkedin_url?.toLowerCase() ?? `${clean(t.full_name)}@${q.domain ?? clean(t.company)}`;
 
+  const store = (r: WaterfallResult): WaterfallResult => {
+    const status = r.verified ? emailStatusFor("valid") : "unverified";
+    db.prepare("UPDATE targets SET email = ?, email_status = ?, email_verified_at = CASE WHEN ? THEN datetime('now') ELSE email_verified_at END WHERE id = ? AND email IS NULL")
+      .run(r.email, status, r.verified ? 1 : 0, targetId);
+    return r;
+  };
+
+  // First unverified hit, used only when no later provider finds a verified address.
+  let fallback: WaterfallResult | null = null;
   for (const key of providerOrder(db, workspaceId)) {
     const provider = providers.find((p) => p.key === key);
     if (!provider) continue;
@@ -149,17 +194,19 @@ export async function enrichTargetEmail(db: Database.Database, workspaceId: stri
     let hit: ProviderHit | null;
     if (cached) hit = cached.email ? { email: cached.email, verified: !!cached.verified } : null;
     else {
-      try { hit = await provider.find(q, apiKey); } catch { hit = null; }
+      try { hit = await provider.find(q, apiKey); } catch (err) {
+        // Rate limit, credits, outage: not a miss. Don't cache it; try the next provider.
+        console.warn(`[enrichment] ${key} failed for ${targetId}:`, err instanceof Error ? err.message : err);
+        continue;
+      }
       db.prepare(`INSERT INTO enrichment_cache (identity_key, provider, email, verified, result_json, fetched_at) VALUES (?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(identity_key, provider) DO UPDATE SET email = excluded.email, verified = excluded.verified, result_json = excluded.result_json, fetched_at = excluded.fetched_at`)
         .run(identity, key, hit?.email ?? null, hit?.verified ? 1 : 0, hit?.raw ? JSON.stringify(hit.raw) : null);
     }
-    if (hit?.email) {
-      const status = hit.verified ? emailStatusFor("valid") : "unverified";
-      db.prepare("UPDATE targets SET email = ?, email_status = ?, email_verified_at = CASE WHEN ? THEN datetime('now') ELSE email_verified_at END WHERE id = ? AND email IS NULL")
-        .run(hit.email.toLowerCase(), status, hit.verified ? 1 : 0, targetId);
-      return { email: hit.email.toLowerCase(), verified: hit.verified, provider: key };
-    }
+    if (!hit?.email) continue;
+    const r: WaterfallResult = { email: hit.email.toLowerCase(), verified: hit.verified, provider: key };
+    if (r.verified) return store(r);
+    fallback ??= r;
   }
-  return null;
+  return fallback ? store(fallback) : null;
 }

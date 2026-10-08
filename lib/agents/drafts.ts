@@ -127,7 +127,10 @@ export async function writeSequence(agent: Agent, icp: Icp | null, steps: Sequen
   const out = new Map<string, { subject: string | null; body: string }>();
   for (const s of r.steps) {
     const step = steps.find((x) => x.id === s.key);
-    if (!step) continue;
+    if (!step) {
+      console.warn(`[agents] model returned a draft for unknown step key "${String(s.key).slice(0, 60)}" (agent ${agent.id}); dropped`);
+      continue;
+    }
     out.set(step.id, { subject: step.channel === "email" ? (s.subject?.trim() || "Quick question") : null, body: s.body.trim() });
   }
   return out;

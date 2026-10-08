@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { getDb } from "@/lib/db";
-import { isAiConfigured, AiNotConfiguredError } from "@/lib/ai/client";
+import { isAiConfigured, isAiBlockingError } from "@/lib/ai/client";
 import { getIcp, getLatestIcp } from "@/lib/icp/store";
 import { ingestSignal } from "@/lib/platform/signals";
 import { emitDomainEvent } from "@/lib/platform/events";
@@ -11,6 +11,7 @@ import { autoApproveDue } from "@/lib/agents/approvals";
 import { enrollLead, workflowChannels } from "@/lib/agents/enroll";
 import { enrichTargetEmail } from "@/lib/enrichment/waterfall";
 import type { Agent } from "@/lib/agents/store";
+import { clearFailure, inBackoff, recordFailure } from "@/lib/agents/backoff";
 
 /**
  * The agent loop. Per active agent, each pass:
@@ -43,21 +44,39 @@ function adoptListMembers(db: Database.Database, agent: Agent): number {
   return rows.length;
 }
 
+/** Marker row in enrichment_cache recording the last waterfall attempt for a target. */
+const EMAIL_ATTEMPT_PROVIDER = "_attempt";
+const EMAIL_ATTEMPT_KEY_SQL = "('target:' || targets.id)";
+
 async function enrichQualified(db: Database.Database, agent: Agent, limit = 5): Promise<number> {
   if (!agent.enrich_emails || !workflowChannels(db, agent.workflow_id).email) return 0;
+  // The attempt is keyed on the target, not on a provider's cache row: a lead with no
+  // LinkedIn URL, or a workspace without the pattern provider, would otherwise be re-picked
+  // forever and starve every lead below the top few. Misses stay cached per provider for 30
+  // days, so the daily retry only re-asks providers that errored.
   const rows = db.prepare(`SELECT id FROM targets WHERE agent_id = ? AND agent_status = 'qualified' AND (email IS NULL OR email = '')
-    AND NOT EXISTS (SELECT 1 FROM enrichment_cache ec WHERE ec.identity_key = lower(targets.linkedin_url) AND ec.provider = 'pattern' AND ec.fetched_at > datetime('now','-30 days'))
+    AND NOT EXISTS (SELECT 1 FROM enrichment_cache ec WHERE ec.identity_key = ${EMAIL_ATTEMPT_KEY_SQL} AND ec.provider = '${EMAIL_ATTEMPT_PROVIDER}' AND ec.fetched_at > datetime('now','-1 day'))
     ORDER BY lead_score DESC LIMIT ?`).all(agent.id, limit) as Array<{ id: string }>;
   let n = 0;
-  for (const r of rows) if (await enrichTargetEmail(db, agent.workspace_id, r.id)) n++;
+  for (const r of rows) {
+    db.prepare(`INSERT INTO enrichment_cache (identity_key, provider, fetched_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT(identity_key, provider) DO UPDATE SET fetched_at = excluded.fetched_at`).run(`target:${r.id}`, EMAIL_ATTEMPT_PROVIDER);
+    try {
+      if (await enrichTargetEmail(db, agent.workspace_id, r.id)) n++;
+    } catch (err) {
+      console.warn(`[agents] email enrichment failed for ${r.id}:`, err instanceof Error ? err.message : err);
+    }
+  }
   return n;
 }
 
 async function draftQualified(db: Database.Database, agent: Agent, icp: ReturnType<typeof getLatestIcp>): Promise<{ drafted: number; enrolled: number }> {
   const room = agent.daily_lead_cap - handledToday(db, agent.id);
   if (room <= 0) return { drafted: 0, enrolled: 0 };
-  const leads = db.prepare(`SELECT id, linkedin_url, email, degree FROM targets WHERE agent_id = ? AND agent_status = 'qualified'
-    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, Math.min(room, 10)) as Array<{ id: string; linkedin_url: string | null; email: string | null; degree: number | null }>;
+  const take = Math.min(room, 10);
+  const leads = (db.prepare(`SELECT id, linkedin_url, email, degree FROM targets WHERE agent_id = ? AND agent_status = 'qualified'
+    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, take * 3) as Array<{ id: string; linkedin_url: string | null; email: string | null; degree: number | null }>)
+    .filter((l) => !inBackoff("draft", l.id)).slice(0, take);
   const aiReady = isAiConfigured(agent.workspace_id);
   let drafted = 0; let enrolled = 0;
   for (const lead of leads) {
@@ -79,16 +98,27 @@ async function draftQualified(db: Database.Database, agent: Agent, icp: ReturnTy
     const signals = strongestSignals(db, lead.id);
     try {
       const written = await writeSequence(agent, icp?.data ?? null, steps, { contact: bundle.contact, company: bundle.company, signals });
+      let queued = 0;
       for (const step of steps) {
         const draft = written.get(step.id);
-        if (draft) queueDraft(db, agent, lead.id, step.channel!, draft, signals[0]?.id ?? null, step);
+        if (draft) { queueDraft(db, agent, lead.id, step.channel!, draft, signals[0]?.id ?? null, step); queued++; }
       }
+      // A lead is only "drafted" when something actually reached the approval queue.
+      if (!queued) {
+        const attempts = recordFailure("draft", lead.id, "The model returned no draft for any campaign step");
+        console.warn(`[agents] no usable drafts for ${lead.id} (attempt ${attempts}); left qualified`);
+        continue;
+      }
+      clearFailure("draft", lead.id);
       db.prepare("UPDATE targets SET agent_status = 'drafted', agent_status_at = datetime('now') WHERE id = ?").run(lead.id);
       emitDomainEvent({ workspaceId: agent.workspace_id, type: "draft.pending", entityType: "contact", entityId: lead.id, payload: { agent_id: agent.id, channels } });
       drafted++;
     } catch (err) {
-      if (err instanceof AiNotConfiguredError) break;
-      console.warn(`[agents] draft failed for ${lead.id}:`, err instanceof Error ? err.message : err);
+      // Key, credit or spend cap: every other lead would fail the same way. Stop and surface it.
+      if (isAiBlockingError(err)) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      const attempts = recordFailure("draft", lead.id, message);
+      console.warn(`[agents] draft failed for ${lead.id} (attempt ${attempts}):`, message);
     }
   }
   return { drafted, enrolled };
@@ -98,23 +128,34 @@ export async function runAgentPass(agent: Agent): Promise<AgentPassResult> {
   const db = getDb();
   const icp = agent.icp_id ? getIcp(agent.icp_id, agent.workspace_id) : getLatestIcp(agent.workspace_id);
   const result: AgentPassResult = { adopted: 0, scored: 0, enriched: 0, drafted: 0, enrolled: 0, autoApproved: 0 };
-  try {
-    result.adopted = adoptListMembers(db, agent);
+  // Each stage is isolated: a failure in one is recorded and the rest of the pass still runs.
+  // An AI key/credit/cap error skips the remaining AI stages (they would fail the same way).
+  const errors: string[] = [];
+  let aiBlocked = false;
+  const stage = async (name: string, fn: () => unknown, needsAi = false) => {
+    if (needsAi && aiBlocked) return;
+    try { await fn(); } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (isAiBlockingError(err)) aiBlocked = true;
+      errors.push(`${name}: ${message}`);
+      console.warn(`[agents] ${name} failed for ${agent.id}: ${message}`);
+    }
+  };
+  await stage("adopt", () => { result.adopted = adoptListMembers(db, agent); });
+  await stage("score", async () => {
     const beforeQualified = (db.prepare("SELECT COUNT(*) n FROM targets WHERE agent_id = ? AND agent_status = 'qualified'").get(agent.id) as { n: number }).n;
     result.scored = await scoreNewLeads(db, agent, icp?.data ?? null, icp?.id ?? null);
     const afterQualified = (db.prepare("SELECT COUNT(*) n FROM targets WHERE agent_id = ? AND agent_status = 'qualified'").get(agent.id) as { n: number }).n;
     if (afterQualified > beforeQualified) emitDomainEvent({ workspaceId: agent.workspace_id, type: "lead.qualified", entityType: "agent", entityId: agent.id, payload: { count: afterQualified - beforeQualified } });
-    result.enriched = await enrichQualified(db, agent);
+  }, true);
+  await stage("enrich", async () => { result.enriched = await enrichQualified(db, agent); });
+  await stage("draft", async () => {
     const d = await draftQualified(db, agent, icp);
     result.drafted = d.drafted;
     result.enrolled = d.enrolled;
-    if (agent.mode === "autopilot") result.autoApproved = autoApproveDue(db, agent);
-    db.prepare("UPDATE agents SET last_run_at = datetime('now'), last_error = NULL WHERE id = ?").run(agent.id);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    db.prepare("UPDATE agents SET last_run_at = datetime('now'), last_error = ? WHERE id = ?").run(message, agent.id);
-    console.warn(`[agents] pass failed for ${agent.id}: ${message}`);
-  }
+  }, true);
+  if (agent.mode === "autopilot") await stage("auto-approve", () => { result.autoApproved = autoApproveDue(db, agent); });
+  db.prepare("UPDATE agents SET last_run_at = datetime('now'), last_error = ? WHERE id = ?").run(errors.length ? errors.join("; ").slice(0, 1000) : null, agent.id);
   return result;
 }
 

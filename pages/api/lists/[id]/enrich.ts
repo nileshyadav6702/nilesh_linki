@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+import { acquireEnrichLock, enrichList } from "@/lib/linkedin/enrich";
+import { discoveryPausedUntil } from "@/lib/linkedin/budget";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -33,6 +35,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     WHERE lt.list_id = ? AND t.sales_nav_url IS NOT NULL AND t.enriched_profile_at IS NULL
   `).get(listId) as { c: number };
 
+  const paused = discoveryPausedUntil(account_id);
+  if (paused) return res.status(409).json({ error: `LinkedIn is limiting this account until ${paused.until}. Try again later.` });
+  // One bulk run per list and per account: a double click must not start a second browser loop.
+  const release = acquireEnrichLock(listId, account_id);
+  if (!release) return res.status(409).json({ error: "Enrichment is already running for this list or account" });
+
   // Respond immediately — enrichment runs in background
   res.json({ started: true, profiles: pending.c });
 
@@ -40,11 +48,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   setImmediate(async () => {
     try {
       const { getSessionContext } = await import("@/lib/linkedin/session");
-      const { enrichList } = await import("@/lib/linkedin/enrich");
       const ctx = await getSessionContext(account_id);
-      await enrichList(ctx, listId);
+      const r = await enrichList(ctx, listId, 2000, undefined, account_id);
+      if (r.stopped) console.warn(`[enrich] list ${listId} stopped early (${r.stopped}${r.reason ? `: ${r.reason}` : ""})`);
     } catch (err) {
       console.error("[enrich] background enrichment failed:", err instanceof Error ? err.message : err);
+    } finally {
+      release();
     }
   });
 }

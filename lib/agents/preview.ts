@@ -117,7 +117,8 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
   }
 
   const icp = agent.icp_id ? getIcp(agent.icp_id, agent.workspace_id) : getLatestIcp(agent.workspace_id);
-  await scoreNewLeads(db, agent, icp?.data ?? null, icp?.id ?? null, SAMPLE);
+  // A quick sample: score thin leads from their title instead of parking them as needs_data.
+  await scoreNewLeads(db, agent, icp?.data ?? null, icp?.id ?? null, SAMPLE, { requireProfileText: false });
   result.leads = previewLeads(db, agent.id);
   if (!result.leads.length) result.leads = previewLeads(db, agent.id, SAMPLE, ["new", "qualified", "disqualified"]);
   result.summary = previewSummary(db, agent.id, filtered);

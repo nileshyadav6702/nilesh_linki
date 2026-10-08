@@ -6,11 +6,13 @@
  * all positions with descriptions, degree, flagshipProfileUrl, summary.
  * We intercept that response instead of making extra API calls.
  *
- * Weight: ~5-8s per profile (one real browser page load). Run fire-and-forget
- * after import — do not await in API routes.
+ * Weight: ~5-10s per profile (one real browser page load). Run fire-and-forget
+ * after import — do not await in API routes. Bulk runs charge the account's
+ * profile_view discovery budget and stop on a checkpoint/authwall/login redirect.
  */
 import type { BrowserContext } from "playwright";
 import { getDb } from "@/lib/db";
+import { consume, discoveryPausedUntil, pauseDiscovery } from "@/lib/linkedin/budget";
 
 interface EnrichedPosition {
   title: string;
@@ -36,15 +38,27 @@ interface SalesNavProfileData {
   skills?: Array<{ name?: string }>;
 }
 
-interface InterceptedResponse {
-  data?: SalesNavProfileData;
-  [key: string]: unknown;
+/** ok: stored; empty: profile had no headline/about (retry later); no_data: nothing intercepted; blocked: LinkedIn challenge. */
+export type EnrichOutcome = { status: "ok" | "empty" | "no_data" | "error" } | { status: "blocked"; reason: string };
+
+/** After this many empty reads the profile is marked enriched anyway, so it stops costing page loads. */
+const MAX_EMPTY_ATTEMPTS = 3;
+const emptyAttempts = new Map<string, number>();
+
+const jitter = (base: number, spread: number) => base + Math.floor(Math.random() * spread);
+
+/** LinkedIn sent the session to a checkpoint, authwall or login page instead of the profile. */
+export function blockedReason(url: string): string | null {
+  if (/\/checkpoint\b/i.test(url)) return "LinkedIn checkpoint";
+  if (/\/authwall\b/i.test(url)) return "LinkedIn authwall";
+  if (/\/(uas\/)?login\b|\/signup\b|sales\/login/i.test(url)) return "LinkedIn login redirect";
+  return null;
 }
 
-export async function enrichProfile(
+export async function enrichProfileDetailed(
   ctx: BrowserContext,
   target: { id: string; sales_nav_url: string; full_name: string }
-): Promise<boolean> {
+): Promise<EnrichOutcome> {
   const db = getDb();
   const page = await ctx.newPage();
 
@@ -70,12 +84,19 @@ export async function enrichProfile(
     });
 
     await page.goto(target.sales_nav_url, { waitUntil: "domcontentloaded", timeout: 30000 });
-    await page.waitForTimeout(8000);
+    const blocked = blockedReason(page.url());
+    if (blocked) return { status: "blocked", reason: blocked };
+    // Wait for the intercept (not a fixed 8s), then linger a human-ish, jittered moment.
+    const deadline = Date.now() + jitter(8000, 4000);
+    while (!box.data && Date.now() < deadline) await page.waitForTimeout(500);
+    await page.waitForTimeout(jitter(1000, 2000));
+    const late = blockedReason(page.url());
+    if (late) return { status: "blocked", reason: late };
 
     const intercepted = box.data;
     if (!intercepted) {
       console.log(`[enrich] No profile data intercepted for ${target.full_name} — skipping`);
-      return false;
+      return { status: "no_data" };
     }
 
     // Extract positions — include all, not just current
@@ -94,39 +115,83 @@ export async function enrichProfile(
       .map((s) => s.name)
       .filter((n): n is string => !!n);
 
+    const headline = intercepted.headline?.trim() || null;
+    const summary = intercepted.summary?.trim() || null;
+    // No headline and no about: keep enriched_profile_at empty so a later run retries,
+    // up to MAX_EMPTY_ATTEMPTS, after which the profile is accepted as genuinely sparse.
+    let markDone = !!(headline || summary);
+    if (!markDone) {
+      const n = (emptyAttempts.get(target.id) ?? 0) + 1;
+      emptyAttempts.set(target.id, n);
+      markDone = n >= MAX_EMPTY_ATTEMPTS;
+    } else emptyAttempts.delete(target.id);
+
     db.prepare(`
       UPDATE targets SET
         headline            = COALESCE(?, headline),
         summary             = COALESCE(?, summary),
-        positions_json      = ?,
+        positions_json      = COALESCE(?, positions_json),
         skills_json         = CASE WHEN ? IS NOT NULL THEN ? ELSE skills_json END,
-        enriched_profile_at = datetime('now')
+        enriched_profile_at = CASE WHEN ? THEN datetime('now') ELSE enriched_profile_at END
       WHERE id = ?
     `).run(
-      intercepted.headline ?? null,
-      intercepted.summary ?? null,
+      headline,
+      summary,
       positions.length > 0 ? JSON.stringify(positions) : null,
       skills.length > 0 ? "1" : null,
       skills.length > 0 ? JSON.stringify(skills) : null,
+      markDone ? 1 : 0,
       target.id
     );
 
-    console.log(`[enrich] ${target.full_name} — ${positions.length} positions, ${skills.length} skills, headline: ${!!intercepted.headline}`);
-    return true;
+    console.log(`[enrich] ${target.full_name} — ${positions.length} positions, ${skills.length} skills, headline: ${!!headline}, about: ${!!summary}`);
+    return { status: headline || summary ? "ok" : "empty" };
   } catch (err) {
     console.error(`[enrich] Error enriching ${target.full_name}:`, err instanceof Error ? err.message : err);
-    return false;
+    return { status: "error" };
   } finally {
     await page.close();
   }
 }
 
+/** Single-profile enrichment used by the runner. True when profile data was read. */
+export async function enrichProfile(
+  ctx: BrowserContext,
+  target: { id: string; sales_nav_url: string; full_name: string }
+): Promise<boolean> {
+  const r = await enrichProfileDetailed(ctx, target);
+  if (r.status === "blocked") console.warn(`[enrich] ${r.reason} while enriching ${target.full_name}`);
+  return r.status === "ok" || r.status === "empty";
+}
+
+// ─── bulk runs: one per list and one per account at a time ─────────────────────
+
+const runningLists = new Set<string>();
+const runningAccounts = new Set<string>();
+
+/** Claims the list and account for a bulk run. Returns a release function, or null when either is busy. */
+export function acquireEnrichLock(listId: string, accountId: string): (() => void) | null {
+  if (runningLists.has(listId) || runningAccounts.has(accountId)) return null;
+  runningLists.add(listId);
+  runningAccounts.add(accountId);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    runningLists.delete(listId);
+    runningAccounts.delete(accountId);
+  };
+}
+
+export interface EnrichListResult { enriched: number; failed: number; stopped?: "budget" | "blocked" | "paused"; reason?: string }
+
 export async function enrichList(
   ctx: BrowserContext,
   listId: string,
   delayMs = 2000,
-  onProgress?: (count: number, total: number) => void
-): Promise<{ enriched: number; failed: number }> {
+  onProgress?: (count: number, total: number) => void,
+  accountId?: string
+): Promise<EnrichListResult> {
   const db = getDb();
 
   // Only targets with a sales_nav_url that haven't been enriched yet
@@ -148,12 +213,29 @@ export async function enrichList(
 
   for (let i = 0; i < targets.length; i++) {
     const target = targets[i];
+    if (accountId) {
+      const paused = discoveryPausedUntil(accountId);
+      if (paused) {
+        console.warn(`[enrich] account ${accountId} paused until ${paused.until} (${paused.reason}) — stopping`);
+        return { enriched, failed, stopped: "paused", reason: paused.reason };
+      }
+      // Each profile load counts against the account's daily profile_view budget.
+      if (!consume(accountId, "profile_view")) {
+        console.warn(`[enrich] daily profile_view budget used up for ${accountId} — stopping at ${i}/${total}`);
+        return { enriched, failed, stopped: "budget" };
+      }
+    }
     console.log(`[enrich] ${i + 1}/${total} — ${target.full_name}`);
-    const ok = await enrichProfile(ctx, target);
-    if (ok) enriched++; else failed++;
+    const r = await enrichProfileDetailed(ctx, target);
+    if (r.status === "blocked") {
+      console.warn(`[enrich] ${r.reason} — stopping bulk enrichment for list ${listId}`);
+      if (accountId) pauseDiscovery(accountId, r.reason);
+      return { enriched, failed, stopped: "blocked", reason: r.reason };
+    }
+    if (r.status === "ok" || r.status === "empty") enriched++; else failed++;
     console.log(`[enrich] ${i + 1}/${total} done (${enriched} ok, ${failed} failed)`);
     onProgress?.(i + 1, total);
-    if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+    if (delayMs > 0 && i < targets.length - 1) await new Promise((res) => setTimeout(res, jitter(delayMs, delayMs * 1.5)));
   }
 
   console.log(`[enrich] Done — ${enriched} enriched, ${failed} failed`);

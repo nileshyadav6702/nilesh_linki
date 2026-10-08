@@ -34,6 +34,15 @@ export interface ApolloMatchResult {
   } | null;
 }
 
+/** Apollo failed (rate limit, credits, auth, 5xx, bad body). Distinct from "no match" (null). */
+export class ApolloError extends Error {
+  constructor(message: string, public status: number | null = null) {
+    super(message);
+    this.name = "ApolloError";
+  }
+}
+
+/** Returns null when Apollo has no match; throws ApolloError when the lookup itself failed. */
 export async function matchPerson(
   linkedinUrl: string,
   apiKey: string
@@ -42,12 +51,15 @@ export async function matchPerson(
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Api-Key": apiKey },
     body: JSON.stringify({ linkedin_url: linkedinUrl, reveal_personal_emails: false }),
+    signal: AbortSignal.timeout(30_000),
   });
 
-  if (!res.ok) return null;
+  if (res.status === 404) return null;
+  if (!res.ok) throw new ApolloError(`Apollo request failed (${res.status})`, res.status);
 
-  const data = await res.json();
-  const p = data.person;
+  let data;
+  try { data = await res.json(); } catch { throw new ApolloError("Apollo returned an unreadable response", res.status); }
+  const p = data?.person;
   if (!p || !p.id) return null;
 
   const org = p.organization ?? null;
