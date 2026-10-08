@@ -10,6 +10,7 @@ import {
   RiTeamLine, RiTimeLine, RiUserAddLine,
 } from "react-icons/ri";
 import ActivityFeed from "@/components/agents/activity/ActivityFeed";
+import AgentHeader from "@/components/agents/AgentHeader";
 import AgentOverview, { type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
 import AgentSettings, { type AgentForm } from "@/components/agents/AgentSettings";
 import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSources";
@@ -142,8 +143,6 @@ export default function AgentDetail() {
   const sending = !!a.outreach_enabled;
   const leadCount = Object.values(d.counts.by_status).reduce((x, y) => x + y, 0);
   const pool = d.sender_pool ?? { linkedin: 0, email: 0 };
-  const attached = !!(d.senders.linkedin || d.senders.email);
-  const senderName = senderLine(d.senders.linkedin?.name, d.senders.email?.from_email, pool);
   const soonest = d.sources.filter((s) => s.enabled && s.next_run_at).sort((x, y) => String(x.next_run_at).localeCompare(String(y.next_run_at)))[0];
   const launch = !soonest ? "No source scheduled" : !soonest.last_run_at && timeUntil(soonest.next_run_at) === "due" ? "First run is scheduled now" : `Next launch ${nextRunLabel(soonest.next_run_at, soonest.last_run_at)}`;
 
@@ -155,46 +154,13 @@ export default function AgentDetail() {
     <>
       <Head><title>{a.name} — Agents — Linki</title></Head>
       <div className="space-y-6">
-        <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-start">
-          <div className="min-w-0">
-            <Link href="/agents" className="mb-3 inline-flex items-center gap-1 text-[13px] font-medium text-base-content/45 hover:text-base-content"><RiArrowLeftSLine size={16} /> Agents</Link>
-            <div className="flex min-w-0 flex-wrap items-center gap-3">
-              <IconTile icon={<RiFocus3Line size={20} />} size={40} />
-              <h1 className="min-w-0 truncate font-display text-[28px] leading-[1.15] text-base-content">{a.name}</h1>
-              <Pill tone={finding ? "success" : a.status === "draft" ? "ink" : "amber"}>
-                {finding ? <RiLoader4Line size={13} className="animate-spin" /> : <RiPauseCircleLine size={13} />}
-                {finding ? "Finding leads" : a.status === "draft" ? "Draft" : "Paused"}
-              </Pill>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-base-content/65">
-              {attached ? <Avatar name={li?.name || senderName} size={24} /> : <span className="h-1.5 w-1.5 rounded-full bg-warning" />}
-              <span className="font-medium text-base-content/80">{li?.name || senderName}</span>
-              {li && (
-                <>
-                  <Pill><RiUserAddLine size={13} /> {li.daily_connection_limit ?? 20}/day</Pill>
-                  <Pill><RiSendPlaneLine size={13} /> {li.daily_message_limit ?? 40}/day</Pill>
-                </>
-              )}
-              {mail && (
-                <>
-                  <span className="hidden h-4 w-px bg-[var(--border-subtle)] sm:block" />
-                  <span className="inline-flex min-w-0 items-center gap-1.5"><RiMailLine className="shrink-0 text-error" size={16} /><span className="truncate">{mail.from_email}</span></span>
-                  {!!mail.ramp_up_enabled && <span className="inline-flex items-center gap-1 text-xs font-medium text-primary"><span className="h-1.5 w-1.5 rounded-full bg-primary" />Ramping up</span>}
-                </>
-              )}
-              {!attached && (pool.linkedin + pool.email > 0
-                ? <button type="button" className="font-medium text-primary" onClick={() => setTab("Settings")}>Choose a sender</button>
-                : <Link href="/settings" className="font-medium text-primary">Add a sender</Link>)}
-              <span className="inline-flex items-center gap-1 text-xs text-base-content/45"><RiTimeLine size={13} />{launch}</span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <RunSwitch label="Sourcing" on={finding} onChange={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")} />
-            <RunSwitch label="Outreach" on={sending} onChange={() => patch({ outreach_enabled: !sending }, sending ? "Outreach paused" : "Outreach on")} />
-            <button className={secondaryBtn} disabled={busy} onClick={runNow}><RiRocketLine size={16} /> Launch now</button>
-            <button className={ghostBtn + " !h-10 !w-10 !px-0"} onClick={remove} aria-label="Delete agent" title="Delete agent"><RiDeleteBinLine size={17} /></button>
-          </div>
-        </div>
+        <AgentHeader
+          name={a.name} status={a.status} outreachOn={sending} senders={d.senders} busy={busy}
+          statusTip={finding ? `Finding leads · ${launch}` : a.status === "draft" ? "Draft — launch it to start finding leads" : `Lead sourcing is paused · ${launch}`}
+          onToggleOutreach={() => patch({ outreach_enabled: !sending }, sending ? "Outreach paused" : "Outreach started")}
+          onToggleSourcing={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")}
+          onLaunch={runNow} onDelete={remove} onSenderSettings={() => setTab("Settings")}
+        />
         {a.last_error && <Callout tone="error" icon={<RiErrorWarningLine size={17} />}>{a.last_error}</Callout>}
         {!sending && waiting > 0 && (
           <Panel className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
