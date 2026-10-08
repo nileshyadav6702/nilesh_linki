@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { randomBytes, randomUUID } from "crypto";
 import { getDb } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
-import { emitDomainEvent, processWebhookDeliveries } from "@/lib/platform/events";
+import { assertPublicWebhookTarget, emitDomainEvent, processWebhookDeliveries, UnsafeWebhookUrlError } from "@/lib/platform/events";
 import { requireWorkspace, recordAudit } from "@/lib/workspace";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -19,6 +19,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === "POST") {
     const { url, event_types = "*" } = req.body as { url?: string; event_types?: string | string[] };
     try { if (!url || new URL(url).protocol !== "https:") throw new Error(); } catch { return res.status(400).json({ error: "A valid HTTPS URL is required" }); }
+    // Reject internal targets up front; delivery re-checks (including DNS) on every send.
+    try { await assertPublicWebhookTarget(String(url)); } catch (e) { return res.status(400).json({ error: e instanceof UnsafeWebhookUrlError ? e.message : "Invalid webhook URL" }); }
     const id = randomUUID(), secret = `whsec_${randomBytes(24).toString("base64url")}`;
     const types = Array.isArray(event_types) ? event_types.join(",") : event_types;
     db.prepare("INSERT INTO webhook_endpoints (id, workspace_id, url, secret, event_types, created_by) VALUES (?, ?, ?, ?, ?, ?)")

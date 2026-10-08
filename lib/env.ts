@@ -34,14 +34,23 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): EnvIssue[] {
     });
   }
 
-  // Recommended: needed for correct NextAuth redirects and as the default base
-  // for email open/click tracking URLs. Not fatal, but misconfiguration causes
-  // broken login redirects and tracking links in production.
+  // Required in production: the canonical public origin. It is the OAuth/MCP token
+  // audience and the only trusted source of this server's own URL — without it the
+  // origin would have to be derived from client-controlled Host headers (see
+  // lib/mcp/auth.ts canonicalOrigin). Also the base for NextAuth redirects and
+  // default email tracking URLs.
   if (isBlank(env.NEXTAUTH_URL)) {
-    warnings.push({
+    missing.push({
       name: "NEXTAUTH_URL",
-      reason: "not set - NextAuth redirects and default email tracking URLs may be incorrect.",
+      reason: "required - the public HTTPS URL of this deployment (e.g. https://linki.example.com).",
     });
+  } else {
+    try {
+      const url = new URL(env.NEXTAUTH_URL!.trim());
+      if (!["http:", "https:"].includes(url.protocol)) throw new Error();
+    } catch {
+      missing.push({ name: "NEXTAUTH_URL", reason: "must be an absolute http(s) URL." });
+    }
   }
 
   // Recommended: server-to-server secret for the MCP server calling Linki's own

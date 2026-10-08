@@ -75,7 +75,8 @@ describe("oauth refresh rotation", () => {
     expect(second.captured.status).not.toBe(400);
     expect(second.captured.body.error).toBeUndefined();
     expect(second.captured.body.access_token).toBeTruthy();
-    expect(second.captured.body.access_token).not.toBe(first.captured.body.access_token);
+    // A replay inside the grace window gets the same rotated pair, not a second token family.
+    expect(second.captured.body.access_token).toBe(first.captured.body.access_token);
   });
 
   it("keeps the superseded access token alive briefly for in-flight calls", () => {

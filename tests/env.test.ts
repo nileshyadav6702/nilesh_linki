@@ -19,12 +19,21 @@ describe("validateEnv", () => {
     warn.mockRestore();
   });
 
+  it("throws in production when NEXTAUTH_URL is missing", () => {
+    // The MCP origin and token audience derive from it; a header-derived fallback leaks the internal secret.
+    const env = { NODE_ENV: "production", NEXTAUTH_SECRET: "x".repeat(32) } as NodeJS.ProcessEnv;
+    expect(() => validateEnv(env)).toThrowError(/NEXTAUTH_URL/);
+  });
+
   it("warns (does not throw) for missing recommended vars", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const env = { NODE_ENV: "production", NEXTAUTH_SECRET: "x".repeat(32) } as NodeJS.ProcessEnv;
+    const env = {
+      NODE_ENV: "production",
+      NEXTAUTH_SECRET: "x".repeat(32),
+      NEXTAUTH_URL: "https://example.com",
+    } as NodeJS.ProcessEnv;
     const warnings = validateEnv(env);
     const names = warnings.map((w) => w.name);
-    expect(names).toContain("NEXTAUTH_URL");
     expect(names).toContain("INTERNAL_API_SECRET");
     warn.mockRestore();
   });

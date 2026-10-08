@@ -27,7 +27,7 @@ export async function getSessionToken(req: NextRequest) {
   return getToken({ req, secret: process.env.NEXTAUTH_SECRET });
 }
 
-async function hasValidInternalSecret(req: NextRequest): Promise<boolean> {
+export async function hasValidInternalSecret(req: NextRequest): Promise<boolean> {
   const expected = process.env.INTERNAL_API_SECRET;
   if (!expected) return false;
 

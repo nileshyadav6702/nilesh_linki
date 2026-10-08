@@ -3,7 +3,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import type { McpScope } from "@/lib/mcp/auth";
+import { internalApiOrigin, type McpScope } from "@/lib/mcp/auth";
 import { registerAgentTools } from "@/lib/mcp/agent-tools";
 import { getMemberships, getMembership } from "@/lib/workspace";
 
@@ -23,7 +23,10 @@ export function createLinkiMcpServer(input: { origin: string; auth: AuthInfo }) 
   }, { capabilities: { logging: {} } });
 
   const api = async (path: string, options: ApiOptions = {}) => {
-    const url = new URL(path, input.origin);
+    // Always loopback: these requests carry the internal secret, so the destination must
+    // never come from anything request-derived (input.origin is the public origin).
+    const url = new URL(path, internalApiOrigin());
+    if (!path.startsWith("/") || url.origin !== internalApiOrigin()) throw new Error(`Refusing non-local API path: ${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) if (value !== undefined) url.searchParams.set(key, String(value));
     const headers: Record<string, string> = { Accept: "application/json" };
     if (process.env.INTERNAL_API_SECRET) headers["x-internal-secret"] = process.env.INTERNAL_API_SECRET;

@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { randomUUID } from "crypto";
-import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+import { requireWorkspace, requireWorkspaceEntity, templatesBelongToWorkspace } from "@/lib/workspace";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const ctx=requireWorkspace(req,res,req.method==="GET"?"viewer":"member"); if(!ctx)return;
@@ -43,6 +43,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "POST") {
     const { step_type, track: trackIn, template_id, template_ids, delay_seconds, connect_note, message_body, email_subject, email_body, email_signature, email_position, email_delivery_mode, email_track_opens, email_track_clicks, email_variants, message_position, ai_enabled, ai_model, ai_prompt, ai_max_words, ai_language } = req.body;
     if (!step_type) return res.status(400).json({ error: "step_type required" });
+    if (template_ids !== undefined && template_ids !== null && !Array.isArray(template_ids)) return res.status(400).json({ error: "template_ids must be an array" });
+    if (!templatesBelongToWorkspace(ctx, [template_id, ...(template_ids ?? [])])) return res.status(400).json({ error: "Unknown template" });
 
     // Auto-assign track: email step_type always goes on the email track; everything else linkedin
     const track: "linkedin" | "email" = trackIn === "email" || step_type === "email" ? "email" : "linkedin";
@@ -88,6 +90,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "PUT") {
     const incoming = Array.isArray((req.body as { steps?: unknown })?.steps) ? (req.body as { steps: Array<Record<string, unknown>> }).steps : null;
     if (!incoming) return res.status(400).json({ error: "steps array is required" });
+
+    const referenced = incoming.flatMap((s) => [s?.template_id, ...(Array.isArray(s?.template_ids) ? s.template_ids as unknown[] : s?.template_ids == null ? [] : [s.template_ids])]);
+    if (!templatesBelongToWorkspace(ctx, referenced)) return res.status(400).json({ error: "Unknown template" });
 
     const byTrack: Record<"linkedin" | "email", Array<Record<string, unknown>>> = { linkedin: [], email: [] };
     for (const s of incoming) {

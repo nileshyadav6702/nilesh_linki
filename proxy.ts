@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getSessionToken, isAuthenticated } from "@/lib/auth";
+import { getSessionToken, hasValidInternalSecret } from "@/lib/auth";
 
 const DEFAULT_WORKSPACE_ID = "00000000-0000-4000-8000-000000000001";
 const WORKSPACE_HEADER = "x-workspace-id";
@@ -36,17 +36,29 @@ export async function proxy(req: NextRequest) {
   if (!pathname.startsWith("/api/")) return NextResponse.next();
   if (PUBLIC_API_PREFIXES.some(p => pathname.startsWith(p))) return NextResponse.next();
 
-  const authed = await isAuthenticated(req);
-  if (!authed) {
+  const internal = await hasValidInternalSecret(req);
+  const token = await getSessionToken(req);
+  if (!internal && !token) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // Identity headers are only ever taken from the client on the internal-secret path.
+  // For a browser session they are rebuilt from the signed token; requireWorkspace
+  // (lib/workspace.ts) then re-checks the user's live membership and role per request.
   const headers = new Headers(req.headers);
-  const token = await getSessionToken(req);
-  if (token?.workspaceId) {
+  const sessionUserId = token ? String(token.userId ?? token.sub ?? "") : "";
+  if (token && !internal && !sessionUserId) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (token?.workspaceId && sessionUserId) {
     headers.set(WORKSPACE_HEADER, String(token.workspaceId));
-    headers.set(USER_HEADER, String(token.userId ?? token.sub ?? ""));
+    headers.set(USER_HEADER, sessionUserId);
     headers.set(ROLE_HEADER, String(token.role ?? "viewer"));
+  } else if (!internal) {
+    // Signed in but no workspace on the token: never fall back to client-chosen headers.
+    headers.delete(WORKSPACE_HEADER);
+    headers.set(USER_HEADER, sessionUserId);
+    headers.set(ROLE_HEADER, "viewer");
   } else {
     // Internal service calls can select a workspace explicitly; otherwise they operate
     // on the legacy workspace for backwards-compatible background jobs.

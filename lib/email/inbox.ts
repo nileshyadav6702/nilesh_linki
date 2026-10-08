@@ -464,87 +464,9 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
                   ? [authoritative, ...scraped.filter(c => c !== authoritative)]
                   : scraped;
 
-                for (const candidate of candidates) {
-                  if (BOUNCE_SENDER_PATTERNS.some(p => p.test(candidate))) continue;
-                  // Never suppress ourselves: our own from_email appears in most DSN bodies
-                  // (it was the original sender), and suppressing it would silently kill the
-                  // mailbox for every future send.
-                  if (ourAddresses.has(candidate)) continue;
-
-                  const target = db
-                    .prepare("SELECT id, workspace_id, email_status, company_id FROM targets WHERE lower(email) = ?")
-                    .get(candidate) as { id: string; workspace_id: string; email_status: string | null; company_id: string | null } | undefined;
-
-                  // The Final-Recipient is trustworthy on its own. Anything merely scraped
-                  // out of the body is only acted on when it matches a contact we know, which
-                  // is what keeps quoted third-party addresses out of the suppression list.
-                  const trusted = candidate === authoritative;
-                  if (!trusted && !target) continue;
-
-                  // Recorded even when the contact is already invalid, and even when there is
-                  // no contact row at all. The suppression entry and the sender-health event
-                  // are the durable half of this — `targets.email_status` is per-contact and
-                  // does not survive a re-import, which is how a dead address gets re-sent to.
-                  const outcome = recordInboundBounce({
-                    workspaceId: target?.workspace_id ?? account.workspace_id,
-                    emailAccountId,
-                    recipient: candidate,
-                    targetId: target?.id,
-                    companyId: target?.company_id,
-                    detail: `Hard bounce received at ${account.from_email ?? emailAccountId}`,
-                    dedupeKey: `${emailAccountId}:${dsnMessageId}:${candidate}`,
-                  });
-                  if (outcome.recorded) bounces++;
-
-                  if (!target || target.email_status === "invalid") break;
-
-                  const note = `Email bounced on ${new Date().toISOString().slice(0, 10)} — marked invalid`;
-                  db.prepare(`
-                    UPDATE targets SET email_status = 'invalid',
-                      notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || char(10) || ? END
-                    WHERE id = ?
-                  `).run(note, note, target.id);
-
-                  db.prepare(`
-                    UPDATE run_profile_tracks SET state = 'skipped', error_message = 'Email bounced — invalid address'
-                    WHERE run_profile_id IN (SELECT id FROM run_profiles WHERE target_id = ?)
-                    AND state IN ('pending', 'in_progress')
-                  `).run(target.id);
-
-                  if (target.company_id) {
-                    const companyNote = `Email domain flagged invalid — bounce for ${candidate} on ${new Date().toISOString().slice(0, 10)}`;
-                    db.prepare(`
-                      UPDATE companies SET email_domain_invalid = 1,
-                        notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || char(10) || ? END
-                      WHERE id = ?
-                    `).run(companyNote, companyNote, target.company_id);
-
-                    const siblings = db.prepare(`
-                      SELECT id FROM targets WHERE company_id = ? AND id != ? AND email IS NOT NULL AND email_status != 'invalid'
-                    `).all(target.company_id, target.id) as { id: string }[];
-
-                    for (const sibling of siblings) {
-                      const sibNote = `Email bounced on ${new Date().toISOString().slice(0, 10)} — marked invalid (domain flagged via company)`;
-                      db.prepare(`
-                        UPDATE targets SET email_status = 'invalid',
-                          notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || char(10) || ? END
-                        WHERE id = ?
-                      `).run(sibNote, sibNote, sibling.id);
-                      db.prepare(`
-                        UPDATE run_profile_tracks SET state = 'skipped', error_message = 'Email domain invalid — company flagged'
-                        WHERE run_profile_id IN (SELECT id FROM run_profiles WHERE target_id = ?)
-                        AND state IN ('pending', 'in_progress')
-                      `).run(sibling.id);
-                    }
-
-                    if (siblings.length > 0) {
-                      console.log(`[email-inbox] Company ${target.company_id} flagged — ${siblings.length} sibling(s) marked invalid`);
-                    }
-                  }
-
-                  console.log(`[email-inbox] Bounce for ${candidate} (target ${target.id}) — suppressed and marked invalid`);
-                  break;
-                }
+                bounces += applyBounceCandidates(db, {
+                  account, emailAccountId, dsnMessageId, authoritative, candidates, ourAddresses,
+                });
               }
               resFetch();
             });
@@ -565,6 +487,76 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
   // IMAP_POLL_INTERVAL_MS instead of monopolising every pass.
   db.prepare("UPDATE email_accounts SET inbox_synced_at = datetime('now') WHERE id = ?").run(emailAccountId);
   return { replies, bounces };
+}
+
+/**
+ * Act on one DSN's candidate recipients. Everything is scoped to the workspace that owns
+ * the mailbox the DSN arrived in: a bounce landing in tenant A's inbox must never look up,
+ * suppress, or invalidate tenant B's contacts, even when they share an address. Only the
+ * bounced address itself is marked invalid — one hard bounce says nothing about other
+ * people at the same company, so colleagues and the company row are left untouched.
+ * Returns the number of newly recorded bounces (0 or 1).
+ */
+export function applyBounceCandidates(db: ReturnType<typeof getDb>, input: {
+  account: { workspace_id: string; from_email: string | null };
+  emailAccountId: string;
+  dsnMessageId: string;
+  authoritative: string;
+  candidates: string[];
+  ourAddresses: Set<string>;
+}): number {
+  const { account, emailAccountId, dsnMessageId, authoritative, ourAddresses } = input;
+  for (const candidate of input.candidates) {
+    if (BOUNCE_SENDER_PATTERNS.some(p => p.test(candidate))) continue;
+    // Never suppress ourselves: our own from_email appears in most DSN bodies
+    // (it was the original sender), and suppressing it would silently kill the
+    // mailbox for every future send.
+    if (ourAddresses.has(candidate)) continue;
+
+    const target = db
+      .prepare("SELECT id, email_status, company_id FROM targets WHERE workspace_id = ? AND lower(email) = ?")
+      .get(account.workspace_id, candidate) as { id: string; email_status: string | null; company_id: string | null } | undefined;
+
+    // The Final-Recipient is trustworthy on its own. Anything merely scraped
+    // out of the body is only acted on when it matches a contact we know, which
+    // is what keeps quoted third-party addresses out of the suppression list.
+    const trusted = candidate === authoritative;
+    if (!trusted && !target) continue;
+
+    // Recorded even when the contact is already invalid, and even when there is
+    // no contact row at all. The suppression entry and the sender-health event
+    // are the durable half of this — `targets.email_status` is per-contact and
+    // does not survive a re-import, which is how a dead address gets re-sent to.
+    const outcome = recordInboundBounce({
+      workspaceId: account.workspace_id,
+      emailAccountId,
+      recipient: candidate,
+      targetId: target?.id,
+      companyId: target?.company_id,
+      detail: `Hard bounce received at ${account.from_email ?? emailAccountId}`,
+      dedupeKey: `${emailAccountId}:${dsnMessageId}:${candidate}`,
+    });
+    const recorded = outcome.recorded ? 1 : 0;
+
+    if (!target || target.email_status === "invalid") return recorded;
+
+    const note = `Email bounced on ${new Date().toISOString().slice(0, 10)} — marked invalid`;
+    db.prepare(`
+      UPDATE targets SET email_status = 'invalid',
+        notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || char(10) || ? END
+      WHERE id = ? AND workspace_id = ?
+    `).run(note, note, target.id, account.workspace_id);
+
+    db.prepare(`
+      UPDATE run_profile_tracks SET state = 'skipped', error_message = 'Email bounced — invalid address'
+      WHERE run_profile_id IN (SELECT id FROM run_profiles WHERE target_id = ?)
+      AND state IN ('pending', 'in_progress')
+    `).run(target.id);
+
+    console.log(`[email-inbox] Bounce for ${candidate} (target ${target.id}) — suppressed and marked invalid`);
+    return recorded;
+  }
+  return 0;
 }
 
 /** Every email account with IMAP configured (used by the always-on poller). */

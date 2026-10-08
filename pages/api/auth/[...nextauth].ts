@@ -1,8 +1,10 @@
+import type { NextApiRequest, NextApiResponse } from "next";
 import NextAuth, { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { getDb } from "@/lib/db";
-import { isRateLimited } from "@/lib/rate-limit";
+import { isRateLimited, REMOTE_ADDR_HEADER } from "@/lib/rate-limit";
+import { normalizeInvitationEmail } from "@/lib/workspace-invitations";
 import { createWorkspaceForUser, getMembership, getPrimaryMembership } from "@/lib/workspace";
 import { isSuperadminEmail } from "@/lib/superadmin-allowlist";
 
@@ -24,10 +26,13 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Too many attempts. Try again later.");
         }
 
+        // Signup stores emails lowercased; match case-insensitively so "Me@x.com" can log in.
+        // An exact-case row (legacy data) wins if two rows differ only by case.
         const db = getDb();
+        const email = normalizeInvitationEmail(credentials.email);
         const user = db
-          .prepare("SELECT id, email, password_hash FROM users WHERE email = ?")
-          .get(credentials.email) as UserRow | undefined;
+          .prepare("SELECT id, email, password_hash FROM users WHERE lower(email) = ? ORDER BY CASE WHEN email = ? THEN 0 ELSE 1 END LIMIT 1")
+          .get(email, credentials.email) as UserRow | undefined;
 
         if (!user) return null;
 
@@ -79,4 +84,11 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
 };
 
-export default NextAuth(authOptions);
+const nextAuthHandler = NextAuth(authOptions);
+
+// authorize() only sees a socket-less copy of the request, so stamp the real peer address
+// for the login rate limiter. Always overwritten: a client-sent value is never trusted.
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  req.headers[REMOTE_ADDR_HEADER] = req.socket?.remoteAddress ?? "";
+  return nextAuthHandler(req, res);
+}

@@ -52,6 +52,8 @@ async function fetchRuns(): Promise<RunRow[]> {
 beforeAll(() => {
   getDb().prepare("INSERT OR IGNORE INTO workspaces (id, name, slug) VALUES (?, ?, ?)")
     .run(WS, "Heartbeat WS", "heartbeat-ws");
+  getDb().prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES (?, ?, 'x')").run("user-1", "hb-user-1@example.com");
+  getDb().prepare("INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin')").run(WS, "user-1");
 });
 
 describe("runs.last_tick_at migration", () => {

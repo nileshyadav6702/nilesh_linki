@@ -26,7 +26,8 @@ function mockReq(targetId: string, body: unknown, role = "member") {
     method: "POST",
     query: { id: targetId },
     body,
-    headers: { "x-workspace-id": WS, "x-user-id": "user-1", "x-workspace-role": role },
+    // One user per role: requireWorkspace takes the role from the live membership row.
+    headers: { "x-workspace-id": WS, "x-user-id": `user-${role}`, "x-workspace-role": role },
   } as unknown as NextApiRequest;
 }
 
@@ -56,6 +57,10 @@ beforeAll(() => {
   const db = getDb();
   db.prepare("INSERT INTO workspaces (id, name, slug) VALUES (?, ?, ?)").run(WS, "MR WS", "mr-ws");
   db.prepare("INSERT INTO workspaces (id, name, slug) VALUES (?, ?, ?)").run(OTHER_WS, "Other WS", "mr-ws-2");
+  for (const role of ["member", "viewer"]) {
+    db.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES (?, ?, 'x')").run(`user-${role}`, `mr-${role}@example.com`);
+    db.prepare("INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?)").run(WS, `user-${role}`, role);
+  }
 });
 
 describe("POST /api/targets/[id]/mark-replied", () => {

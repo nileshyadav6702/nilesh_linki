@@ -42,12 +42,31 @@ function sweepIfDue(now: number, windowMs: number) {
   }
 }
 
-function clientIp(req: IpSource): string {
-  const xRealIp = req.headers?.["x-real-ip"];
-  if (typeof xRealIp === "string" && xRealIp) return xRealIp;
+// X-Real-IP / X-Forwarded-For are client-controlled unless a reverse proxy we trust
+// overwrites them, so they are only honoured when TRUST_PROXY=1 (see DEPLOYMENT.md).
+// Otherwise an attacker rotates a fake header per request and is never throttled.
+export function clientIp(req: IpSource, env: NodeJS.ProcessEnv = process.env): string {
+  if (env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true") {
+    // nginx `proxy_set_header X-Real-IP $remote_addr` replaces any client value.
+    const xRealIp = req.headers?.["x-real-ip"];
+    if (typeof xRealIp === "string" && xRealIp.trim()) return xRealIp.trim();
 
-  const xForwardedFor = req.headers?.["x-forwarded-for"];
-  if (typeof xForwardedFor === "string" && xForwardedFor) return xForwardedFor.split(",")[0].trim();
+    // The right-most entry is the one appended by our own proxy; anything to its left
+    // came from the client and may be forged.
+    const xForwardedFor = req.headers?.["x-forwarded-for"];
+    const forwarded = Array.isArray(xForwardedFor) ? xForwardedFor.join(",") : xForwardedFor;
+    if (typeof forwarded === "string" && forwarded) {
+      const last = forwarded.split(",").map(s => s.trim()).filter(Boolean).pop();
+      if (last) return last;
+    }
+  }
 
-  return req.socket?.remoteAddress || "unknown";
+  // NextAuth's authorize() receives a socket-less RequestInternal, so the NextAuth route
+  // stamps the real peer address into this header first (always overwriting any client
+  // value — see pages/api/auth/[...nextauth].ts). A request with a socket ignores it.
+  if (req.socket?.remoteAddress) return req.socket.remoteAddress;
+  const stamped = req.headers?.[REMOTE_ADDR_HEADER];
+  return (typeof stamped === "string" && stamped) || "unknown";
 }
+
+export const REMOTE_ADDR_HEADER = "x-linki-remote-addr";

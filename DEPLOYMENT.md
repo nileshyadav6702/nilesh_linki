@@ -18,10 +18,11 @@ Create `/opt/linki/.env.local` from `.env.example`. It is read by compose via `e
 
 Required in production:
 - `NEXTAUTH_SECRET` (generate with `openssl rand -base64 32`). The app fails fast at startup if this is missing.
-- `NEXTAUTH_URL` (your public HTTPS URL).
+- `NEXTAUTH_URL` (your public HTTPS URL, e.g. `https://linki.example.com`). The app fails fast at startup if this is missing or not an absolute URL. It is the only source of the app's public origin (OAuth/MCP token audience, discovery metadata); `Host` / `X-Forwarded-Host` headers are never trusted for this.
 
 Recommended:
-- `INTERNAL_API_SECRET` (generate with `openssl rand -base64 32`) if the MCP endpoint is used.
+- `INTERNAL_API_SECRET` (generate with `openssl rand -base64 32`) if the MCP endpoint is used. It is only ever sent to the app's own loopback address (`http://127.0.0.1:${PORT:-3000}` inside the container).
+- `TRUST_PROXY=1` when the app sits behind the reverse proxy described above. Rate limits (login, signup, OAuth) then key on the proxy-supplied `X-Real-IP` (or the right-most `X-Forwarded-For` entry). Configure the proxy to overwrite, not append to, `X-Real-IP` — for nginx: `proxy_set_header X-Real-IP $remote_addr;`. Leave it unset when clients can reach the app directly; otherwise those headers are client-forgeable and are ignored in favour of the socket address. Without it behind a proxy, every client shares the proxy's address and one rate-limit bucket.
 
 Optional: `EMAIL_TRACKING_BASE_URL`, `EMAIL_TRACKING_SECRET`, `MCP_ALLOWED_ORIGINS`, `HEADLESS`. `LINKI_DB_PATH` is set to `/data/linki.db` by compose automatically.
 

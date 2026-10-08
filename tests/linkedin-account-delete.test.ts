@@ -62,6 +62,8 @@ beforeAll(() => {
   const db = getDb();
   db.prepare("INSERT OR IGNORE INTO workspaces (id, name, slug) VALUES (?, ?, ?)").run(WS, "LI Acct WS", "li-acct-ws");
   db.prepare("INSERT OR IGNORE INTO workspaces (id, name, slug) VALUES (?, ?, ?)").run(OTHER_WS, "Other WS", "li-acct-ws-2");
+  db.prepare("INSERT OR IGNORE INTO users (id, email, password_hash) VALUES (?, ?, 'x')").run("user-1", "li-user-1@example.com");
+  db.prepare("INSERT OR IGNORE INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin')").run(WS, "user-1");
 });
 
 describe("DELETE /api/accounts/[id]", () => {

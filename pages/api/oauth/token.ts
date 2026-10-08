@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { createHash } from "crypto";
 import { getDb } from "@/lib/db";
 import { getOAuthClient, hashToken, issueTokenPair, normalizeScopes, verifyPkce } from "@/lib/mcp/auth";
 import { isRateLimited } from "@/lib/rate-limit";
@@ -29,29 +30,39 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (body.grant_type === "refresh_token") {
     if (!body.refresh_token) return oauthError(res, "invalid_request");
     const db = getDb();
+    const presentedHash = hashToken(body.refresh_token);
+
+    // A refresh token presented again inside the grace window (two surfaces racing, or a
+    // retry) gets back the SAME rotated pair the first request received. Minting a fresh
+    // pair per reuse would fork independent long-lived token families from one refresh
+    // token — exactly what a thief replaying a stolen token within the window would want.
+    sweepRotationCache();
+    const cached = recentRotations.get(presentedHash);
+    if (cached && cached.clientId === body.client_id && (!body.scope || body.scope === cached.response.scope)) {
+      return res.json(cached.response);
+    }
+
     const row = db.prepare(`SELECT id, client_id, user_id, scope, resource, workspace_id, refresh_expires_at
-      FROM oauth_tokens WHERE refresh_hash = ?`).get(hashToken(body.refresh_token)) as RefreshRow | undefined;
-    if (!row || row.client_id !== body.client_id || !row.refresh_expires_at || Date.parse(row.refresh_expires_at) <= Date.now()) {
+      FROM oauth_tokens WHERE refresh_hash = ?`).get(presentedHash) as RefreshRow | undefined;
+    if (!row || row.client_id !== body.client_id) return oauthError(res, "invalid_grant");
+
+    // Already rotated (its successor exists) and not served from the cache above: this is a
+    // replay. Outside the grace window that is the OAuth BCP theft signal, so the whole
+    // family descended from this token is revoked. Inside the window (cache lost to a
+    // restart) it is simply refused — the legitimate successor stays valid.
+    if (db.prepare("SELECT 1 FROM oauth_tokens WHERE id = ?").get(successorTokenId(row.id))) {
+      if (!row.refresh_expires_at || Date.parse(row.refresh_expires_at) <= Date.now()) revokeTokenFamily(db, row.id);
       return oauthError(res, "invalid_grant");
     }
+    if (!row.refresh_expires_at || Date.parse(row.refresh_expires_at) <= Date.now()) return oauthError(res, "invalid_grant");
+
     const original = normalizeScopes(row.scope, []);
     const requested = body.scope ? normalizeScopes(body.scope, []) : original;
     if (requested.some((scope) => !original.includes(scope))) return oauthError(res, "invalid_scope");
 
-    // Rotate with a grace window rather than deleting outright. Deleting made every refresh a
-    // race the client could lose: two refreshes in flight at once (two Claude surfaces on the
-    // same connector, or a retry) meant the second found no row, got invalid_grant, and threw
-    // the session away — the "please reconnect" prompt. Any request still carrying the old
-    // access token 401'd for the same reason. Both tokens now stay usable for GRACE_MS, which
-    // is long enough for concurrent refreshes and in-flight calls to settle and short enough
-    // that a leaked token is not durable.
-    //
-    // The tradeoff is deliberate: OAuth BCP wants refresh reuse to revoke the whole family as
-    // theft detection. That rule assumes reuse is anomalous — here it is the normal behaviour
-    // of a well-behaved concurrent client, and enforcing it is what logged the user out.
-    // MIN, not assignment: re-presenting an already-rotated refresh token must not push its
-    // deadline out again, or repeated reuse would keep a superseded token alive indefinitely.
-    // The window is measured from the FIRST rotation and only ever shrinks.
+    // Rotate with a grace window rather than deleting outright, so requests still carrying
+    // the old access token keep working for GRACE_MS while concurrent refreshes settle.
+    // MIN, not assignment: the window is measured from the FIRST rotation and only shrinks.
     const deadline = graceDeadline();
     db.prepare(
       `UPDATE oauth_tokens
@@ -60,7 +71,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
        WHERE id = ?`
     ).run(deadline, deadline, deadline, row.id);
     sweepExpiredTokens(db);
-    return res.json(issueTokenPair({ clientId: row.client_id, userId: row.user_id, scopes: requested, resource: row.resource, workspaceId: row.workspace_id }));
+    const response = issueTokenPair({ id: successorTokenId(row.id), clientId: row.client_id, userId: row.user_id, scopes: requested, resource: row.resource, workspaceId: row.workspace_id });
+    recentRotations.set(presentedHash, { clientId: row.client_id, response, expiresAt: Date.now() + ROTATION_GRACE_MS });
+    return res.json(response);
   }
 
   return oauthError(res, "unsupported_grant_type");
@@ -69,6 +82,32 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 // How long a rotated token pair stays usable after being superseded. Covers concurrent
 // refreshes and requests already in flight; well short of the 1h lifetime of a live token.
 const ROTATION_GRACE_MS = 60_000;
+
+// Rotation responses kept for the grace window so a reused refresh token gets the same
+// pair back. In-memory is enough: Linki runs as a single process (see lib/rate-limit.ts).
+const recentRotations = new Map<string, { clientId: string; response: ReturnType<typeof issueTokenPair>; expiresAt: number }>();
+
+function sweepRotationCache() {
+  const now = Date.now();
+  for (const [key, entry] of recentRotations) if (entry.expiresAt <= now) recentRotations.delete(key);
+}
+
+/** Successor ids are derived from the parent id, so a token's descendants can be walked without a family column. */
+function successorTokenId(parentId: string): string {
+  return createHash("sha256").update(`oauth-rotation:${parentId}`).digest("hex");
+}
+
+function revokeTokenFamily(db: ReturnType<typeof getDb>, rootId: string) {
+  const del = db.prepare("DELETE FROM oauth_tokens WHERE id = ?");
+  db.transaction(() => {
+    let id = rootId;
+    for (let i = 0; i < 10_000 && id; i++) {
+      const next = successorTokenId(id);
+      del.run(id);
+      id = db.prepare("SELECT 1 FROM oauth_tokens WHERE id = ?").get(next) ? next : "";
+    }
+  })();
+}
 
 function graceDeadline(): string {
   return new Date(Date.now() + ROTATION_GRACE_MS).toISOString();

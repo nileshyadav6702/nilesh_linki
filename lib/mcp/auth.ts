@@ -23,16 +23,32 @@ interface OAuthTokenRow {
   workspace_id: string | null;
 }
 
-export function requestOrigin(req: NextApiRequest): string {
-  const configured = process.env.NEXTAUTH_URL;
+/**
+ * The canonical public origin of this deployment. Always NEXTAUTH_URL — never derived
+ * from Host / X-Forwarded-Host, which a client controls: a spoofed host would otherwise
+ * become the OAuth token audience and the base URL the MCP server calls with the
+ * internal secret. lib/env.ts makes NEXTAUTH_URL mandatory in production; dev/test fall
+ * back to localhost.
+ */
+export function canonicalOrigin(env: NodeJS.ProcessEnv = process.env): string {
+  const configured = env.NEXTAUTH_URL?.trim();
   if (configured) return new URL(configured).origin;
-  const proto = String(req.headers["x-forwarded-proto"] ?? "http").split(",")[0].trim();
-  const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:3000").split(",")[0].trim();
-  return `${proto}://${host}`;
+  if (env.NODE_ENV === "production") throw new Error("NEXTAUTH_URL must be set in production");
+  return `http://localhost:${env.PORT || 3000}`;
 }
 
-export function mcpResourceUrl(req: NextApiRequest): string {
-  return `${requestOrigin(req)}/api/mcp`;
+/** Loopback base URL for this server's own API — the only destination the internal secret is sent to. */
+export function internalApiOrigin(env: NodeJS.ProcessEnv = process.env): string {
+  return `http://127.0.0.1:${env.PORT || 3000}`;
+}
+
+// The request parameter is kept for call-site compatibility and deliberately ignored.
+export function requestOrigin(_req?: NextApiRequest): string {
+  return canonicalOrigin();
+}
+
+export function mcpResourceUrl(_req?: NextApiRequest): string {
+  return `${canonicalOrigin()}/api/mcp`;
 }
 
 export function hashToken(value: string): string {
@@ -97,6 +113,7 @@ export function verifyPkce(verifier: string, challenge: string): boolean {
 }
 
 export function issueTokenPair(input: {
+  id?: string;
   clientId: string;
   userId: string;
   scopes: McpScope[];
@@ -111,7 +128,7 @@ export function issueTokenPair(input: {
       (id, access_hash, refresh_hash, client_id, user_id, scope, resource, workspace_id, expires_at, refresh_expires_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    randomUUID(), hashToken(accessToken), hashToken(refreshToken), input.clientId, input.userId,
+    input.id ?? randomUUID(), hashToken(accessToken), hashToken(refreshToken), input.clientId, input.userId,
     input.scopes.join(" "), input.resource, input.workspaceId,
     new Date(Date.now() + expiresIn * 1000).toISOString(),
     new Date(Date.now() + 30 * 24 * 60 * 60_000).toISOString(),

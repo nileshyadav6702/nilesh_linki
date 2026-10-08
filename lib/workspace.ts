@@ -60,12 +60,50 @@ export function workspaceFromRequest(req: NextApiRequest): WorkspaceContext {
   const workspaceId = header(req, WORKSPACE_HEADER) || DEFAULT_WORKSPACE_ID;
   const userId = header(req, USER_HEADER) || null;
   const roleValue = header(req, ROLE_HEADER) as WorkspaceRole;
-  const role = ROLE_LEVEL[roleValue] !== undefined ? roleValue : "owner";
+  // Least privilege: a missing or malformed role header never grants more than viewer.
+  const role = ROLE_LEVEL[roleValue] !== undefined ? roleValue : "viewer";
   return { workspaceId, userId, role };
+}
+
+// Per-request membership re-check. The JWT's workspace/role are only refreshed when the
+// NextAuth jwt callback runs, so a removed member or a downgraded role would otherwise keep
+// its old access for the life of the session. A short TTL keeps this to one indexed
+// lookup per user/workspace per minute.
+const MEMBERSHIP_TTL_MS = 60_000;
+const MEMBERSHIP_CACHE_MAX = 10_000;
+const membershipCache = new Map<string, { role: WorkspaceRole | null; expiresAt: number }>();
+
+/** The user's current role in the workspace (null if not a member), cached for MEMBERSHIP_TTL_MS. */
+export function currentMembershipRole(userId: string, workspaceId: string, now = Date.now()): WorkspaceRole | null {
+  const key = `${userId}|${workspaceId}`;
+  const hit = membershipCache.get(key);
+  if (hit && hit.expiresAt > now) return hit.role;
+  const row = getDb().prepare("SELECT role FROM workspace_members WHERE user_id = ? AND workspace_id = ?")
+    .get(userId, workspaceId) as { role: string } | undefined;
+  const role = row && ROLE_LEVEL[row.role as WorkspaceRole] !== undefined ? row.role as WorkspaceRole : null;
+  if (membershipCache.size >= MEMBERSHIP_CACHE_MAX) membershipCache.clear();
+  membershipCache.set(key, { role, expiresAt: now + MEMBERSHIP_TTL_MS });
+  return role;
+}
+
+/** Drop cached memberships (all, or one user's) — call after changing workspace_members for an immediate effect. */
+export function invalidateMembershipCache(userId?: string): void {
+  if (!userId) { membershipCache.clear(); return; }
+  for (const key of membershipCache.keys()) if (key.startsWith(`${userId}|`)) membershipCache.delete(key);
 }
 
 export function requireWorkspace(req: NextApiRequest, res: NextApiResponse, minimum: WorkspaceRole = "viewer"): WorkspaceContext | null {
   const ctx = workspaceFromRequest(req);
+  // Any request acting as a user (browser session, or MCP on a user's behalf) is checked
+  // against the live membership table, and the stored role — not the header/JWT copy — wins.
+  if (ctx.userId) {
+    const role = currentMembershipRole(ctx.userId, ctx.workspaceId);
+    if (!role) {
+      res.status(403).json({ error: "You are no longer a member of this workspace" });
+      return null;
+    }
+    ctx.role = role;
+  }
   if (ROLE_LEVEL[ctx.role] < ROLE_LEVEL[minimum]) {
     res.status(403).json({ error: "Insufficient workspace permission", required_role: minimum });
     return null;
@@ -87,6 +125,19 @@ export function requireWorkspaceEntity(res: NextApiResponse, ctx: WorkspaceConte
   if (!WORKSPACE_TABLES.has(table)) throw new Error(`Unsupported workspace table: ${table}`);
   const found = getDb().prepare(`SELECT 1 FROM ${table} WHERE id = ? AND workspace_id = ?`).get(id, ctx.workspaceId);
   if (!found) { res.status(404).json({ error: "Resource not found" }); return false; }
+  return true;
+}
+
+/**
+ * True when every given template id (nulls/undefined ignored) is a string naming a template
+ * in this workspace. Guards foreign-key-by-id writes such as workflow step template_id(s).
+ */
+export function templatesBelongToWorkspace(ctx: WorkspaceContext, ids: unknown[]): boolean {
+  const lookup = getDb().prepare("SELECT 1 FROM templates WHERE id = ? AND workspace_id = ?");
+  for (const id of ids) {
+    if (id === null || id === undefined || id === "") continue;
+    if (typeof id !== "string" || !lookup.get(id, ctx.workspaceId)) return false;
+  }
   return true;
 }
 

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
-import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+import { requireWorkspace, requireWorkspaceEntity, templatesBelongToWorkspace } from "@/lib/workspace";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const ctx=requireWorkspace(req,res,"member"); if(!ctx)return;
@@ -17,6 +17,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     // email_body silently wiped email_subject (and vice versa).
     const body = req.body as Record<string, unknown>;
     const has = (k: string) => Object.prototype.hasOwnProperty.call(body, k);
+    if (has("template_id") && !templatesBelongToWorkspace(ctx, [body.template_id])) return res.status(400).json({ error: "Unknown template" });
     const sets: string[] = []; const params: unknown[] = [];
     const put = (col: string, val: unknown) => { sets.push(`${col} = ?`); params.push(val); };
     for (const col of ["step_type", "template_id", "delay_seconds", "step_order", "connect_note", "message_body", "email_subject", "email_body"]) {
