@@ -187,8 +187,19 @@ export async function fetchRecentPosts(client: VoyagerLike, entity: EntityRef, c
   const path = entity.kind === "company"
     ? `/voyager/api/feed/updates?companyUniversalName=${encodeURIComponent(entity.universalName)}&q=companyFeedByUniversalName&moduleKey=member-share&count=${count}&start=0`
     : `/voyager/api/feed/updates?profileId=${encodeURIComponent(entity.publicId)}&q=memberShareFeed&moduleKey=member-share&count=${count}&start=0`;
-  const json = await client.get(path, { normalized: true });
-  return json ? parseFeedUpdates(json).slice(0, count) : [];
+  try {
+    const json = await client.get(path, { normalized: true });
+    const posts = json ? parseFeedUpdates(json).slice(0, count) : [];
+    if (posts.length || !client.capturePage) return posts;
+  } catch (err) {
+    const name = err instanceof Error ? err.name : "";
+    if (!client.capturePage || name === "VoyagerBlockedError" || name === "VoyagerBudgetExceeded") throw err;
+  }
+  const pageUrl = entity.kind === "company"
+    ? `https://www.linkedin.com/company/${encodeURIComponent(entity.universalName)}/posts/?feedView=all`
+    : `https://www.linkedin.com/in/${encodeURIComponent(entity.publicId)}/recent-activity/all/`;
+  const bodies = await client.capturePage(pageUrl, { match: /linkedin\.com/, scrolls: 1 });
+  return activityUrnsIn(bodies).slice(0, count).map((urn) => ({ activityUrn: urn, text: "", postedAt: timeFromActivityUrn(urn), url: `https://www.linkedin.com/feed/update/${urn}/` }));
 }
 
 /**

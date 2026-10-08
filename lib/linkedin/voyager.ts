@@ -33,7 +33,23 @@ export class VoyagerClient {
   private async ensurePage(): Promise<Page> {
     if (this.page) return this.page;
     const page = await this.ctx.newPage();
-    await page.goto("https://www.linkedin.com/feed/", { waitUntil: "domcontentloaded", timeout: 25000 });
+    let status = 0;
+    page.on("response", (resp) => {
+      if (resp.url().includes("linkedin.com/feed")) status = resp.status();
+    });
+    try {
+      const nav = await page.goto("https://www.linkedin.com/feed/", { waitUntil: "domcontentloaded", timeout: 25000 });
+      status = nav?.status() || status;
+    } catch (err) {
+      await page.close().catch(() => {});
+      if (status === 429 || status === 999 || status === 401 || status === 403) throw new VoyagerBlockedError(status);
+      throw err;
+    }
+    if (status === 429 || status === 999 || status === 401 || status === 403) {
+      await page.close().catch(() => {});
+      throw new VoyagerBlockedError(status);
+    }
+    await page.waitForTimeout(1200);
     if (/\/(login|checkpoint|authwall)/.test(page.url())) {
       await page.close();
       throw new VoyagerBlockedError(401);
@@ -45,23 +61,57 @@ export class VoyagerClient {
     return page;
   }
 
+  private async resetPage(): Promise<void> {
+    if (this.page) { try { await this.page.close(); } catch { /* already closed */ } }
+    this.page = null;
+  }
+
+  /** Read a same-origin Voyager path from the open LinkedIn page. A thrown fetch becomes status 0. */
+  private async read(page: Page, path: string, accept: string): Promise<{ status: number; body: string }> {
+    return page.evaluate(async ({ path, csrf, accept }: { path: string; csrf: string; accept: string }) => {
+      const regs = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+      await Promise.all(regs.map((r) => r.unregister()));
+      const headers: Record<string, string> = { accept, "csrf-token": csrf, "x-restli-protocol-version": "2.0.0" };
+      const viaXhr = () => new Promise<{ status: number; body: string }>((resolve) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("GET", path, true);
+        xhr.withCredentials = true;
+        for (const [key, value] of Object.entries(headers)) xhr.setRequestHeader(key, value);
+        xhr.onload = () => resolve({ status: xhr.status, body: xhr.status === 200 ? xhr.responseText : "" });
+        xhr.onerror = () => resolve({ status: 0, body: "" });
+        xhr.send();
+      });
+      try {
+        const r = await fetch(path, { headers, credentials: "include" });
+        return { status: r.status, body: r.status === 200 ? await r.text() : "" };
+      } catch {
+        return viaXhr();
+      }
+    }, { path, csrf: this.csrf, accept });
+  }
+
   /** GET a Voyager path (starting with /voyager/api/). Returns parsed JSON, or null on 404/400. */
   async get(path: string, opts: VoyagerGetOptions = {}): Promise<unknown | null> {
     const kind = opts.kind ?? "voyager_read";
     if (!consume(this.accountId, kind)) throw new VoyagerBudgetExceeded(kind);
-    const page = await this.ensurePage();
-    const wait = this.lastAt + MIN_GAP_MS + Math.random() * (MAX_GAP_MS - MIN_GAP_MS) - Date.now();
-    if (wait > 0) await this.sleep(wait);
-    this.lastAt = Date.now();
-    this.requests++;
-    const result = await page.evaluate(
-      async ({ url, csrf, accept }: { url: string; csrf: string; accept: string }) => {
-        const r = await fetch(url, { headers: { accept, "csrf-token": csrf, "x-restli-protocol-version": "2.0.0" }, credentials: "include" });
-        return { status: r.status, body: r.status === 200 ? await r.text() : "" };
-      },
-      { url: `https://www.linkedin.com${path}`, csrf: this.csrf, accept: opts.normalized ? "application/vnd.linkedin.normalized+json+2.1" : "application/json" },
-    );
+    const accept = opts.normalized ? "application/vnd.linkedin.normalized+json+2.1" : "application/json";
+    let result = { status: 0, body: "" };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const page = await this.ensurePage();
+      const wait = this.lastAt + MIN_GAP_MS + Math.random() * (MAX_GAP_MS - MIN_GAP_MS) - Date.now();
+      if (wait > 0) await this.sleep(wait);
+      this.lastAt = Date.now();
+      this.requests++;
+      try {
+        result = await this.read(page, path, accept);
+      } catch {
+        result = { status: 0, body: "" };
+      }
+      if (result.status !== 0) break;
+      await this.resetPage();
+    }
     if (result.status === 429 || result.status === 401 || result.status === 403 || result.status === 999) throw new VoyagerBlockedError(result.status);
+    if (result.status === 0) throw new Error("LinkedIn did not answer. Preview the leads again in a moment.");
     if (result.status !== 200 || !result.body) return null;
     try { return JSON.parse(result.body); } catch { return null; }
   }

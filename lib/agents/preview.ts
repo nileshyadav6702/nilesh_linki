@@ -5,7 +5,7 @@ import { listSources, type Agent } from "@/lib/agents/store";
 import { scoreNewLeads } from "@/lib/agents/fit";
 import { runSource } from "@/lib/signals/engine";
 import { SOURCE_TYPES } from "@/lib/signals/types";
-import { discoveryPausedUntil } from "@/lib/linkedin/budget";
+import { discoveryPausedUntil, pauseDiscovery } from "@/lib/linkedin/budget";
 
 /**
  * Wizard "Preview": run the agent's sources once, now, until a small pool of leads exists,
@@ -14,6 +14,8 @@ import { discoveryPausedUntil } from "@/lib/linkedin/budget";
  */
 
 const POOL = 15;
+/** The sample card shows five people. Stop once that many are in hand. */
+const SAMPLE = 5;
 
 export interface PreviewLead {
   id: string; full_name: string | null; headline: string | null; title: string | null; company: string | null; location: string | null;
@@ -21,14 +23,15 @@ export interface PreviewLead {
   industry: string | null; employee_count: number | null; signal_title: string | null; signal_type: string | null;
 }
 
-export function previewLeads(db: Database.Database, agentId: string, limit = 5): PreviewLead[] {
+export function previewLeads(db: Database.Database, agentId: string, limit = 5, statuses: string[] = ["new", "qualified"]): PreviewLead[] {
+  const marks = statuses.map(() => "?").join(",");
   return db.prepare(`SELECT t.id, t.full_name, t.headline, t.title, t.company, t.location, t.linkedin_url, t.profile_image_url,
       t.lead_score, t.fit_verdict, t.fit_reason, c.industry, c.employee_count,
       (SELECT s.title FROM signals s WHERE s.target_id = t.id ORDER BY s.occurred_at DESC LIMIT 1) signal_title,
       (SELECT s.type FROM signals s WHERE s.target_id = t.id ORDER BY s.occurred_at DESC LIMIT 1) signal_type
     FROM targets t LEFT JOIN companies c ON c.id = t.company_id
-    WHERE t.agent_id = ? AND t.agent_status IN ('new','qualified')
-    ORDER BY (t.agent_status = 'qualified') DESC, COALESCE(t.lead_score, t.intent_score) DESC LIMIT ?`).all(agentId, limit) as PreviewLead[];
+    WHERE t.agent_id = ? AND t.agent_status IN (${marks})
+    ORDER BY (t.agent_status = 'qualified') DESC, COALESCE(t.lead_score, t.intent_score) DESC LIMIT ?`).all(agentId, ...statuses, limit) as PreviewLead[];
 }
 
 export interface PreviewSummary {
@@ -67,29 +70,43 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
     if (r.error) result.errors.push(`${s.source_type}: ${r.error}`);
   }
 
-  const linkedinSources = sources.filter((x) => SOURCE_TYPES[x.source_type].needsLinkedIn && x.source_type !== "lookalike" && x.source_type !== "job_change");
-  if (linkedinSources.length && have() < POOL) {
+  // Competitor pages are read from the feed, so they still work after the daily search allowance is used up.
+  const linkedinSources = sources
+    .filter((x) => SOURCE_TYPES[x.source_type].needsLinkedIn && x.source_type !== "lookalike" && x.source_type !== "job_change")
+    .sort((a, b) => Number(b.source_type === "competitor_engagement") - Number(a.source_type === "competitor_engagement"));
+  if (linkedinSources.length && have() < SAMPLE) {
     const account = agent.linkedin_account_id ? db.prepare("SELECT is_authenticated FROM accounts WHERE id = ?").get(agent.linkedin_account_id) as { is_authenticated: number } | undefined : undefined;
+    const paused = agent.linkedin_account_id ? discoveryPausedUntil(agent.linkedin_account_id) : null;
     if (!account?.is_authenticated) result.linkedin = "no_account";
-    else if (discoveryPausedUntil(agent.linkedin_account_id!)) result.linkedin = "paused";
-    else {
+    else if (paused) {
+      result.linkedin = "paused";
+      result.errors.push(/HTTP 401|HTTP 403/.test(paused.reason)
+        ? "LinkedIn needs you to connect the account again before it can find people."
+        : "LinkedIn is limiting this account right now. Wait a little, then preview the leads again.");
+    } else {
       // Loaded lazily: the browser stack is only needed when LinkedIn sources run.
       const { getSessionContext, saveSessionState } = await import("@/lib/linkedin/session");
-      const { VoyagerClient } = await import("@/lib/linkedin/voyager");
+      const { VoyagerClient, VoyagerBlockedError } = await import("@/lib/linkedin/voyager");
       const ctx = await getSessionContext(agent.linkedin_account_id!);
       const client = new VoyagerClient(ctx, agent.linkedin_account_id!);
       result.linkedin = "ok";
       try {
         for (const s of linkedinSources) {
-          if (have() >= POOL || Date.now() > deadline) break;
+          if (have() >= SAMPLE || Date.now() > deadline) break;
           try {
-            const r = await runSource(s, { voyager: client, browser: ctx, maxNew: POOL - have() });
+            const r = await runSource(s, { voyager: client, browser: ctx, maxNew: SAMPLE - have() });
             filtered += r.filtered;
             result.ran.push(s.source_type);
             if (r.error) result.errors.push(`${s.source_type}: ${r.error}`);
           } catch (err) {
+            if (err instanceof VoyagerBlockedError) {
+              if (err.status === 429 || err.status === 999) pauseDiscovery(agent.linkedin_account_id!, err.message, 1);
+              result.errors.push(err.status === 401 || err.status === 403
+                ? "LinkedIn needs you to connect the account again before it can find people."
+                : "LinkedIn is limiting this account right now. Wait a little, then preview the leads again.");
+              break;
+            }
             result.errors.push(`${s.source_type}: ${err instanceof Error ? err.message : String(err)}`);
-            break; // budget or LinkedIn pushback: stop, keep what we have
           }
         }
       } finally {
@@ -100,8 +117,9 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
   }
 
   const icp = agent.icp_id ? getIcp(agent.icp_id, agent.workspace_id) : getLatestIcp(agent.workspace_id);
-  await scoreNewLeads(db, agent, icp?.data ?? null, icp?.id ?? null, POOL);
+  await scoreNewLeads(db, agent, icp?.data ?? null, icp?.id ?? null, SAMPLE);
   result.leads = previewLeads(db, agent.id);
+  if (!result.leads.length) result.leads = previewLeads(db, agent.id, SAMPLE, ["new", "qualified", "disqualified"]);
   result.summary = previewSummary(db, agent.id, filtered);
   return result;
 }
