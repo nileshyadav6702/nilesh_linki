@@ -47,8 +47,11 @@ export async function draftIcpFromWebsite(workspaceId: string, websiteUrl: strin
     purpose: "icp_extract",
     temperature: 0.2,
     instructions: [
-      "Read the company's website pages under data.pages and work out who this company sells to.",
-      "Describe the offer in one sentence, its value props and the pain points it solves.",
+      "Read the company's website pages under data.pages and work out who this company is and who it sells to.",
+      "company_industry is the seller's own industry. industries are the industries of the buyers.",
+      "offer is the company description and value proposition in 2-4 sentences. value_props are distinct product features. social_proof are customers, metrics, or awards stated on the site; leave it empty if the site states none. language is the language the site is written in.",
+      "company_types are the kinds of companies they sell to, such as Startup, SMB, Mid-market, or Enterprise. company_sizes and geographies describe those buyers.",
+      "pain_points are the customer problems the product addresses.",
       "Define 2-4 buyer personas with realistic LinkedIn job titles (as people write them on LinkedIn), seniority and departments.",
       "List direct competitors you can infer from the site or that are well known in this exact category; include their LinkedIn company page URL only if you are confident of it, else null.",
       "keywords: 8-20 short phrases buyers would post or comment about on LinkedIn (topics, not the company's own brand).",

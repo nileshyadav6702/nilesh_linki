@@ -3,7 +3,8 @@ import type { Icp } from "@/lib/icp/schema";
 import { Field, fromList, ghostBtn, inputCls, textareaCls, toList } from "@/components/agents/ui";
 
 export const EMPTY_ICP: Icp = {
-  company_name: "", offer: "", value_props: [], pain_points: [], industries: [], company_sizes: [], geographies: [],
+  company_name: "", company_industry: "", offer: "", value_props: [], social_proof: [], language: "English",
+  pain_points: [], industries: [], company_sizes: [], company_types: [], geographies: [],
   personas: [], competitors: [], keywords: [], exclusions: [], sales_nav_keywords: "",
 };
 

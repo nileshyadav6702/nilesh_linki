@@ -34,10 +34,10 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
   );
 }
 
-export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
+export function Field({ label, hint, required, children }: { label: string; hint?: ReactNode; required?: boolean; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-[13px] font-medium text-base-content/70">{label}</span>
+      <span className="text-[13px] font-medium text-base-content/70">{label}{required && <span className="text-primary"> *</span>}</span>
       {children}
       {hint && <span className="block text-xs text-base-content/45">{hint}</span>}
     </label>
