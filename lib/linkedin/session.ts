@@ -19,6 +19,10 @@ const lastUsedAt: Map<string, number> = new Map();
 
 const HEADLESS = process.env.HEADLESS !== "false";
 const CHROMIUM_PATH = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+// Should match where the accounts' traffic comes from (the IP's region): a browser clock in
+// New York on an Indian IP is a risk signal to LinkedIn. Changing it is a fingerprint change,
+// so set it before the next login, not under a live session.
+const BROWSER_TIMEZONE = process.env.LINKEDIN_BROWSER_TIMEZONE || "America/New_York";
 
 const LAUNCH_ARGS = [
   "--no-sandbox",
@@ -40,7 +44,7 @@ export function contextOptions(storageState?: object) {
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     locale: "en-US",
-    timezoneId: "America/New_York",
+    timezoneId: BROWSER_TIMEZONE,
     permissions: ["clipboard-read", "clipboard-write"] as ("clipboard-read" | "clipboard-write")[],
   };
 }
@@ -226,13 +230,8 @@ export async function authenticateAccount(accountId: string): Promise<void> {
   });
 
   try {
-    const ctx = await visibleBrowser.newContext({
-      viewport: { width: 1440, height: 900 },
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      locale: "en-US",
-      timezoneId: "America/New_York",
-    });
+    // Same fingerprint as runtime, so the session is not born under a different one.
+    const ctx = await visibleBrowser.newContext(contextOptions());
 
     const page = await ctx.newPage();
     await page.goto("https://www.linkedin.com/login");

@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import { getDb } from "@/lib/db";
 import { getIcp, getLatestIcp } from "@/lib/icp/store";
-import { listSources, type Agent } from "@/lib/agents/store";
+import { listSources, type Agent, type AgentSource } from "@/lib/agents/store";
 import { scoreNewLeads } from "@/lib/agents/fit";
 import { runSource } from "@/lib/signals/engine";
 import { SOURCE_TYPES } from "@/lib/signals/types";
@@ -45,7 +45,7 @@ export interface PreviewSummary {
   reasons: string[];
 }
 
-export interface PreviewResult { leads: PreviewLead[]; ran: string[]; errors: string[]; linkedin: "ok" | "no_account" | "paused" | "skipped"; summary: PreviewSummary }
+export interface PreviewResult { leads: PreviewLead[]; ran: string[]; errors: string[]; linkedin: "ok" | "no_account" | "paused" | "busy" | "skipped"; summary: PreviewSummary }
 
 export function previewSummary(db: Database.Database, agentId: string, filtered: number): PreviewSummary {
   const counts = db.prepare("SELECT COUNT(*) found, SUM(agent_status = 'disqualified') not_a_fit FROM targets WHERE agent_id = ?").get(agentId) as { found: number; not_a_fit: number | null };
@@ -82,36 +82,22 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
       result.linkedin = "paused";
       result.errors.push(/HTTP 401|HTTP 403/.test(paused.reason)
         ? "LinkedIn needs you to connect the account again before it can find people."
-        : "LinkedIn is limiting this account right now. Wait a little, then preview the leads again.");
+        : `LinkedIn is limiting this account, so finding people is paused until ${new Date(paused.until).toUTCString()}. Preview the leads again after that.`);
     } else {
       // Loaded lazily: the browser stack is only needed when LinkedIn sources run.
-      const { getSessionContext, saveSessionState } = await import("@/lib/linkedin/session");
-      const { VoyagerClient, VoyagerBlockedError } = await import("@/lib/linkedin/voyager");
-      const ctx = await getSessionContext(agent.linkedin_account_id!);
-      const client = new VoyagerClient(ctx, agent.linkedin_account_id!);
-      result.linkedin = "ok";
-      try {
-        for (const s of linkedinSources) {
-          if (have() >= SAMPLE || Date.now() > deadline) break;
-          try {
-            const r = await runSource(s, { voyager: client, browser: ctx, maxNew: SAMPLE - have() });
-            filtered += r.filtered;
-            result.ran.push(s.source_type);
-            if (r.error) result.errors.push(`${s.source_type}: ${r.error}`);
-          } catch (err) {
-            if (err instanceof VoyagerBlockedError) {
-              if (err.status === 429 || err.status === 999) pauseDiscovery(agent.linkedin_account_id!, err.message, 1);
-              result.errors.push(err.status === 401 || err.status === 403
-                ? "LinkedIn needs you to connect the account again before it can find people."
-                : "LinkedIn is limiting this account right now. Wait a little, then preview the leads again.");
-              break;
-            }
-            result.errors.push(`${s.source_type}: ${err instanceof Error ? err.message : String(err)}`);
-          }
+      const { claimAccount } = await import("@/lib/linkedin/campaign/account-workers");
+      // Never drive the session alongside the runner (outreach, imports, discovery): parallel
+      // traffic on one account is what gets it rate-limited. Claimed before any await below.
+      const release = claimAccount(agent.linkedin_account_id!);
+      if (!release) {
+        result.linkedin = "busy";
+        result.errors.push("This LinkedIn account is busy with other work right now. Preview the leads again in a few minutes.");
+      } else {
+        try {
+          filtered += await previewLinkedInSources(agent, linkedinSources, result, have, deadline);
+        } finally {
+          release();
         }
-      } finally {
-        await client.close();
-        await saveSessionState(agent.linkedin_account_id!).catch(() => {});
       }
     }
   }
@@ -123,6 +109,42 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
   if (!result.leads.length) result.leads = previewLeads(db, agent.id, SAMPLE, ["new", "qualified", "disqualified"]);
   result.summary = previewSummary(db, agent.id, filtered);
   return result;
+}
+
+/** Run the LinkedIn sources through the account's session until the sample is full. Returns how many leads were filtered. */
+async function previewLinkedInSources(agent: Agent, sources: AgentSource[], result: PreviewResult, have: () => number, deadline: number): Promise<number> {
+  const { getSessionContext, saveSessionState } = await import("@/lib/linkedin/session");
+  const { VoyagerClient, VoyagerBlockedError } = await import("@/lib/linkedin/voyager");
+  const ctx = await getSessionContext(agent.linkedin_account_id!);
+  const client = new VoyagerClient(ctx, agent.linkedin_account_id!);
+  result.linkedin = "ok";
+  let filtered = 0;
+  try {
+    for (const s of sources) {
+      if (have() >= SAMPLE || Date.now() > deadline) break;
+      try {
+        const r = await runSource(s, { voyager: client, browser: ctx, maxNew: SAMPLE - have() });
+        filtered += r.filtered;
+        result.ran.push(s.source_type);
+        if (r.error) result.errors.push(`${s.source_type}: ${r.error}`);
+      } catch (err) {
+        if (err instanceof VoyagerBlockedError) {
+          // Same 24h pause as the runner's discovery: a shorter one let the runner hit the
+          // account again while LinkedIn was still limiting it.
+          if (err.status === 429 || err.status === 999) pauseDiscovery(agent.linkedin_account_id!, err.message);
+          result.errors.push(err.status === 401 || err.status === 403
+            ? "LinkedIn needs you to connect the account again before it can find people."
+            : "LinkedIn is limiting this account, so finding people is paused for 24 hours to let it recover.");
+          break;
+        }
+        result.errors.push(`${s.source_type}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  } finally {
+    await client.close();
+    await saveSessionState(agent.linkedin_account_id!).catch(() => {});
+  }
+  return filtered;
 }
 
 /** Reject a preview lead: skip it (the reason helps tune scoring) and return the refreshed top five. */

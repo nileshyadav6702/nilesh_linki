@@ -61,6 +61,18 @@ function track<T>(accountId: string, promise: Promise<T>): Promise<T> {
   return promise;
 }
 
+/**
+ * Claim an account's session from outside the runner (the wizard preview), so no worker unit
+ * starts on it meanwhile. Returns a release function, or null when the account is already busy.
+ * Check and claim happen in one synchronous step, so they cannot interleave with a unit start.
+ */
+export function claimAccount(accountId: string): (() => void) | null {
+  if (isAccountBusy(accountId)) return null;
+  let release!: () => void;
+  void track(accountId, new Promise<void>((resolve) => { release = resolve; }));
+  return release;
+}
+
 export interface AccountPhase {
   label: string;
   timeoutMs: number;

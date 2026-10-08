@@ -15,6 +15,20 @@
  */
 import type { BrowserContext, Page } from "playwright";
 
+/**
+ * Why a Sales Navigator page yielded no data. Only a redirect to login/checkpoint/authwall
+ * means the session died (and the "re-authentication" wording makes callers log the account
+ * out). Anything else — no Sales Navigator seat, an upsell page, a slow load — must keep the
+ * session: a false logout forces a re-login through LinkedIn's checkpoint, which itself gets
+ * the account rate-limited.
+ */
+export function noDataError(finalUrl: string, what: string): Error {
+  if (/\/(login|checkpoint|authwall)/.test(finalUrl)) {
+    return new Error(`No data intercepted from ${what} — session may need re-authentication`);
+  }
+  return new Error(`Sales Navigator returned no ${what} results (ended on ${finalUrl}). The account may not have Sales Navigator, or LinkedIn was slow. The session was kept.`);
+}
+
 export interface ScrapedProfile {
   salesNavUrn: string;
   salesNavUrl: string;
@@ -305,7 +319,7 @@ export async function scrapeNavigatorList(
     const finalUrl = page.url();
     console.error(`[scraper] no intercept after 15s. Final URL: ${finalUrl}`);
     await page.close();
-    throw new Error("No data intercepted from Sales Nav — session may need re-authentication");
+    throw noDataError(finalUrl, "Sales Nav list");
   }
 
   knownTotal = firstData.paging?.total ?? 0;
@@ -393,8 +407,10 @@ export async function scrapeSavedSearch(
   // First page of the window
   const firstData = await waitForIntercept(buildUrl(startPage), 15000);
   if (!firstData) {
+    const finalUrl = page.url();
+    console.error(`[scraper:saved-search] no intercept after 15s. Final URL: ${finalUrl}`);
     await page.close();
-    throw new Error("No data intercepted from saved search — session may need re-authentication");
+    throw noDataError(finalUrl, "saved search");
   }
 
   knownTotal = firstData.paging?.total ?? 0;
