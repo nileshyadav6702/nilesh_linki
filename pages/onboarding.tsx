@@ -25,7 +25,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   return { props: {} };
 };
 
-const STEPS = ["Your website", "Find leads", "Who to reach", "How to reach them", "Review"] as const;
+const STEPS = ["Your website", "LinkedIn", "Find leads", "Who to reach", "How to reach them", "Review"] as const;
 
 const INITIAL: WizardState = {
   name: "", website: "", icp: EMPTY_ICP, icpId: null, sourceKind: null, sources: [], listIds: [], importUrl: "", minScore: 55, agentId: null,
@@ -34,8 +34,8 @@ const INITIAL: WizardState = {
 
 const BEATS = [
   { title: "Your website", text: "We read it and draft who you sell to." },
-  { title: "Find people", text: "Choose where leads come from. The agent keeps looking." },
-  { title: "You approve the send", text: "LinkedIn, email, or both. Nothing goes out until you say so." },
+  { title: "Your LinkedIn", text: "Sign in so the agent can find people and send from your account." },
+  { title: "You approve the send", text: "Nothing goes out until you say so." },
 ];
 
 async function api(url: string, method: string, body?: unknown) {
@@ -57,6 +57,14 @@ export default function Onboarding() {
   const [startOutreach, setStartOutreach] = useState(false);
   const [readFor, setReadFor] = useState("");
   const [readPages, setReadPages] = useState<string[]>([]);
+  const [liAccountId, setLiAccountId] = useState<string | null>(null);
+  const [liEmail, setLiEmail] = useState("");
+  const [liPassword, setLiPassword] = useState("");
+  const [liCode, setLiCode] = useState("");
+  const [liStage, setLiStage] = useState<"creds" | "code" | "approve" | "cookies">("creds");
+  const [liMsg, setLiMsg] = useState("");
+  const [liAt, setLiAt] = useState("");
+  const [liCookie, setLiCookie] = useState("");
   const set = (p: Partial<WizardState>) => setS((prev) => ({ ...prev, ...p }));
   const canSend = !!(s.outreach.linkedin_account_id || s.outreach.email_account_id);
   const siteRead = readFor !== "" && readFor === s.website.trim();
@@ -68,7 +76,13 @@ export default function Onboarding() {
       fetch("/api/email-accounts").then((r) => r.json()).catch(() => []),
     ]).then(([accounts, emails]) => {
       if (!alive) return;
-      const li = (accounts as Array<{ id: string; is_authenticated: number }>).find((a) => a.is_authenticated);
+      const rows = accounts as Array<{ id: string; email?: string | null; is_authenticated: number }>;
+      const li = rows.find((a) => a.is_authenticated) ?? null;
+      const existing = li ?? rows[0] ?? null;
+      if (existing) {
+        setLiAccountId(existing.id);
+        setLiEmail(existing.email ?? "");
+      }
       const em = (emails as Array<{ id: string }>)[0];
       setHasLinkedIn(!!li);
       setHasEmail(!!em);
@@ -97,19 +111,81 @@ export default function Onboarding() {
     } finally { setBusy(false); }
   }
 
+  function markLinkedIn(id: string) {
+    setHasLinkedIn(true);
+    setLiPassword("");
+    set({ outreach: { ...s.outreach, linkedin_account_id: id, channel: s.outreach.email_account_id ? "multi" : "linkedin" } });
+  }
+
+  async function connectLinkedIn() {
+    const email = liEmail.trim();
+    if (liStage === "creds" && (!email || !liPassword)) return toast.error("Enter the LinkedIn email and password");
+    if (liStage === "code" && !liCode.trim()) return toast.error("Enter the verification code");
+    if (liStage === "cookies" && !liAt.trim()) return toast.error("Paste the li_at cookie");
+    setBusy(true);
+    try {
+      let id = liAccountId;
+      if (!id) {
+        try {
+          id = (await api("/api/accounts", "POST", { name: email.split("@")[0] || "LinkedIn", email })).id as string;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "";
+          if (!/already exists/i.test(message)) throw err;
+          const rows = await api("/api/accounts", "GET") as Array<{ id: string; email?: string | null }>;
+          id = rows.find((a) => (a.email ?? "").toLowerCase() === email.toLowerCase())?.id ?? null;
+          if (!id) throw err;
+        }
+        setLiAccountId(id);
+      }
+      if (liStage === "cookies") {
+        await api(`/api/accounts/${id}/authenticate`, "POST", { li_at: liAt.trim(), document_cookie: liCookie });
+        markLinkedIn(id);
+        toast.success("LinkedIn connected");
+        return;
+      }
+      const body = liStage === "creds"
+        ? { step: "start", email, password: liPassword }
+        : liStage === "approve"
+          ? { step: "await" }
+          : { step: "verify", code: liCode.trim() };
+      const data = await api(`/api/accounts/${id}/login`, "POST", body) as { status?: string; kind?: string; message?: string };
+      if (data.status === "authenticated") {
+        markLinkedIn(id);
+        toast.success("LinkedIn connected");
+      } else if (data.status === "challenge" && data.kind === "captcha") {
+        toast.error(data.message ?? "LinkedIn asked for a captcha. Paste the session cookie instead.");
+        setLiStage("cookies");
+      } else if (data.status === "challenge") {
+        setLiMsg(data.message ?? "");
+        if (data.kind === "app") {
+          if (liStage === "approve") toast.error("Still waiting. Approve the request in the LinkedIn app, then try again.");
+          setLiStage("approve");
+        } else {
+          setLiStage("code");
+          setLiCode("");
+        }
+      } else {
+        throw new Error(data.message ?? "LinkedIn login failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not connect LinkedIn");
+    } finally { setBusy(false); }
+  }
+
   function next() {
     if (step === 1) {
       if (!s.website.trim()) return toast.error("Enter your website");
       if (!siteRead) return toast.error("Read your website before continuing");
     }
-    if (step === 2) {
+    if (step === 2 && !s.outreach.linkedin_account_id) return toast.error("Connect LinkedIn before continuing");
+    if (step === 3) {
       const problem = sourcesReady(s);
       if (problem) return toast.error(problem);
     }
-    if (step === 3 && !s.icp.personas.some((p) => p.titles.length)) {
+    if (step === 4 && !s.icp.personas.some((p) => p.titles.length)) {
       return toast.error("Add at least one job title to target");
     }
-    if (step === 4) {
+    if (step === 5) {
       if (!sendersLoaded) return toast.error("Still checking your senders");
       const problem = outreachReady(s.outreach);
       if (problem && (hasLinkedIn || hasEmail)) return toast.error(problem);
@@ -216,9 +292,53 @@ export default function Onboarding() {
                 )}
               </div>
             )}
-            {step === 2 && <SourcesStep state={s} set={set} hasLinkedIn={hasLinkedIn} />}
-            {step === 3 && <TargetStep state={s} set={set} />}
-            {step === 4 && (
+            {step === 2 && (
+              <div className="mx-auto max-w-xl space-y-5">
+                <div className="text-center">
+                  <h2 className="text-2xl font-semibold tracking-[-.02em]">Connect LinkedIn</h2>
+                  <p className="mt-1 text-sm text-base-content/55">Sign in with the account this agent should use. LinkedIn may ask for a code or an approval in the mobile app.</p>
+                </div>
+                {s.outreach.linkedin_account_id ? (
+                  <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-4">
+                    <p className="text-sm font-medium text-base-content">LinkedIn is connected{liEmail ? ` as ${liEmail}` : ""}.</p>
+                    <p className="mt-1 text-sm text-base-content/55">The agent will find people and send from this account.</p>
+                  </div>
+                ) : liStage === "cookies" ? (
+                  <div className="space-y-4">
+                    <Field label="li_at cookie" hint="From linkedin.com, signed in, DevTools → Application → Cookies.">
+                      <input className={inputCls} value={liAt} onChange={(e) => setLiAt(e.target.value)} autoComplete="off" />
+                    </Field>
+                    <Field label="document.cookie" hint="Optional. Paste the console output if you have it.">
+                      <textarea className={`${inputCls} h-24 py-2 font-mono text-xs`} value={liCookie} onChange={(e) => setLiCookie(e.target.value)} />
+                    </Field>
+                    <button type="button" className="text-sm text-base-content/55 hover:text-base-content" onClick={() => setLiStage("creds")}>Use email and password instead</button>
+                  </div>
+                ) : liStage === "approve" ? (
+                  <p className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-4 py-3 text-sm text-base-content/70">{liMsg || "Approve the sign-in request in the LinkedIn app, then continue."}</p>
+                ) : liStage === "code" ? (
+                  <div className="space-y-4">
+                    {liMsg && <p className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-4 py-3 text-sm text-base-content/70">{liMsg}</p>}
+                    <Field label="Verification code">
+                      <input className={inputCls} inputMode="numeric" autoComplete="one-time-code" placeholder="123456" value={liCode} onChange={(e) => setLiCode(e.target.value)} autoFocus />
+                    </Field>
+                    <button type="button" className="text-sm text-base-content/55 hover:text-base-content" onClick={() => setLiStage("approve")}>It asked me to approve in the app</button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Field label="LinkedIn email">
+                      <input className={inputCls} type="email" autoComplete="off" placeholder="you@company.com" value={liEmail} onChange={(e) => setLiEmail(e.target.value)} autoFocus />
+                    </Field>
+                    <Field label="LinkedIn password">
+                      <input className={inputCls} type="password" autoComplete="off" value={liPassword} onChange={(e) => setLiPassword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void connectLinkedIn(); } }} />
+                    </Field>
+                    <button type="button" className="text-sm text-base-content/55 hover:text-base-content" onClick={() => setLiStage("cookies")}>Paste a session cookie instead</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {step === 3 && <SourcesStep state={s} set={set} hasLinkedIn={hasLinkedIn} />}
+            {step === 4 && <TargetStep state={s} set={set} />}
+            {step === 5 && (
               <div className="space-y-4">
                 {!hasLinkedIn && !hasEmail && (
                   <p className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-4 py-3 text-sm text-base-content/70">No sender is connected yet. You can still start the agent. It will find leads, and outreach stays off until you add LinkedIn or email.</p>
@@ -226,7 +346,7 @@ export default function Onboarding() {
                 <OutreachStep state={s} set={set} />
               </div>
             )}
-            {step === 5 && (
+            {step === 6 && (
               <div className="space-y-4">
                 {!canSend && <p className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-4 py-3 text-sm text-base-content/70">Outreach stays off until a sender is attached. You can add one from the agent after this.</p>}
                 <ReviewStep state={s} startOutreach={canSend && startOutreach} setStartOutreach={(v) => {
@@ -244,9 +364,11 @@ export default function Onboarding() {
               <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setStep(step - 1)}><RiArrowLeftSLine size={18} /> Back</button>
               {step === 1 && !siteRead
                 ? <button type="button" className={primaryBtn} disabled={busy} onClick={readSite}>{busy ? "Reading your site…" : "Read site"} <RiArrowRightSLine size={18} /></button>
-                : step < 5
-                  ? <button type="button" className={primaryBtn} disabled={busy} onClick={next}>Continue <RiArrowRightSLine size={18} /></button>
-                  : <button type="button" className={primaryBtn} disabled={busy} onClick={launch}><RiRocket2Line size={16} /> {busy ? "Starting…" : "Start the agent"}</button>}
+                : step === 2 && !s.outreach.linkedin_account_id
+                  ? <button type="button" className={primaryBtn} disabled={busy} onClick={connectLinkedIn}>{busy ? "Connecting…" : liStage === "code" ? "Verify code" : liStage === "approve" ? "I approved it" : liStage === "cookies" ? "Save session" : "Connect LinkedIn"}</button>
+                  : step < 6
+                    ? <button type="button" className={primaryBtn} disabled={busy} onClick={next}>Continue <RiArrowRightSLine size={18} /></button>
+                    : <button type="button" className={primaryBtn} disabled={busy} onClick={launch}><RiRocket2Line size={16} /> {busy ? "Starting…" : "Start the agent"}</button>}
             </div>
           </div>
         )}
