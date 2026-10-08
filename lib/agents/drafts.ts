@@ -31,15 +31,17 @@ export interface SequenceStep {
   /** 1-based position among this track's message/email steps; null for non-writing steps. */
   position: number | null;
   channel: Channel | null;
+  /** The same text goes to everyone (set in the Campaign tab), so the agent writes no draft for it. */
+  fixed?: boolean;
   label: string;
 }
 
-const STEP_LABEL: Record<string, string> = { visit: "Visit profile", connect: "Connection request", message: "LinkedIn message", email: "Email", sales_inmail: "InMail", delay: "Wait" };
+const STEP_LABEL: Record<string, string> = { visit: "Visit profile", connect: "Connection request", message: "LinkedIn message", email: "Email", sales_inmail: "InMail", delay: "Wait", like_posts: "Like posts", voice: "Voice message" };
 
 export function sequenceSteps(db: Database.Database, workflowId: string | null): SequenceStep[] {
   if (!workflowId) return [];
-  const rows = db.prepare(`SELECT id, track, step_type, step_order, delay_seconds FROM workflow_steps
-    WHERE workflow_id = ? AND COALESCE(enabled, 1) = 1 ORDER BY track DESC, step_order`).all(workflowId) as Array<{ id: string; track: string; step_type: string; step_order: number; delay_seconds: number | null }>;
+  const rows = db.prepare(`SELECT id, track, step_type, step_order, delay_seconds, send_mode FROM workflow_steps
+    WHERE workflow_id = ? AND COALESCE(enabled, 1) = 1 ORDER BY track DESC, step_order`).all(workflowId) as Array<{ id: string; track: string; step_type: string; step_order: number; delay_seconds: number | null; send_mode: string | null }>;
   const out: SequenceStep[] = [];
   const day: Record<string, number> = { linkedin: 0, email: 0 };
   const pos: Record<string, number> = { linkedin: 0, email: 0 };
@@ -53,6 +55,7 @@ export function sequenceSteps(db: Database.Database, workflowId: string | null):
       position: writes ? pos[track] : null,
       channel: r.step_type === "message" ? "linkedin_message" : r.step_type === "email" ? "email" : null,
       label: STEP_LABEL[r.step_type] ?? r.step_type,
+      fixed: r.send_mode === "fixed",
     });
   }
   // Interleave the two parallel tracks by expected day, LinkedIn first on ties.
@@ -61,9 +64,9 @@ export function sequenceSteps(db: Database.Database, workflowId: string | null):
 
 /** The steps the AI writes for this lead: message/email steps on channels the lead is reachable on. */
 export function draftableSteps(db: Database.Database, agent: Agent, target: { linkedin_url: string | null; email: string | null }): SequenceStep[] {
-  return sequenceSteps(db, agent.workflow_id).filter((s) =>
+  return sequenceSteps(db, agent.workflow_id).filter((s) => !s.fixed && (
     (s.channel === "linkedin_message" && !!target.linkedin_url && !!agent.linkedin_account_id) ||
-    (s.channel === "email" && !!target.email && !!agent.email_account_id));
+    (s.channel === "email" && !!target.email && !!agent.email_account_id)));
 }
 
 // ─── writing ──────────────────────────────────────────────────────────────────

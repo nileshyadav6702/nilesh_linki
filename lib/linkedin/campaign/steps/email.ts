@@ -1,5 +1,6 @@
 import { sendEmailDurably, EmailRetryScheduledError } from "@/lib/email/infrastructure";
-import { applyUnsubscribeVariable, unsubscribeHeaders } from "@/lib/email/unsubscribe";
+import { applyUnsubscribeVariable, unsubscribeHeaders, unsubscribeUrl } from "@/lib/email/unsubscribe";
+import { signatureText } from "@/lib/email/signature";
 import { campaignEmailsToday } from "@/lib/linkedin/actions";
 import { peekApprovedDraft, consumeDraft } from "@/lib/linkedin/step-drafts";
 import { premium } from "@/lib/premium";
@@ -174,6 +175,7 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
     id: string; from_email: string; from_name: string | null; reply_to: string | null;
     smtp_host: string; smtp_port: number; smtp_secure: number;
     username: string; password: string; signature: string | null;
+    track_opens: number | null; include_unsubscribe: number | null;
   } | undefined;
 
   if (!emailAccount) {
@@ -207,8 +209,14 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
   let headers: Record<string, string> | undefined;
   if (!queuedJob) {
     // Step-level signature takes precedence; null means fall back to email account default
-    const sig = (step.email_signature !== null ? step.email_signature : emailAccount.signature)?.trim();
-    finalEmailBody = applyUnsubscribeVariable(sig ? `${emailBody}\n\n--\n${sig}` : emailBody, target.workspace_id, freshTarget.email);
+    const rawSig = (step.email_signature !== null ? step.email_signature : emailAccount.signature)?.trim();
+    const sig = rawSig ? signatureText(rawSig) : "";
+    let composed = sig ? `${emailBody}\n\n--\n${sig}` : emailBody;
+    // The sender's "Unsubscribe link: Included" adds a footer link when the copy has none of its own.
+    if (emailAccount.include_unsubscribe && !/\{\{\s*unsubscribe_url/i.test(composed) && unsubscribeUrl(target.workspace_id, freshTarget.email)) {
+      composed += "\n\nUnsubscribe: {{unsubscribe_url}}";
+    }
+    finalEmailBody = applyUnsubscribeVariable(composed, target.workspace_id, freshTarget.email);
     // A placeholder that survived rendering ({{frist_name}}, a deleted custom field) would go
     // out literally. Fail the step with the culprit named instead.
     const unresolved = findUnresolvedTokens(`${emailSubject}\n${finalEmailBody}`);
@@ -248,8 +256,9 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
       to: freshTarget.email,
       subject: emailSubject,
       body: finalEmailBody,
-      deliveryMode: step.email_delivery_mode === "enhanced" ? "enhanced" : "plain",
-      trackOpens: step.email_delivery_mode === "enhanced" && step.email_track_opens === 1,
+      // Open tracking needs HTML: the step's own setting, or the sender's "Open tracking: Enabled".
+      deliveryMode: step.email_delivery_mode === "enhanced" || emailAccount.track_opens ? "enhanced" : "plain",
+      trackOpens: (step.email_delivery_mode === "enhanced" && step.email_track_opens === 1) || !!emailAccount.track_opens,
       trackClicks: step.email_delivery_mode === "enhanced" && step.email_track_clicks === 1,
       ...threading,
       headers,

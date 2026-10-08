@@ -84,7 +84,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   };
 
   if (input.ai_enabled) {
-    if (!input.ai_model) return res.status(400).json({ error: "Select an AI model before previewing" });
+    // A step without its own model (e.g. an agent campaign) previews with the workspace default.
+    const model = input.ai_model || (db.prepare("SELECT default_model FROM workspace_ai_config WHERE workspace_id = ?").get(ctx.workspaceId) as { default_model: string | null } | undefined)?.default_model || "";
+    if (!model) return res.status(400).json({ error: "Choose a default AI model in Settings before previewing" });
     const integration = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?")
       .get(ctx.workspaceId) as { api_key: string | null } | undefined;
     const apiKey = decryptSecret(integration?.api_key ?? null);
@@ -95,7 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const generated = await generateCommunityContent({
         apiKey,
-        model: input.ai_model,
+        model,
         stepType: input.step_type,
         stepPrompt: input.ai_prompt || undefined,
         maxWords: input.ai_max_words ?? undefined,

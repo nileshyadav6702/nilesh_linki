@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { execMigration } from "@/lib/db/migrate";
+import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
 
 /**
  * Schema for runner robustness: claim-before-send for LinkedIn actions, lease fencing,
@@ -54,6 +54,24 @@ const STATEMENTS: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_list_imports_list_status ON list_imports(list_id, status)",
 ];
 
+/** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */
+export const LINKEDIN_ACTION_TYPES = ["connect", "message", "inmail", "visit", "like", "voice", "withdraw"];
+
+/** Widen linkedin_actions.type's CHECK in place, keeping every column and row. True when it rebuilt. */
+function widenLinkedinActionTypes(db: Database.Database): boolean {
+  const sql = tableSql(db, "linkedin_actions");
+  if (!sql || LINKEDIN_ACTION_TYPES.every((t) => sql.includes(`'${t}'`))) return false;
+  const check = /CHECK\s*\(\s*type\s+IN\s*\([^)]*\)\s*\)/i;
+  if (!check.test(sql)) throw new Error("linkedin_actions has no recognisable type CHECK to widen");
+  const createTempSql = sql
+    .replace(/^CREATE TABLE\s+("?)linkedin_actions\1/i, "CREATE TABLE linkedin_actions_new")
+    .replace(check, `CHECK(type IN (${LINKEDIN_ACTION_TYPES.map((t) => `'${t}'`).join(",")}))`);
+  rebuildTable(db, { table: "linkedin_actions", tempTable: "linkedin_actions_new", createTempSql });
+  return true;
+}
+
 export function runRobustnessMigrations(db: Database.Database): void {
   for (const sql of STATEMENTS) execMigration(db, sql);
+  // A rebuild drops the table's indexes; the statements are idempotent, so run them again.
+  if (widenLinkedinActionTypes(db)) for (const sql of STATEMENTS) execMigration(db, sql);
 }

@@ -29,6 +29,8 @@ export async function draftReply(db: Database.Database, workspaceId: string, rep
   const lastSent = reply.target_id ? db.prepare("SELECT subject, body_text AS body FROM email_jobs WHERE target_id = ? AND status = 'sent' ORDER BY created_at DESC LIMIT 1").get(reply.target_id) as { subject: string; body: string } | undefined : undefined;
   const icp = getLatestIcp(workspaceId)?.data;
   const booking = bookingUrlFor(db, workspaceId, reply.target_id);
+  // The contact's agent can add its own guidance (Settings → LinkedIn seat → Inbox & AI replies).
+  const guidance = reply.target_id ? (db.prepare("SELECT a.reply_instructions FROM targets t JOIN agents a ON a.id = t.agent_id WHERE t.id = ?").get(reply.target_id) as { reply_instructions: string | null } | undefined)?.reply_instructions?.trim() || null : null;
 
   const r = await aiJson({
     workspaceId,
@@ -40,6 +42,7 @@ export async function draftReply(db: Database.Database, workspaceId: string, rep
       "Objection: acknowledge it in one sentence, address it with one fact from data.offer, and leave the door open. Not interested or unsubscribe: a one-line courteous close, nothing else.",
       "Out of office: a one-line note that you will follow up after they return.",
       "Plain text, 30-120 words, no signature block (the sender's mail client adds it). Never invent facts, prices or customers.",
+      ...(guidance ? ["Also follow the user's own guidance in data.guidance, unless it conflicts with the rules above."] : []),
     ],
     data: {
       classification: kind,
@@ -48,6 +51,7 @@ export async function draftReply(db: Database.Database, workspaceId: string, rep
       our_last_email: lastSent ? { subject: lastSent.subject, body: lastSent.body.slice(0, 1500) } : null,
       offer: icp ? { company: icp.company_name, offer: icp.offer, value_props: icp.value_props } : null,
       booking_url: booking,
+      guidance,
     },
     outputShape: `{"body":""}`,
     schema: replySchema,

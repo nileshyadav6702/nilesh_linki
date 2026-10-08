@@ -6,7 +6,7 @@ import type { Page } from "playwright";
  * select the first result, paste message, click send.
  * This works regardless of whether the linkedin_url is a Sales Nav or /in/ URL.
  */
-export async function sendMessage(page: Page, fullName: string, text: string): Promise<void> {
+export async function sendMessage(page: Page, fullName: string, text: string, opts: { attachmentPath?: string } = {}): Promise<void> {
   await page.goto("https://www.linkedin.com/messaging/thread/new/", {
     waitUntil: "domcontentloaded",
     timeout: 30000,
@@ -29,16 +29,28 @@ export async function sendMessage(page: Page, fullName: string, text: string): P
   // Paste message into compose area
   const msgInput = page.locator("div.msg-form__contenteditable").first();
   await msgInput.waitFor({ timeout: 8000 });
-  await msgInput.click();
-  try {
-    await page.evaluate((t) => navigator.clipboard.writeText(t), text);
-    await page.waitForTimeout(300);
-    await msgInput.press("Control+V");
-  } catch {
-    // Clipboard blocked in headless — fall back to keyboard typing
-    await msgInput.pressSequentially(text, { delay: 20 });
+  if (text) {
+    await msgInput.click();
+    try {
+      await page.evaluate((t) => navigator.clipboard.writeText(t), text);
+      await page.waitForTimeout(300);
+      await msgInput.press("Control+V");
+    } catch {
+      // Clipboard blocked in headless — fall back to keyboard typing
+      await msgInput.pressSequentially(text, { delay: 20 });
+    }
+    await page.waitForTimeout(500);
   }
-  await page.waitForTimeout(500);
+
+  // Attach a file (a recorded voice message) through the composer's own file input.
+  if (opts.attachmentPath) {
+    const fileInput = page.locator('.msg-form input[type="file"], form.msg-form__form input[type="file"]').first();
+    if (await fileInput.count() === 0) throw new Error("Message composer has no file attachment input");
+    await fileInput.setInputFiles(opts.attachmentPath);
+    // Wait for the upload to finish: the send button turns enabled once the attachment is ready.
+    await page.locator("button.msg-form__send-button:enabled").first().waitFor({ timeout: 30000 });
+    await page.waitForTimeout(800);
+  }
 
   // Send
   const sendBtn = page.locator("button.msg-form__send-button:visible").first();

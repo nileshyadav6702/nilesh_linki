@@ -10,6 +10,7 @@ export interface Agent {
   linkedin_account_id: string | null; email_account_id: string | null;
   autopilot_delay_minutes: number; daily_lead_cap: number; enrich_emails: number;
   booking_url: string | null; last_run_at: string | null; last_error: string | null;
+  reply_instructions?: string | null;
   outreach_enabled: number; goal: "conversations" | "meetings"; tone: "professional" | "conversational" | "direct";
   channel: "linkedin" | "multi" | "email"; exclude_first_degree: number;
   created_at: string; updated_at: string;
@@ -46,6 +47,7 @@ export const agentInputSchema = z.object({
   daily_lead_cap: z.number().int().min(1).max(500).default(25),
   enrich_emails: z.boolean().default(true),
   booking_url: z.string().trim().url().max(400).nullish(),
+  reply_instructions: z.string().trim().max(500).nullish(),
   goal: z.enum(["conversations", "meetings"]).default("conversations"),
   tone: z.enum(["professional", "conversational", "direct"]).default("professional"),
   channel: z.enum(["linkedin", "multi", "email"]).default("multi"),
@@ -88,7 +90,7 @@ export function createAgent(workspaceId: string, input: AgentInput): Agent {
   return getAgent(id, workspaceId)!;
 }
 
-const PATCHABLE = ["name", "icp_id", "mode", "min_score", "fit_weight", "workflow_id", "linkedin_account_id", "email_account_id", "autopilot_delay_minutes", "daily_lead_cap", "enrich_emails", "booking_url", "status", "goal", "tone", "channel", "exclude_first_degree", "outreach_enabled"] as const;
+const PATCHABLE = ["name", "icp_id", "mode", "min_score", "fit_weight", "workflow_id", "linkedin_account_id", "email_account_id", "autopilot_delay_minutes", "daily_lead_cap", "enrich_emails", "booking_url", "status", "goal", "tone", "channel", "exclude_first_degree", "outreach_enabled", "reply_instructions"] as const;
 
 export function updateAgent(id: string, workspaceId: string, patch: Record<string, unknown>): Agent | null {
   const fields = PATCHABLE.filter((f) => patch[f] !== undefined);

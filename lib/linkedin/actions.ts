@@ -20,7 +20,7 @@ import { localDayBoundsUtc } from "@/lib/outreach/schedule";
 
 type DB = Database.Database;
 
-export type LinkedinActionType = "connect" | "message" | "inmail" | "visit";
+export type LinkedinActionType = "connect" | "message" | "inmail" | "visit" | "like" | "voice" | "withdraw";
 export type LinkedinActionStatus = "sending" | "sent" | "failed" | "uncertain";
 
 /** One action per (run, track, step): the same step never sends twice. */
@@ -141,6 +141,10 @@ const LEGACY_LOG_PREFIX: Record<LinkedinActionType, string> = {
   message: "Message sent%",
   inmail: "InMail sent%",
   visit: "Visited %",
+  // Newer actions are only ever counted from linkedin_actions; these never match a log line.
+  like: "\u0000like",
+  voice: "\u0000voice",
+  withdraw: "\u0000withdraw",
 };
 
 /**

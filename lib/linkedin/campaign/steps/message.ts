@@ -7,10 +7,11 @@ import { decryptSecret } from "@/lib/crypto";
 import { emitDomainEvent } from "@/lib/platform/events";
 import { renderOutreachTemplate } from "@/lib/outreach/render";
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
-import { CONNECTION_MAX_WAIT_DAYS, CONNECTION_RECHECK_HOURS } from "../constants";
+import { CONNECTION_RECHECK_HOURS } from "../constants";
+import { invitationExpired, skipToEmail } from "../invitation-fallback";
 import { actionInput, holdForAi, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction, stepTemplateBody } from "../step-helpers";
 import { ensureSalesNavEnriched } from "../pre-enrich";
-import { enforceSchedule, hoursSince, log, nowIso, trAdvance, trFail, trRecordContext, trSkip, trWait } from "../track-state";
+import { enforceSchedule, log, nowIso, trAdvance, trFail, trRecordContext, trWait } from "../track-state";
 import type { Target } from "../types";
 import type { StepContext } from "./context";
 
@@ -22,9 +23,8 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
   const freshTarget = db.prepare("SELECT * FROM targets WHERE id = ?").get(target.id) as Target;
   if (freshTarget.degree !== 1) {
     const requested = freshTarget.connection_requested_at;
-    if (requested && hoursSince(requested) / 24 > CONNECTION_MAX_WAIT_DAYS) {
-      log(db, runId, target.id, "warn", `${name} never accepted — skipping message step`);
-      trSkip(db, tr, "Never accepted connection");
+    if (invitationExpired(steps, requested)) {
+      skipToEmail(db, runId, tr, target.id, name, steps);
       return;
     }
     log(db, runId, target.id, "info", `${name} not yet connected — rescheduling message in ${CONNECTION_RECHECK_HOURS}h`);

@@ -225,7 +225,7 @@ function dropDeprecatedRunProfileColumns(db: Database.Database) {
   });
 }
 
-const STEP_TYPES = ["visit", "connect", "message", "sales_inmail", "delay", "email"];
+const STEP_TYPES = ["visit", "connect", "message", "sales_inmail", "delay", "email", "like_posts", "voice"];
 
 /**
  * Widen workflow_steps.step_type's CHECK to every step type the runner knows. The new table
@@ -329,6 +329,21 @@ function runMigrations(db: Database.Database) {
     // Company logo and page captured with the profile (Sales Nav / profile reads)
     "ALTER TABLE targets ADD COLUMN company_logo_url TEXT",
     "ALTER TABLE targets ADD COLUMN company_linkedin_url TEXT",
+    // Per-step message mode: 'ai' = drafted per lead, 'fixed' = the step's own text for everyone
+    "ALTER TABLE workflow_steps ADD COLUMN send_mode TEXT NOT NULL DEFAULT 'ai' CHECK(send_mode IN ('ai','fixed'))",
+    // Campaign step options: posts to like; skip an unaccepted invitation after N days; withdraw it after N days (0 = never)
+    "ALTER TABLE workflow_steps ADD COLUMN like_count INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE workflow_steps ADD COLUMN skip_after_days INTEGER NOT NULL DEFAULT 7",
+    "ALTER TABLE workflow_steps ADD COLUMN withdraw_after_days INTEGER NOT NULL DEFAULT 30",
+    // Per-mailbox sending options set in the agent's Email Sender drawer
+    "ALTER TABLE email_accounts ADD COLUMN track_opens INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE email_accounts ADD COLUMN include_unsubscribe INTEGER NOT NULL DEFAULT 0",
+    // Recorded audio for voice-message steps, one per step
+    `CREATE TABLE IF NOT EXISTS step_media (
+      step_id TEXT PRIMARY KEY REFERENCES workflow_steps(id) ON DELETE CASCADE,
+      mime TEXT NOT NULL, data BLOB NOT NULL, duration_ms INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
     // Company profile read from Sales Navigator, once per workspace
     "ALTER TABLE companies ADD COLUMN employee_range TEXT",
     "ALTER TABLE companies ADD COLUMN profile_fetched_at TEXT",

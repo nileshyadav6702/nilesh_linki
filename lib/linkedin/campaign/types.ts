@@ -24,7 +24,7 @@ export interface WorkflowStep {
   id: string;
   step_order: number;
   track: "linkedin" | "email";
-  step_type: "visit" | "connect" | "message" | "sales_inmail" | "delay" | "email";
+  step_type: "visit" | "connect" | "message" | "sales_inmail" | "delay" | "email" | "like_posts" | "voice";
   template_id: string | null;
   delay_seconds: number;
   connect_note: string | null;
@@ -42,6 +42,12 @@ export interface WorkflowStep {
   email_delivery_mode: "plain" | "enhanced" | null;
   email_track_opens: number | null;
   email_track_clicks: number | null;
+  /** like_posts: how many recent posts to like (1-3). */
+  like_count?: number | null;
+  /** connect: give up on the invitation (and the LinkedIn steps) after N days; 0 = wait indefinitely. */
+  skip_after_days?: number | null;
+  /** connect: withdraw a still-pending invitation after N days; 0 = never. */
+  withdraw_after_days?: number | null;
 }
 
 // A track-run row joined with its parent run_profile and run context

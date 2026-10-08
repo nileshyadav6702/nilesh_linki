@@ -23,6 +23,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     for (const col of ["step_type", "template_id", "delay_seconds", "step_order", "connect_note", "message_body", "email_subject", "email_body"]) {
       if (has(col)) put(col, body[col] ?? null);
     }
+    if (has("ai_enabled")) put("ai_enabled", body.ai_enabled ? 1 : 0);
+    const int = (k: string, min: number, max: number) => { const n = Math.round(Number(body[k])); if (Number.isFinite(n)) put(k, Math.min(max, Math.max(min, n))); };
+    if (has("like_count")) int("like_count", 1, 3);
+    if (has("skip_after_days")) int("skip_after_days", 0, 60);
+    if (has("withdraw_after_days")) int("withdraw_after_days", 0, 90);
+    // 'fixed' = the same text for everyone: the agent stops drafting this step per lead.
+    if (has("send_mode")) put("send_mode", body.send_mode === "fixed" ? "fixed" : "ai");
     if (has("email_delivery_mode")) {
       const mode = body.email_delivery_mode === "enhanced" ? "enhanced" : "plain";
       put("email_delivery_mode", mode);

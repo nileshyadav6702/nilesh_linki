@@ -117,15 +117,49 @@ export function agentActivity(db: Database.Database, agentId: string, workflowId
   return items.slice(0, limit);
 }
 
-export interface StepOccupancy { id: string; track: string; step_type: string; step_order: number; delay_seconds: number; contacts: number }
+/**
+ * contacts: leads that have completed this step and not yet the next action step on its track
+ * (waits in between count here). For an invitation step, invited/accepted cover everyone who
+ * got past it, with accepted = the connection was accepted.
+ */
+export interface StepOccupancy { id: string; track: string; step_type: string; step_order: number; delay_seconds: number; contacts: number; invited?: number; accepted?: number }
+
+/** Per action step: the current_step window [from, to) of leads sitting after it; to = null for the last one. */
+export function stepWindows(db: Database.Database, workflowId: string): Map<string, { track: string; from: number; to: number | null }> {
+  const rows = db.prepare("SELECT id, track, step_type, step_order FROM workflow_steps WHERE workflow_id = ? AND COALESCE(enabled, 1) = 1 ORDER BY track, step_order")
+    .all(workflowId) as Array<{ id: string; track: string; step_type: string; step_order: number }>;
+  const out = new Map<string, { track: string; from: number; to: number | null }>();
+  const actions = rows.filter((r) => r.step_type !== "delay");
+  actions.forEach((a, i) => {
+    const next = actions.slice(i + 1).find((n) => n.track === a.track);
+    out.set(a.id, { track: a.track, from: a.step_order, to: next ? next.step_order : null });
+  });
+  return out;
+}
+
+const TRACKS_IN_RUN = `FROM run_profile_tracks rt JOIN run_profiles rp ON rp.id = rt.run_profile_id JOIN runs r ON r.id = rp.run_id
+  WHERE r.workflow_id = ? AND r.status IN ('running','paused') AND rt.track = ?`;
+
+/** SQL condition + params selecting the leads that sit after one action step (see stepWindows). */
+export function afterStepWhere(w: { track: string; from: number; to: number | null }): { sql: string; params: unknown[] } {
+  return w.to === null
+    ? { sql: "(rt.state = 'completed' OR (rt.state = 'in_progress' AND rt.current_step >= ?))", params: [w.from] }
+    : { sql: "rt.state = 'in_progress' AND rt.current_step >= ? AND rt.current_step < ?", params: [w.from, w.to] };
+}
 
 export function stepOccupancy(db: Database.Database, workflowId: string | null): StepOccupancy[] {
   if (!workflowId) return [];
-  return db.prepare(`SELECT ws.id, ws.track, ws.step_type, ws.step_order, ws.delay_seconds,
-      (SELECT COUNT(*) FROM run_profile_tracks rt
-        JOIN run_profiles rp ON rp.id = rt.run_profile_id
-        JOIN runs r ON r.id = rp.run_id
-        WHERE r.workflow_id = ws.workflow_id AND r.status = 'running' AND rt.track = ws.track
-          AND rt.state = 'in_progress' AND rt.current_step = ws.step_order - 1) contacts
-    FROM workflow_steps ws WHERE ws.workflow_id = ? ORDER BY ws.track, ws.step_order`).all(workflowId) as StepOccupancy[];
+  const steps = db.prepare("SELECT id, track, step_type, step_order, delay_seconds FROM workflow_steps WHERE workflow_id = ? ORDER BY track, step_order").all(workflowId) as StepOccupancy[];
+  const windows = stepWindows(db, workflowId);
+  return steps.map((s) => {
+    const w = windows.get(s.id);
+    if (!w) return { ...s, contacts: 0 };
+    const where = afterStepWhere(w);
+    const contacts = (db.prepare(`SELECT COUNT(DISTINCT rp.target_id) n ${TRACKS_IN_RUN} AND ${where.sql}`).get(workflowId, s.track, ...where.params) as { n: number }).n;
+    if (s.step_type !== "connect") return { ...s, contacts };
+    const past = db.prepare(`SELECT COUNT(DISTINCT rp.target_id) invited, COUNT(DISTINCT CASE WHEN t.connected_at IS NOT NULL THEN rp.target_id END) accepted
+      ${TRACKS_IN_RUN.replace("JOIN runs r", "JOIN targets t ON t.id = rp.target_id JOIN runs r")} AND (rt.state = 'completed' OR rt.current_step >= ?)`)
+      .get(workflowId, s.track, s.step_order) as { invited: number; accepted: number };
+    return { ...s, contacts, invited: past.invited, accepted: past.accepted };
+  });
 }

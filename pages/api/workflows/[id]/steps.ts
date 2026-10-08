@@ -3,6 +3,11 @@ import { getDb } from "@/lib/db";
 import { randomUUID } from "crypto";
 import { requireWorkspace, requireWorkspaceEntity, templatesBelongToWorkspace } from "@/lib/workspace";
 
+const clampInt = (v: unknown, min: number, max: number, fallback: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : fallback;
+};
+
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const ctx=requireWorkspace(req,res,req.method==="GET"?"viewer":"member"); if(!ctx)return;
   const db = getDb();
@@ -12,7 +17,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
     const steps = db
       .prepare(
-        `SELECT ws.*, t.name as template_name
+        `SELECT ws.*, t.name as template_name, (SELECT m.duration_ms FROM step_media m WHERE m.step_id = ws.id) AS voice_duration_ms
          FROM workflow_steps ws
          LEFT JOIN templates t ON t.id = ws.template_id
          WHERE ws.workflow_id = ?
@@ -100,7 +105,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       byTrack[track].push({ ...s, track });
     }
 
-    const cols = "step_order, track, step_type, template_id, delay_seconds, connect_note, message_body, email_subject, email_body, email_signature, email_position, email_delivery_mode, email_track_opens, email_track_clicks, message_position, ai_enabled, ai_model, ai_prompt, ai_max_words, ai_language";
+    const cols = "step_order, track, step_type, template_id, delay_seconds, connect_note, message_body, email_subject, email_body, email_signature, email_position, email_delivery_mode, email_track_opens, email_track_clicks, message_position, ai_enabled, ai_model, ai_prompt, ai_max_words, ai_language, send_mode, like_count, skip_after_days, withdraw_after_days";
     const updateStmt = db.prepare(`UPDATE workflow_steps SET ${cols.split(", ").map(c => `${c} = ?`).join(", ")} WHERE id = ?`);
     const insertStmt = db.prepare(`INSERT INTO workflow_steps (id, workflow_id, ${cols}) VALUES (${Array(2 + cols.split(", ").length).fill("?").join(", ")})`);
     const delStmt = db.prepare("DELETE FROM workflow_steps WHERE id = ?");
@@ -113,6 +118,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       for (const track of ["linkedin", "email"] as const) {
         const existing = db.prepare("SELECT id FROM workflow_steps WHERE workflow_id = ? AND track = ? ORDER BY step_order").all(workflowId, track) as Array<{ id: string }>;
         const rows = byTrack[track];
+        // A step keeps its own id when the client sends it, so its branches, recorded voice
+        // message and sent-action history stay with it when steps above it are added or
+        // removed. Rows without a known id take the remaining ids in order, then new ones.
+        const known = new Set(existing.map((e) => e.id));
+        const claimed = new Set(rows.map((r) => (typeof r.id === "string" && known.has(r.id) ? r.id : null)).filter(Boolean) as string[]);
+        const spare = existing.map((e) => e.id).filter((id) => !claimed.has(id));
+        const used = new Set<string>();
         for (let i = 0; i < rows.length; i++) {
           const s = rows[i];
           const mode = s.email_delivery_mode === "enhanced" ? "enhanced" : "plain";
@@ -121,10 +133,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             s.message_body ?? null, s.email_subject ?? null, s.email_body ?? null, s.email_signature ?? null,
             s.email_position ?? 1, mode, mode === "enhanced" && s.email_track_opens ? 1 : 0, mode === "enhanced" && s.email_track_clicks ? 1 : 0,
             s.message_position ?? 1, s.ai_enabled ? 1 : 0, s.ai_model ?? null, s.ai_prompt ?? null, s.ai_max_words ?? null, s.ai_language ?? "English",
+            s.send_mode === "fixed" ? "fixed" : "ai",
+            clampInt(s.like_count, 1, 3, 1), clampInt(s.skip_after_days, 0, 60, 7), clampInt(s.withdraw_after_days, 0, 90, 30),
           ];
-          let stepId: string;
-          if (i < existing.length) { stepId = existing[i].id; updateStmt.run(...vals, stepId); }
+          let stepId: string | undefined = typeof s.id === "string" && claimed.has(s.id) ? s.id : spare.shift();
+          if (stepId) updateStmt.run(...vals, stepId);
           else { stepId = randomUUID(); insertStmt.run(stepId, workflowId, ...vals); }
+          used.add(stepId);
           clearLinks.run(stepId);
           if (Array.isArray(s.template_ids)) for (const tid of s.template_ids as string[]) addLink.run(stepId, tid);
           clearEmailVariants.run(stepId);
@@ -134,8 +149,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             });
           }
         }
-        // Delete steps beyond the new length (their branches cascade — the step is gone).
-        for (let i = rows.length; i < existing.length; i++) delStmt.run(existing[i].id);
+        // Delete the steps no longer in the list (their branches cascade — the step is gone).
+        for (const e of existing) if (!used.has(e.id)) delStmt.run(e.id);
       }
     });
     reconcile();

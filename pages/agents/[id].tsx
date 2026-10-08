@@ -1,13 +1,10 @@
 import Head from "next/head";
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
 import type { ReactNode } from "react";
 import {
-  RiArrowLeftSLine, RiFlowChart, RiCheckboxCircleFill, RiDashboardLine, RiDeleteBinLine, RiErrorWarningLine, RiFocus3Line, RiHistoryLine, RiLineChartLine,
-  RiLinkedinBoxFill, RiLoader4Line, RiMailLine, RiPauseCircleLine, RiPlayLine, RiRadarLine, RiRocketLine, RiSendPlaneLine, RiSettings3Line,
-  RiTeamLine, RiTimeLine, RiUserAddLine,
+  RiFlowChart, RiDashboardLine, RiErrorWarningLine, RiHistoryLine, RiPlayLine, RiRadarLine, RiSettings3Line, RiTeamLine,
 } from "react-icons/ri";
 import ActivityFeed from "@/components/agents/activity/ActivityFeed";
 import AgentHeader from "@/components/agents/AgentHeader";
@@ -20,14 +17,14 @@ import AgentCampaign from "@/components/agents/AgentCampaign";
 import LeadsTable from "@/components/agents/LeadsTable";
 import type { Step } from "@/components/agents/SequenceEditor";
 import {
-  Avatar, Callout, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, RunSwitch, secondaryBtn, SectionHeading, senderLine, TabBar, timeUntil, type Tone,
+  Callout, IconTile, nextRunLabel, Panel, primaryBtn, TabBar, timeUntil,
 } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 import type { Icp } from "@/lib/icp/schema";
 
 export const getServerSideProps = requireSignedIn;
 
-interface StepRow { id: string; track: string; step_type: string; step_order: number; delay_seconds: number; contacts: number }
+interface StepRow { id: string; track: string; step_type: string; step_order: number; delay_seconds: number; contacts: number; invited?: number; accepted?: number }
 interface Detail {
   agent: AgentForm & { id: string; status: string; outreach_enabled: number; icp_id: string | null; last_run_at: string | null; last_error: string | null; list_id: string | null; channel: string };
   sources: AgentSourceRow[]; linkedin_budget: Budget | null;
@@ -47,22 +44,6 @@ const TAB_ICONS: Partial<Record<(typeof TABS)[number], ReactNode>> = {
   Campaign: <RiFlowChart size={15} />, Activity: <RiHistoryLine size={15} />, Settings: <RiSettings3Line size={15} />,
 };
 
-function SenderRow({ icon, tone, name, kind, status, limits }: { icon: ReactNode; tone: Tone; name: string; kind: string; status: "connected" | "logged_out" | "none"; limits: ReactNode[] }) {
-  return (
-    <div className="flex flex-wrap items-center gap-4 rounded-[12px] border border-[var(--border-subtle)] px-4 py-3.5">
-      <IconTile icon={icon} tone={tone} size={40} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate font-medium text-base-content">{name}</span>
-          {status === "connected" && <Pill tone="success"><RiCheckboxCircleFill size={12} /> Connected</Pill>}
-          {status === "logged_out" && <Pill tone="error"><RiErrorWarningLine size={12} /> Logged out</Pill>}
-        </div>
-        <div className="text-[13px] text-base-content/50">{kind}</div>
-      </div>
-      {limits.length > 0 && <div className="flex flex-wrap gap-2">{limits.map((l, i) => <Pill key={i}>{l}</Pill>)}</div>}
-    </div>
-  );
-}
 
 export default function AgentDetail() {
   const router = useRouter();
@@ -142,13 +123,10 @@ export default function AgentDetail() {
   const finding = a.status === "active";
   const sending = !!a.outreach_enabled;
   const leadCount = Object.values(d.counts.by_status).reduce((x, y) => x + y, 0);
-  const pool = d.sender_pool ?? { linkedin: 0, email: 0 };
   const soonest = d.sources.filter((s) => s.enabled && s.next_run_at).sort((x, y) => String(x.next_run_at).localeCompare(String(y.next_run_at)))[0];
   const launch = !soonest ? "No source scheduled" : !soonest.last_run_at && timeUntil(soonest.next_run_at) === "due" ? "First run is scheduled now" : `Next launch ${nextRunLabel(soonest.next_run_at, soonest.last_run_at)}`;
 
   const waiting = (d.counts.by_status.enrolled ?? 0) + (d.counts.by_status.approved ?? 0);
-  const li = d.senders.linkedin;
-  const mail = d.senders.email;
 
   return (
     <>
@@ -187,10 +165,15 @@ export default function AgentDetail() {
         )}
         {tab === "Campaign" && (
           <AgentCampaign
+            agentId={a.id}
             workflowId={d.workflow?.id ?? null}
-            counts={Object.fromEntries(d.steps.map((s) => [s.id, s.contacts]))}
+            stats={d.steps}
+            leadCount={leadCount}
+            sources={{ count: d.sources.filter((s) => s.enabled).length, leads: d.sources.reduce((n, s) => n + (Number((s as { leads?: number }).leads) || 0), 0) }}
+            settings={{ goal: a.goal, tone: a.tone, exclude_first_degree: a.exclude_first_degree }}
             onChanged={load}
             onCreate={async () => { await patch({ create_default_campaign: true }, "Sequence created"); }}
+            onEditSources={() => setTab("Sources")}
           />
         )}
         {tab === "Activity" && (
@@ -198,22 +181,7 @@ export default function AgentDetail() {
             void router.replace({ pathname: router.pathname, query: { ...router.query, tab: "Leads", signal } }, undefined, { shallow: true }).then(() => setTab("Leads"));
           }} />
         )}
-        {tab === "Settings" && (
-          <div className="space-y-6">
-            <Panel className="p-6">
-              <SectionHeading title="Senders" subtitle="The accounts this agent sends from." />
-              <div className="mt-5 space-y-3">
-                <SenderRow icon={<RiLinkedinBoxFill size={20} />} tone="linkedin" name={li?.name || li?.email || "No LinkedIn account"} kind="LinkedIn sender"
-                  status={li ? (li.is_authenticated ? "connected" : "logged_out") : "none"}
-                  limits={li ? [<><RiUserAddLine size={13} /> {li.daily_connection_limit ?? 20}/day</>, <><RiSendPlaneLine size={13} /> {li.daily_message_limit ?? 40}/day</>] : []} />
-                <SenderRow icon={<RiMailLine size={20} />} tone="error" name={mail?.from_email || "No mailbox"} kind="Email sender"
-                  status={mail ? "connected" : "none"}
-                  limits={mail ? [<><RiSendPlaneLine size={13} /> {mail.daily_email_limit ?? 50}/day</>, <><RiLineChartLine size={13} /> warmup {mail.ramp_up_enabled ? "on" : "off"}</>] : []} />
-              </div>
-            </Panel>
-            <AgentSettings agentId={a.id} initial={a} onSaved={load} />
-          </div>
-        )}
+        {tab === "Settings" && <AgentSettings agentId={a.id} initial={a} onSaved={load} />}
       </div>
     </>
   );

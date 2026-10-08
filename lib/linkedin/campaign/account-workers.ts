@@ -115,6 +115,13 @@ export function defaultAccountPhases(db: ReturnType<typeof getDb> = getDb()): Ac
   return [
     { label: "Campaign tick", timeoutMs: TICK_TIMEOUT_MS, run: (accountId, lease) => tick(db, lease, accountId) },
     {
+      // Invitations still pending past the step's withdraw window (default 30 days).
+      label: "Withdraw stale invitations", timeoutMs: NEEDS_DATA_TIMEOUT_MS, run: async (accountId, lease) => {
+        const { withdrawStaleInvitations } = await import("./withdraw-stale");
+        await withdrawStaleInvitations(accountId, { shouldStop: () => !lease.isHeld() });
+      },
+    },
+    {
       label: "List import", timeoutMs: IMPORT_PASS_TIMEOUT_MS, run: async (accountId, lease) => {
         const { processScheduledImports } = await import("@/lib/import-jobs");
         await processScheduledImports(db, { accountId, shouldStop: () => !lease.isHeld() });

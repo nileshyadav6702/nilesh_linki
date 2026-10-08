@@ -13,6 +13,8 @@ import { runConnectStep } from "./connect";
 import { runMessageStep } from "./message";
 import { runInmailStep } from "./inmail";
 import { runEmailStep } from "./email";
+import { runLikePostsStep } from "./like";
+import { runVoiceStep } from "./voice";
 
 // ─── step execution ──────────────────────────────────────────────────────────
 
@@ -70,6 +72,8 @@ export async function executeStep(
       case "message": return await runMessageStep(ctx);
       case "sales_inmail": return await runInmailStep(ctx);
       case "email": return await runEmailStep(ctx);
+      case "like_posts": return await runLikePostsStep(ctx);
+      case "voice": return await runVoiceStep(ctx);
     }
   } catch (err) {
     handleStepError(db, runId, tr, target, steps, name, err);

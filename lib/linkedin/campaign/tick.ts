@@ -113,9 +113,10 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
   for (const [accountId, accountLimits] of accountLimitsMap) {
     const tz = accountLimits.timezone;
     connectsSentToday.set(accountId, linkedinActionsToday(db, accountId, "connect", tz));
-    messagesSentToday.set(accountId, linkedinActionsToday(db, accountId, "message", tz));
+    messagesSentToday.set(accountId, linkedinActionsToday(db, accountId, "message", tz) + linkedinActionsToday(db, accountId, "voice", tz));
     inmailsSentToday.set(accountId, linkedinActionsToday(db, accountId, "inmail", tz));
-    visitsSentToday.set(accountId, linkedinActionsToday(db, accountId, "visit", tz));
+    // Likes share the visit cap; voice notes share the message cap.
+    visitsSentToday.set(accountId, linkedinActionsToday(db, accountId, "visit", tz) + linkedinActionsToday(db, accountId, "like", tz));
   }
 
   // Steps cache: (workflow_id, track) → steps filtered by that track
@@ -245,7 +246,7 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
         connectsPlanned.set(tr.account_id, planned + 1);
         toExecute.push(tr);
       }
-    } else if (step.step_type === "message") {
+    } else if (step.step_type === "message" || step.step_type === "voice") {
       const sentToday = messagesSentToday.get(tr.account_id) ?? 0;
       const planned = messagesPlanned.get(tr.account_id) ?? 0;
       if (sentToday + planned >= (limits.daily_message_limit ?? 50)) {
@@ -266,7 +267,7 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
     } else if (step.step_type === "email") {
       // Belongs to emailCampaignTick. Leaving it due here would send it from the browser loop.
       continue;
-    } else if (step.step_type === "visit") {
+    } else if (step.step_type === "visit" || step.step_type === "like_posts") {
       const sentToday = visitsSentToday.get(tr.account_id) ?? 0;
       const planned = visitsPlanned.get(tr.account_id) ?? 0;
       if (sentToday + planned >= (limits.daily_visit_limit ?? 150)) {

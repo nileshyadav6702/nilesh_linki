@@ -133,6 +133,8 @@ const STATEMENTS: string[] = [
   "ALTER TABLE agents ADD COLUMN tone TEXT NOT NULL DEFAULT 'professional'",
   "ALTER TABLE agents ADD COLUMN channel TEXT NOT NULL DEFAULT 'multi'",
   "ALTER TABLE agents ADD COLUMN exclude_first_degree INTEGER NOT NULL DEFAULT 1",
+  // Extra guidance for "Draft with AI" replies to this agent's leads (tone, product, when to offer a call)
+  "ALTER TABLE agents ADD COLUMN reply_instructions TEXT",
 ];
 
 /** Agents created before the split were "active" for both discovery and outreach. */

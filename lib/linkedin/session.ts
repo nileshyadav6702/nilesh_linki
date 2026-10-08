@@ -3,6 +3,7 @@ import type { Browser, BrowserContext, Page } from "playwright";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { getDb } from "@/lib/db";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
+import { accountProxy, type PlaywrightProxy } from "@/lib/linkedin/proxy";
 
 chromium.use(StealthPlugin());
 
@@ -43,8 +44,10 @@ const LAUNCH_ARGS = [
  * options so the LinkedIn session is BORN under the exact fingerprint it will
  * later be used with — a mismatch (or a drift) triggers a forced re-auth.
  */
-export function contextOptions(storageState?: object) {
+export function contextOptions(storageState?: object, proxy?: PlaywrightProxy) {
   return {
+    // The account's own proxy, when set: login and runtime both go through it (one stable IP).
+    ...(proxy ? { proxy } : {}),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     storageState: storageState as any,
     viewport: { width: 1920, height: 1080 },
@@ -114,7 +117,7 @@ async function createContext(accountId: string): Promise<BrowserContext> {
     }
   }
 
-  const ctx = await b.newContext(contextOptions(storageState));
+  const ctx = await b.newContext(contextOptions(storageState, accountProxy(accountId)));
 
   // Auto-evict from map when context closes for any reason (crash, session expiry, etc.)
   ctx.on("close", () => {
@@ -316,7 +319,7 @@ export async function authenticateAccount(accountId: string): Promise<void> {
 
   try {
     // Same fingerprint as runtime, so the session is not born under a different one.
-    const ctx = await visibleBrowser.newContext(contextOptions());
+    const ctx = await visibleBrowser.newContext(contextOptions(undefined, accountProxy(accountId)));
 
     const page = await ctx.newPage();
     await page.goto("https://www.linkedin.com/login");

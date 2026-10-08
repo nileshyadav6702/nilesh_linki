@@ -50,7 +50,7 @@ describe("agent workspace", () => {
     expect((db.prepare("SELECT COUNT(*) n FROM targets WHERE agent_id = ?").get(agent.id) as { n: number }).n).toBe(1);
   });
 
-  it("counts contacts sitting on the current step", () => {
+  it("counts contacts that completed a step and have not moved past it", () => {
     const db = getDb();
     const workflowId = createDefaultCampaign(db, WS, "Occupancy", "linkedin");
     const agent = createAgent(WS, { name: "Occ", workflow_id: workflowId, mode: "copilot", min_score: 55, fit_weight: 0.6, autopilot_delay_minutes: 60, daily_lead_cap: 25, enrich_emails: false });
@@ -58,9 +58,13 @@ describe("agent workspace", () => {
     db.prepare("INSERT INTO runs (id, workspace_id, workflow_id, list_id, status, started_at) VALUES (?, ?, ?, ?, 'running', datetime('now'))").run(runId, WS, workflowId, agent.list_id);
     db.prepare("INSERT INTO targets (id, workspace_id, agent_id, linkedin_url) VALUES ('t-occ', ?, ?, 'https://www.linkedin.com/in/occ')").run(WS, agent.id);
     db.prepare("INSERT INTO run_profiles (id, run_id, target_id) VALUES ('rp-occ', ?, 't-occ')").run(runId);
-    db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step, next_step_at) VALUES ('tr-occ', 'rp-occ', 'linkedin', 'in_progress', 0, datetime('now'))").run();
+    db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step, next_step_at) VALUES ('tr-occ', 'rp-occ', 'linkedin', 'in_progress', 1, datetime('now'))").run();
     const steps = stepOccupancy(db, workflowId);
-    expect(steps.find((s) => s.track === "linkedin" && s.step_order === 1)?.contacts).toBe(1);
+    // Invitation (step 1) done, waiting before the first message: counted on the invitation.
+    const invite = steps.find((s) => s.track === "linkedin" && s.step_order === 1);
+    expect(invite?.contacts).toBe(1);
+    expect(invite).toMatchObject({ invited: 1, accepted: 0 });
+    expect(steps.filter((s) => s.step_type !== "connect").every((s) => s.contacts === 0)).toBe(true);
     expect(dueToday(db, workflowId)).toBe(1);
   });
 });

@@ -5,12 +5,12 @@ export class AlreadyConnectedError extends Error {}
 export class PendingInviteError extends Error {}
 
 /**
- * Sends a LinkedIn connection request without a note.
+ * Sends a LinkedIn connection request, with the note when one is given and LinkedIn allows it.
  * Navigates to the profile page and clicks the Connect button.
  * Throws WeeklyLimitError if the weekly limit popup appears.
  * Throws AlreadyConnectedError / PendingInviteError if already in that state.
  */
-export async function sendConnectionRequest(page: Page, linkedinUrl: string): Promise<void> {
+export async function sendConnectionRequest(page: Page, linkedinUrl: string, note?: string | null): Promise<{ noteSent: boolean }> {
   await page.goto(linkedinUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForTimeout(2000 + Math.random() * 1000);
 
@@ -50,13 +50,42 @@ export async function sendConnectionRequest(page: Page, linkedinUrl: string): Pr
 
   await page.waitForTimeout(1000);
 
-  // Click "Send without a note" / "Send now"
-  const sendBtn = page.locator(
-    'button:has-text("Send now"), button[aria-label*="Send without"], button[aria-label*="Send invitation"]:not([aria-label*="note"])'
-  );
-  if (await sendBtn.count() > 0) {
-    await sendBtn.first().click({ force: true });
-    await page.waitForTimeout(1500);
+  // With a note: "Add a note" → type it → "Send". LinkedIn caps notes for free accounts; when the
+  // note box doesn't open (quota used up, upsell shown) the invitation still goes out without it.
+  let noteSent = false;
+  const text = note?.trim().slice(0, 300);
+  if (text) {
+    const addNote = page.locator('button[aria-label*="Add a note"]:visible, button:has-text("Add a note"):visible').first();
+    if (await addNote.count() > 0) {
+      await addNote.click({ force: true });
+      await page.waitForTimeout(800);
+      const box = page.locator('textarea[name="message"]:visible, textarea#custom-message:visible').first();
+      if (await box.count() > 0) {
+        await box.click();
+        await box.pressSequentially(text, { delay: 25 + Math.random() * 25 });
+        await page.waitForTimeout(500);
+        const send = page.locator('button[aria-label="Send invitation"]:visible, button[aria-label*="Send"]:not([aria-label*="without"]):visible').first();
+        if (await send.count() > 0 && await send.isEnabled()) {
+          await send.click({ force: true });
+          await page.waitForTimeout(1500);
+          noteSent = true;
+        }
+      } else {
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(600);
+      }
+    }
+  }
+
+  if (!noteSent) {
+    // Click "Send without a note" / "Send now"
+    const sendBtn = page.locator(
+      'button:has-text("Send now"), button[aria-label*="Send without"], button[aria-label*="Send invitation"]:not([aria-label*="note"])'
+    );
+    if (await sendBtn.count() > 0) {
+      await sendBtn.first().click({ force: true });
+      await page.waitForTimeout(1500);
+    }
   }
 
   // Check for weekly limit popup
@@ -69,4 +98,5 @@ export async function sendConnectionRequest(page: Page, linkedinUrl: string): Pr
     const msg = await errorToast.innerText();
     throw new Error(`Connection error: ${msg.trim()}`);
   }
+  return { noteSent };
 }

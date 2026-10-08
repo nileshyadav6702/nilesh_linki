@@ -1,10 +1,13 @@
 import { getSessionPage } from "@/lib/linkedin/session";
 import { sendConnectionRequest } from "@/lib/linkedin/connect";
 import { settledPriorAction } from "@/lib/linkedin/actions";
-import { CONNECTION_MAX_WAIT_DAYS, CONNECTION_RECHECK_HOURS } from "../constants";
+import { CONNECTION_RECHECK_HOURS } from "../constants";
+import { renderOutreachTemplate } from "@/lib/outreach/render";
+import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
+import { invitationExpired, skipToEmail } from "../invitation-fallback";
 import { actionInput, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction } from "../step-helpers";
 import { getLinkedinUrl } from "../resolve-url";
-import { enforceSchedule, hoursSince, log, nowIso, trAdvance, trSkip, trWait } from "../track-state";
+import { enforceSchedule, log, nowIso, trAdvance, trWait } from "../track-state";
 import type { Target } from "../types";
 import type { StepContext } from "./context";
 
@@ -21,10 +24,8 @@ export async function runConnectStep(ctx: StepContext): Promise<void> {
   }
 
   if (freshTarget.connection_requested_at) {
-    const hoursSinceRequest = hoursSince(freshTarget.connection_requested_at);
-    if (hoursSinceRequest / 24 > CONNECTION_MAX_WAIT_DAYS) {
-      log(db, runId, target.id, "warn", `${name} did not accept after ${CONNECTION_MAX_WAIT_DAYS} days — skipping`);
-      trSkip(db, tr, `Did not accept connection after ${CONNECTION_MAX_WAIT_DAYS} days`);
+    if (invitationExpired(steps, freshTarget.connection_requested_at)) {
+      skipToEmail(db, runId, tr, target.id, name, steps);
       return;
     }
     // Acceptance is detected by the daily sync-accepted job (scrolls invitation manager).
@@ -40,10 +41,13 @@ export async function runConnectStep(ctx: StepContext): Promise<void> {
   db.prepare("UPDATE run_profile_tracks SET last_step_at = datetime('now') WHERE id = ?").run(tr.id);
   log(db, runId, target.id, "info", `Sending connection request to ${name}`);
   const linkedinUrl = await getLinkedinUrl(db, target, accountId);
+  const note = step.connect_note?.trim() ? renderOutreachTemplate(step.connect_note, freshTarget, loadTargetCustomValues(db, target.workspace_id, target.id)) : null;
+  let noteSent = false;
   const sent = await sendLinkedinAction(db, connect, async () => {
     const page = await getSessionPage(accountId);
-    try { await sendConnectionRequest(page, linkedinUrl); } finally { await page.close(); }
+    try { noteSent = (await sendConnectionRequest(page, linkedinUrl, note)).noteSent; } finally { await page.close(); }
   });
+  if (note && sent.claimed && !noteSent) log(db, runId, target.id, "warn", `LinkedIn did not allow a note for ${name} (free accounts get a few per month) — sent without it`);
   if (!sent.claimed) { settlePriorLinkedinAction(db, runId, tr, steps, target.id, name, "connect", sent.status); return; }
   await saveSessionAfterSend(accountId);
   db.transaction(() => {

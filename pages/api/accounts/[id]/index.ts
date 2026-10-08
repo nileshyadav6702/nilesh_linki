@@ -1,13 +1,25 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { requireWorkspace, recordAudit } from "@/lib/workspace";
+import { encryptSecret } from "@/lib/crypto";
+import { linkedinActionsToday } from "@/lib/linkedin/actions";
+import { normalizeProxyUrl } from "@/lib/linkedin/proxy";
 
 // Excludes cookies_json — the frontend never uses the raw session blob, only
 // is_authenticated, so there's no reason to ship it (even encrypted) to the client.
 const ACCOUNT_COLUMNS = `id, name, email, is_authenticated, daily_connection_limit, daily_message_limit, daily_inmail_limit, daily_visit_limit,
   active_hours_start, active_hours_end, timezone, working_days, created_at,
   inbox_synced_at, accepted_sync_at, li_connections, li_pending, li_profile_views,
-  li_stats_synced_at, connections_synced_through_ms`;
+  li_stats_synced_at, connections_synced_through_ms, proxy_url, proxy_username, (proxy_password IS NOT NULL AND proxy_password <> '') AS has_proxy_password`;
+
+/** The account as the settings drawer sees it, with today's action counts on the account's own day. */
+function accountView(db: ReturnType<typeof getDb>, id: string, workspaceId: string) {
+  const account = db.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM accounts WHERE id = ? AND workspace_id = ?`).get(id, workspaceId) as Record<string, unknown> | undefined;
+  if (!account) return null;
+  const tz = String(account.timezone || "UTC");
+  const today = (t: "visit" | "connect" | "message" | "inmail" | "like" | "voice") => linkedinActionsToday(db, id, t, tz);
+  return { ...account, has_proxy_password: !!account.has_proxy_password, usage_today: { visit: today("visit") + today("like"), connect: today("connect"), message: today("message") + today("voice"), inmail: today("inmail") } };
+}
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const db = getDb();
@@ -16,7 +28,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!ctx) return;
 
   if (req.method === "GET") {
-    const account = db.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM accounts WHERE id = ? AND workspace_id = ?`).get(id, ctx.workspaceId);
+    const account = accountView(db, id, ctx.workspaceId);
     if (!account) return res.status(404).json({ error: "Not found" });
     return res.json(account);
   }
@@ -40,8 +52,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         working_days = COALESCE(?, working_days)
        WHERE id = ? AND workspace_id = ?`
     ).run(name, email, daily_connection_limit, daily_message_limit, daily_inmail_limit, daily_visit_limit, active_hours_start, active_hours_end, timezone, working_days, id, ctx.workspaceId);
+    // Proxy override: "" clears it; the password is kept unless a new one (or "") is sent.
+    const body = req.body as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(body, "proxy_url")) {
+      const raw = typeof body.proxy_url === "string" ? body.proxy_url.trim() : "";
+      const url = raw ? normalizeProxyUrl(raw) : null;
+      if (raw && !url) return res.status(400).json({ error: "Proxy must look like http://host:port (or https/socks5)" });
+      db.prepare("UPDATE accounts SET proxy_url = ?, proxy_username = ? WHERE id = ? AND workspace_id = ?")
+        .run(url, url && typeof body.proxy_username === "string" && body.proxy_username.trim() ? body.proxy_username.trim() : null, id, ctx.workspaceId);
+      if (!url) db.prepare("UPDATE accounts SET proxy_password = NULL WHERE id = ? AND workspace_id = ?").run(id, ctx.workspaceId);
+      // An open browser context keeps its old proxy; close it so the next use picks up the new one.
+      const { closeSession } = await import("@/lib/linkedin/session");
+      await closeSession(id).catch(() => {});
+    }
+    if (typeof body.proxy_password === "string") {
+      db.prepare("UPDATE accounts SET proxy_password = ? WHERE id = ? AND workspace_id = ?").run(body.proxy_password ? encryptSecret(body.proxy_password) : null, id, ctx.workspaceId);
+    }
     recordAudit(ctx, "account.updated", "account", id);
-    return res.json(db.prepare(`SELECT ${ACCOUNT_COLUMNS} FROM accounts WHERE id = ? AND workspace_id = ?`).get(id, ctx.workspaceId));
+    return res.json(accountView(db, id, ctx.workspaceId));
   }
 
   if (req.method === "DELETE") {

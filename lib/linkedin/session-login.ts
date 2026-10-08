@@ -2,6 +2,7 @@ import type { BrowserContext, Page } from "playwright";
 import { getDb } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
 import { closeSession, contextOptions, getBrowser } from "@/lib/linkedin/session";
+import { accountProxy } from "@/lib/linkedin/proxy";
 
 // ─── Server-side headless login ───────────────────────────────────────────────
 // Logs in directly on the server (no screen) so the session is born under the
@@ -148,7 +149,7 @@ export async function startHeadlessLogin(
   await clearPendingLogin(accountId);
 
   const b = await getBrowser(true);
-  const ctx = await b.newContext(contextOptions());
+  const ctx = await b.newContext(contextOptions(undefined, accountProxy(accountId)));
   const page = await ctx.newPage();
   try {
     await page.goto("https://www.linkedin.com/login", { waitUntil: "domcontentloaded", timeout: 30_000 });

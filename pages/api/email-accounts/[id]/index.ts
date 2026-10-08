@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
 import { requireWorkspace, recordAudit } from "@/lib/workspace";
+import { effectiveEmailLimit } from "@/lib/linkedin/campaign/schedule";
+import { campaignEmailsToday } from "@/lib/linkedin/actions";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const db = getDb();
@@ -11,10 +13,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (req.method === "GET") {
     const account = db
-      .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, imap_username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at FROM email_accounts WHERE id = ? AND workspace_id = ?")
-      .get(id, ctx.workspaceId);
+      .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, imap_username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at, track_opens, include_unsubscribe FROM email_accounts WHERE id = ? AND workspace_id = ?")
+      .get(id, ctx.workspaceId) as (Record<string, unknown> & { daily_email_limit: number | null; ramp_up_enabled: number | null; ramp_start_date: string | null; timezone: string | null }) | undefined;
     if (!account) return res.status(404).json({ error: "not found" });
-    return res.json(account);
+    // Today's usage on the mailbox's own day, and today's limit once warm-up is applied.
+    return res.json({
+      ...account,
+      sent_today: campaignEmailsToday(db, id, account.timezone || "UTC"),
+      effective_limit: effectiveEmailLimit({ ...account, daily_email_limit: account.daily_email_limit ?? 50 } as Parameters<typeof effectiveEmailLimit>[0]),
+    });
   }
 
   // Manual deactivate / reactivate. A paused sender never sends (the durable mail plane
@@ -44,6 +51,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       if (has(col)) put(col, body[col] ?? null);
     }
     if (has("ramp_up_enabled")) put("ramp_up_enabled", body.ramp_up_enabled ? 1 : 0);
+    if (has("track_opens")) put("track_opens", body.track_opens ? 1 : 0);
+    if (has("include_unsubscribe")) put("include_unsubscribe", body.include_unsubscribe ? 1 : 0);
+    if (has("signature") && typeof body.signature === "string" && body.signature.length > 20_000) return res.status(400).json({ error: "Signature is too long" });
     // Secrets: only rewrite when a non-empty value is supplied.
     if (body.password) put("password", encryptSecret(String(body.password)));
     if (body.imap_password) put("imap_password", encryptSecret(String(body.imap_password)));
