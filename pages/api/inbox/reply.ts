@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { createHash, randomUUID } from "crypto";
 import { getDb } from "@/lib/db";
 import { sendEmailDurably } from "@/lib/email/infrastructure";
+import { MailboxDailyCapError } from "@/lib/email/daily-cap";
 import { isAddressSuppressed } from "@/lib/platform/suppression";
 import { recordAudit, requireWorkspace } from "@/lib/workspace";
 
@@ -34,9 +35,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } | undefined;
 
   if (!account) return res.status(404).json({ error: "Email account not found" });
+  let parentMessageId: string | undefined;
   if(replyId){
-    const reply=db.prepare("SELECT locked_by,locked_at FROM email_replies WHERE id=? AND workspace_id=?").get(replyId,ctx.workspaceId) as {locked_by:string|null;locked_at:string|null}|undefined;
+    const reply=db.prepare("SELECT locked_by,locked_at,message_id FROM email_replies WHERE id=? AND workspace_id=?").get(replyId,ctx.workspaceId) as {locked_by:string|null;locked_at:string|null;message_id:string|null}|undefined;
     if(!reply)return res.status(404).json({error:"Inbox reply not found"});
+    // Answer in the prospect's thread: In-Reply-To/References point at their message.
+    parentMessageId=reply.message_id??undefined;
     const fresh=reply.locked_at && Date.now()-Date.parse(reply.locked_at)<15*60_000;
     if(fresh && reply.locked_by && reply.locked_by!==ctx.userId)return res.status(409).json({error:"Reply is being handled by another teammate"});
   }
@@ -45,10 +49,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const digest=createHash("sha256").update(`${to}\n${subject}\n${body}`).digest("hex").slice(0,16);
-    const receipt=await sendEmailDurably({workspaceId:ctx.workspaceId,emailAccountId,idempotencyKey:`team-inbox:${replyId??randomUUID()}:${digest}`,source:"team_inbox",to,subject,body});
+    const receipt=await sendEmailDurably({workspaceId:ctx.workspaceId,emailAccountId,idempotencyKey:`team-inbox:${replyId??randomUUID()}:${digest}`,source:"team_inbox",to,subject,body,replyToMessageId:parentMessageId});
     recordAudit(ctx, "inbox.reply_sent", "email_job", receipt.jobId, { to, subject, message_id:receipt.messageId });
     return res.json({ ok: true, job_id:receipt.jobId, message_id:receipt.messageId });
   } catch (err) {
+    if (err instanceof MailboxDailyCapError) return res.status(429).json({ error: err.message, sent_today: err.sentToday, daily_limit: err.dailyLimit });
     console.error("[inbox/reply] send failed:", err);
     return res.status(500).json({ error: err instanceof Error ? err.message : "Send failed" });
   }

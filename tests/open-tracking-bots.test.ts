@@ -186,9 +186,13 @@ describe("recordProviderEvent — open classification", () => {
   it("carries the verdict into the domain event so webhook subscribers can filter too", () => {
     const send = seedSend({ sentAt: "2026-08-24 18:00:00", recipient: "event@corp.example" });
     open(send, "2026-08-24 18:00:02");
+    // Read THIS send's event. domain_events.occurred_at has one-second resolution, so
+    // "latest event in the workspace" tied with the 3-second open from the test above and
+    // could return that one instead.
+    const sentId = (getDb().prepare("SELECT id FROM sent_messages WHERE job_id = ?").get(send.jobId) as { id: string }).id;
     const row = getDb()
-      .prepare("SELECT payload_json FROM domain_events WHERE workspace_id = ? AND type = 'email.opened' ORDER BY occurred_at DESC LIMIT 1")
-      .get(WS) as { payload_json: string };
+      .prepare("SELECT payload_json FROM domain_events WHERE workspace_id = ? AND type = 'email.opened' AND entity_id = ?")
+      .get(WS, sentId) as { payload_json: string };
     const payload = JSON.parse(row.payload_json);
     expect(payload.bot).toBe(true);
     expect(payload.bot_reason).toBe("prefetch");

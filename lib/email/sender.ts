@@ -42,8 +42,10 @@ export async function sendEmail(
     socketTimeout: 20_000,
   });
 
+  // Address object, not a hand-built string: nodemailer quotes/encodes the display name, so a
+  // name containing quotes, commas or non-ASCII cannot corrupt the From header.
   const from = account.from_name
-    ? `"${account.from_name}" <${account.from_email}>`
+    ? { name: account.from_name, address: account.from_email }
     : account.from_email;
 
   const info = await transporter.sendMail({

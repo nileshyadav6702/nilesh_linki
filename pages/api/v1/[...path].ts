@@ -8,6 +8,7 @@ import { apiContactCreateSchema, apiSignalCreateSchema, firstIssue } from "@/lib
 import { verifyAndSuppressTargets } from "@/lib/email/verify";
 import { isAddressSuppressed } from "@/lib/platform/suppression";
 import { sendEmailDurably } from "@/lib/email/infrastructure";
+import { MailboxDailyCapError } from "@/lib/email/daily-cap";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader("X-API-Version", "2026-07-17");
@@ -121,6 +122,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const receipt = await sendEmailDurably({ workspaceId: ws, emailAccountId, idempotencyKey: `public-api:${id}:${digest}`, source: "public_api", targetId: id, to: contact.email, subject, body });
       return res.status(200).json({ ok: true, job_id: receipt.jobId, message_id: receipt.messageId });
     } catch (err) {
+      if (err instanceof MailboxDailyCapError) return res.status(429).json({ error: "daily_limit_reached", detail: err.message, sent_today: err.sentToday, daily_limit: err.dailyLimit });
       return res.status(500).json({ error: err instanceof Error ? err.message : "Send failed" });
     }
   }

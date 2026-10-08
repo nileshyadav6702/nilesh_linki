@@ -161,16 +161,26 @@ export function linkedinActionsToday(db: DB, accountId: string, type: LinkedinAc
 }
 
 /**
- * Campaign emails this mailbox has spent today (account timezone): accepted sends from
- * sent_messages plus jobs whose outcome is still open. Ground truth, not log text.
+ * Email sources that spend a mailbox's daily cap: campaign steps plus every one-off send to a
+ * prospect (contact thread, team-inbox reply, public API). Warmup, placement tests, test sends
+ * and internal notifications are infrastructure traffic with their own budgets.
+ */
+export const MAILBOX_CAPPED_SOURCES = ["campaign", "contact_thread", "team_inbox", "public_api"] as const;
+const CAPPED_SOURCES_SQL = MAILBOX_CAPPED_SOURCES.map((s) => `'${s}'`).join(",");
+
+/**
+ * Prospect emails this mailbox has spent today (account timezone): accepted sends from
+ * sent_messages plus jobs whose outcome is still open, across every capped source, so manual
+ * and campaign sends share one per-mailbox cap. Ground truth, not log text. (The name is kept
+ * for its callers; it counts more than campaign sends.)
  */
 export function campaignEmailsToday(db: DB, emailAccountId: string, timezone: string): number {
   const day = localDayBoundsUtc(timezone || "UTC");
   const sent = (db.prepare(`SELECT COUNT(*) c FROM sent_messages sm JOIN email_jobs ej ON ej.id = sm.job_id
-    WHERE sm.email_account_id = ? AND ej.source = 'campaign' AND sm.accepted_at >= ? AND sm.accepted_at < ?`)
+    WHERE sm.email_account_id = ? AND ej.source IN (${CAPPED_SOURCES_SQL}) AND sm.accepted_at >= ? AND sm.accepted_at < ?`)
     .get(emailAccountId, day.start, day.end) as { c: number }).c;
   const open = (db.prepare(`SELECT COUNT(*) c FROM email_jobs
-    WHERE email_account_id = ? AND source = 'campaign' AND status IN ('leased','sending','uncertain') AND created_at >= ? AND created_at < ?`)
+    WHERE email_account_id = ? AND source IN (${CAPPED_SOURCES_SQL}) AND status IN ('leased','sending','uncertain') AND created_at >= ? AND created_at < ?`)
     .get(emailAccountId, day.start, day.end) as { c: number }).c;
   return sent + open;
 }

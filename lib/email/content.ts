@@ -28,7 +28,9 @@ export function toPlainText(value: string, removeLinks = false): string {
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">");
 
-  if (removeLinks) text = text.replace(URL_PATTERN, "");
+  // Plain mode strips links for deliverability, except this app's own unsubscribe link: a
+  // {{unsubscribe_url}} footer the author asked for must survive.
+  if (removeLinks) text = text.replace(URL_PATTERN, (url) => (isOwnUnsubscribeLink(url) ? url : ""));
   return text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -129,6 +131,11 @@ function signature(kind: "open" | "click", jobId: string, destination = ""): str
   const secret = process.env.EMAIL_TRACKING_SECRET || process.env.NEXTAUTH_SECRET;
   if (!secret) return null;
   return createHmac("sha256", secret).update(`${kind}:${jobId}:${destination}`).digest("base64url");
+}
+
+function isOwnUnsubscribeLink(url: string): boolean {
+  const base = trackingBaseUrl();
+  return Boolean(base) && url.startsWith(`${base}/api/u/`);
 }
 
 function trackingBaseUrl(): string | null {

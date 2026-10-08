@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { sendEmail, type EmailAccount } from "@/lib/email/sender";
+import { decryptSecret } from "@/lib/crypto";
 import { requireWorkspace, recordAudit, type WorkspaceRole } from "@/lib/workspace";
 import { createWorkspaceInvitation, listWorkspaceInvitations, revokeWorkspaceInvitation } from "@/lib/workspace-invitations";
 
@@ -27,7 +28,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (account) {
           const workspace = db.prepare("SELECT name FROM workspaces WHERE id=?").get(ctx.workspaceId) as { name: string };
           try {
-            await sendEmail(account, created.invitation.email, `You're invited to ${workspace.name} on Linki`,
+            // Stored encrypted at rest; the sender needs the plaintext, as the email queue does.
+            await sendEmail({ ...account, password: decryptSecret(account.password) ?? "" }, created.invitation.email, `You're invited to ${workspace.name} on Linki`,
               `You've been invited to collaborate on outreach in ${workspace.name} as ${role}.\n\nAccept your invitation: ${inviteUrl}\n\nThis link expires in 7 days.`);
             emailSent = true;
           } catch (error) { deliveryWarning = error instanceof Error ? error.message : String(error); }

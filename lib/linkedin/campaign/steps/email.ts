@@ -1,11 +1,12 @@
-import { sendEmailDurably } from "@/lib/email/infrastructure";
+import { sendEmailDurably, EmailRetryScheduledError } from "@/lib/email/infrastructure";
+import { applyUnsubscribeVariable, unsubscribeHeaders } from "@/lib/email/unsubscribe";
 import { campaignEmailsToday } from "@/lib/linkedin/actions";
 import { peekApprovedDraft, consumeDraft } from "@/lib/linkedin/step-drafts";
 import { premium } from "@/lib/premium";
 import { decryptSecret } from "@/lib/crypto";
 import { addSuppression } from "@/lib/platform/suppression";
 import { verifyEmailAddress, emailStatusFor, suppressionSourceFor, needsPreSendVerification } from "@/lib/email/verify";
-import { renderOutreachTemplate } from "@/lib/outreach/render";
+import { renderOutreachTemplate, findUnresolvedTokens } from "@/lib/outreach/render";
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
 import { EMAIL_RECHECK_INTERVAL_MS } from "../constants";
 import { effectiveEmailLimit, emailPaceGate, rescheduleToTomorrow } from "../schedule";
@@ -87,9 +88,18 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
   let emailSubject = "";
   let emailBody = "";
   let emailVariantId: string | null = null;
+  // One job per (run, track, step). If an earlier attempt already queued it (a transient
+  // provider error left it pending for retry), re-send THAT job — same content, headers and
+  // Message-ID — rather than writing (and paying for) a different email.
+  const idempotencyKey = `campaign:${runId}:${tr.id}:${step.id}`;
+  const queuedJob = db.prepare("SELECT subject, body_text FROM email_jobs WHERE workspace_id = ? AND idempotency_key = ?")
+    .get(target.workspace_id, idempotencyKey) as { subject: string; body_text: string } | undefined;
   // Consumed only once the email is handed to the provider (see the message step).
   const approvedEmail = peekApprovedDraft(db, target.id, "email", step.id, (step.email_position ?? 1) === 1);
-  if (approvedEmail) {
+  if (queuedJob) {
+    emailSubject = queuedJob.subject;
+    emailBody = queuedJob.body_text;
+  } else if (approvedEmail) {
     emailSubject = approvedEmail.subject ?? "";
     emailBody = approvedEmail.body;
     log(db, runId, target.id, "info", `Using the approved agent email for ${name}`);
@@ -192,27 +202,69 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
     return;
   }
 
-  // Step-level signature takes precedence; null means fall back to email account default
-  const sig = (step.email_signature !== null ? step.email_signature : emailAccount.signature)?.trim();
-  const finalEmailBody = sig ? `${emailBody}\n\n--\n${sig}` : emailBody;
+  let finalEmailBody = emailBody;
+  let threading: { replyToMessageId?: string; references?: string[] } = {};
+  let headers: Record<string, string> | undefined;
+  if (!queuedJob) {
+    // Step-level signature takes precedence; null means fall back to email account default
+    const sig = (step.email_signature !== null ? step.email_signature : emailAccount.signature)?.trim();
+    finalEmailBody = applyUnsubscribeVariable(sig ? `${emailBody}\n\n--\n${sig}` : emailBody, target.workspace_id, freshTarget.email);
+    // A placeholder that survived rendering ({{frist_name}}, a deleted custom field) would go
+    // out literally. Fail the step with the culprit named instead.
+    const unresolved = findUnresolvedTokens(`${emailSubject}\n${finalEmailBody}`);
+    if (unresolved.length > 0) {
+      log(db, runId, target.id, "error", `Email to ${name} not sent — unresolved template variables: ${unresolved.join(", ")}`);
+      trFail(db, tr, `Unresolved template variables: ${unresolved.join(", ")}`);
+      return;
+    }
+    // Follow-ups thread onto the earlier emails of this sequence. A blank subject means "reply
+    // in the same thread" and reuses "Re: <first subject>" (Gmail only threads on a matching
+    // subject); an explicit follow-up subject is kept, with the threading headers still set.
+    const prior = db.prepare(`SELECT sm.message_id, sm.subject FROM sent_messages sm JOIN email_jobs ej ON ej.id = sm.job_id
+      WHERE ej.source = 'campaign' AND ej.run_id = ? AND ej.target_id = ? AND sm.email_account_id = ? AND ej.idempotency_key <> ?
+      ORDER BY sm.accepted_at, sm.rowid`).all(runId, target.id, emailAccountId, idempotencyKey) as Array<{ message_id: string; subject: string }>;
+    if (prior.length > 0) {
+      threading = { replyToMessageId: prior[prior.length - 1].message_id, references: prior.map((p) => p.message_id) };
+      if (!emailSubject.trim()) {
+        const first = prior[0].subject.trim();
+        emailSubject = /^re:/i.test(first) ? first : `Re: ${first}`;
+      }
+    }
+    const listUnsubscribe = unsubscribeHeaders(target.workspace_id, freshTarget.email, emailAccount.reply_to || emailAccount.from_email);
+    headers = Object.keys(listUnsubscribe).length ? listUnsubscribe : undefined;
+  }
   db.prepare("UPDATE run_profile_tracks SET last_step_at = datetime('now') WHERE id = ?").run(tr.id);
   log(db, runId, target.id, "info", `Sending email to ${name} <${freshTarget.email}>`);
-  await sendEmailDurably({
-    workspaceId: target.workspace_id,
-    emailAccountId,
-    idempotencyKey: `campaign:${runId}:${tr.id}:${step.id}`,
-    source: "campaign",
-    targetId: target.id,
-    runId,
-    stepId: step.id,
-    variantId: emailVariantId ?? undefined,
-    to: freshTarget.email,
-    subject: emailSubject,
-    body: finalEmailBody,
-    deliveryMode: step.email_delivery_mode === "enhanced" ? "enhanced" : "plain",
-    trackOpens: step.email_delivery_mode === "enhanced" && step.email_track_opens === 1,
-    trackClicks: step.email_delivery_mode === "enhanced" && step.email_track_clicks === 1,
-  });
+  try {
+    await sendEmailDurably({
+      workspaceId: target.workspace_id,
+      emailAccountId,
+      idempotencyKey,
+      source: "campaign",
+      targetId: target.id,
+      runId,
+      stepId: step.id,
+      variantId: emailVariantId ?? undefined,
+      to: freshTarget.email,
+      subject: emailSubject,
+      body: finalEmailBody,
+      deliveryMode: step.email_delivery_mode === "enhanced" ? "enhanced" : "plain",
+      trackOpens: step.email_delivery_mode === "enhanced" && step.email_track_opens === 1,
+      trackClicks: step.email_delivery_mode === "enhanced" && step.email_track_clicks === 1,
+      ...threading,
+      headers,
+    });
+  } catch (err) {
+    // Transient provider error: the job is kept and this step re-sends it once due, back
+    // through the working-hours, daily-cap and pacing gates above. The track stays on this
+    // step; a permanent failure (retries exhausted) still throws and fails the track.
+    if (err instanceof EmailRetryScheduledError) {
+      log(db, runId, target.id, "warn", `Email to ${name} hit a temporary error (${err.message}) — retrying after ${err.retryAt}`);
+      trReschedule(db, tr, err.retryAt);
+      return;
+    }
+    throw err;
+  }
   db.transaction(() => {
     consumeDraft(db, approvedEmail);
     if (tr.pending_reply_context) db.prepare("UPDATE run_profile_tracks SET pending_reply_context = NULL WHERE id = ?").run(tr.id);

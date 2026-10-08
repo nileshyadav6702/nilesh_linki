@@ -3,6 +3,7 @@ import Imap from "imap";
 import { simpleParser } from "mailparser";
 import { getDb } from "@/lib/db";
 import { sendEmailDurably } from "@/lib/email/infrastructure";
+import { MailboxDailyCapError } from "@/lib/email/daily-cap";
 import { decryptSecret } from "@/lib/crypto";
 import { randomUUID } from "crypto";
 import { emitDomainEvent } from "@/lib/platform/events";
@@ -104,14 +105,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (suppression) return res.status(409).json({ error: "Contact is suppressed", suppression });
 
     // No subject → treat as a reply: reuse the last subject in the thread (Re: …) or a sane default.
+    // A reply also threads: In-Reply-To/References point at the contact's last message.
     let finalSubject = subject?.trim();
+    let parentMessageId: string | undefined;
     if (!finalSubject) {
       const lastReply = db.prepare(
-        "SELECT subject FROM email_replies WHERE target_id = ? AND subject IS NOT NULL ORDER BY received_at DESC LIMIT 1"
-      ).get(targetId) as { subject: string } | undefined;
+        "SELECT subject, message_id FROM email_replies WHERE target_id = ? AND workspace_id = ? AND subject IS NOT NULL ORDER BY received_at DESC LIMIT 1"
+      ).get(targetId, ctx.workspaceId) as { subject: string; message_id: string | null } | undefined;
       finalSubject = lastReply?.subject
         ? (/^re:/i.test(lastReply.subject) ? lastReply.subject : `Re: ${lastReply.subject}`)
         : "Re:";
+      parentMessageId = lastReply?.message_id ?? undefined;
     }
 
     try {
@@ -126,11 +130,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         to: target.email,
         subject: finalSubject,
         body,
+        replyToMessageId: parentMessageId,
       });
       const eventId = emitDomainEvent({ workspaceId: ctx.workspaceId, type: "email.sent", entityType: "target", entityId: targetId, payload: { to: target.email, subject: finalSubject, email_account_id: account.id, source: "contact_thread" } });
       recordAudit(ctx, "contact.email_sent", "target", targetId, { event_id: eventId, subject: finalSubject });
       return res.json({ ok: true, email_account_id: account.id, to: target.email, subject: finalSubject });
     } catch (err) {
+      if (err instanceof MailboxDailyCapError) return res.status(429).json({ error: err.message, sent_today: err.sentToday, daily_limit: err.dailyLimit });
       console.error("[targets/emails] send failed:", err);
       return res.status(500).json({ error: err instanceof Error ? err.message : "Send failed" });
     }

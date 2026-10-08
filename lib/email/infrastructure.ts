@@ -8,10 +8,11 @@ import { findTargetSuppression, isAddressSuppressed, addSuppression } from "@/li
 import { emitDomainEvent } from "@/lib/platform/events";
 import { buildEmailContent, type EmailDeliveryMode } from "@/lib/email/content";
 import { classifyTrackingHit, type BotVerdict } from "@/lib/email/bot-detection";
+import { assertMailboxCapacity } from "@/lib/email/daily-cap";
 
 export const WORKER_ID=`${hostname()}:${process.pid}:${randomUUID().slice(0,8)}`;
 
-export type QueueEmailInput={workspaceId:string;emailAccountId:string;idempotencyKey:string;source?:string;targetId?:string;runId?:string;stepId?:string;variantId?:string;to:string;subject:string;body:string;deliveryMode?:EmailDeliveryMode;trackOpens?:boolean;trackClicks?:boolean;replyToMessageId?:string;headers?:Record<string,string>};
+export type QueueEmailInput={workspaceId:string;emailAccountId:string;idempotencyKey:string;source?:string;targetId?:string;runId?:string;stepId?:string;variantId?:string;to:string;subject:string;body:string;deliveryMode?:EmailDeliveryMode;trackOpens?:boolean;trackClicks?:boolean;replyToMessageId?:string;references?:string[];headers?:Record<string,string>};
 type Job={id:string;workspace_id:string;email_account_id:string;idempotency_key:string;source:string;target_id:string|null;run_id:string|null;step_id:string|null;recipient:string;subject:string;body_text:string;email_delivery_mode:EmailDeliveryMode;track_opens:number;track_clicks:number;reply_to_message_id:string|null;headers_json:string|null;status:string;attempt:number;max_attempts:number};
 type Account=EmailAccount&{workspace_id:string;provider:string;oauth_connection_id:string|null;paused_at:string|null;paused_reason:string|null};
 type SentRow={id:string;email_account_id:string;recipient:string;message_id:string;target_id:string|null;accepted_at:string|null};
@@ -19,15 +20,28 @@ type SentRow={id:string;email_account_id:string;recipient:string;message_id:stri
 export function enqueueEmail(input:QueueEmailInput){
   const db=getDb();const existing=db.prepare("SELECT id,status FROM email_jobs WHERE workspace_id=? AND idempotency_key=?").get(input.workspaceId,input.idempotencyKey) as {id:string;status:string}|undefined;if(existing)return existing;
   const id=randomUUID();db.prepare(`INSERT INTO email_jobs(id,workspace_id,email_account_id,idempotency_key,source,target_id,run_id,step_id,variant_id,recipient,subject,body_text,email_delivery_mode,track_opens,track_clicks,reply_to_message_id,headers_json)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,input.workspaceId,input.emailAccountId,input.idempotencyKey,input.source??"campaign",input.targetId??null,input.runId??null,input.stepId??null,input.variantId??null,input.to.toLowerCase().trim(),input.subject,input.body,input.deliveryMode??"plain",input.trackOpens?1:0,input.trackClicks?1:0,input.replyToMessageId??null,input.headers?JSON.stringify(input.headers):null);
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,input.workspaceId,input.emailAccountId,input.idempotencyKey,input.source??"campaign",input.targetId??null,input.runId??null,input.stepId??null,input.variantId??null,input.to.toLowerCase().trim(),input.subject,input.body,input.deliveryMode??"plain",input.trackOpens?1:0,input.trackClicks?1:0,input.replyToMessageId??null,jobHeaders(input));
   return{id,status:"pending"};
 }
 
+/** One-off sends to a prospect: no pacing, but they spend the mailbox's daily cap. */
+const MANUAL_CAPPED_SOURCES=new Set(["contact_thread","team_inbox","public_api"]);
+
 export async function sendEmailDurably(input:QueueEmailInput):Promise<SendReceipt&{jobId:string,status:string}>{
+  const db=getDb();
+  if(MANUAL_CAPPED_SOURCES.has(input.source??"campaign")&&!db.prepare("SELECT 1 FROM email_jobs WHERE workspace_id=? AND idempotency_key=?").get(input.workspaceId,input.idempotencyKey))assertMailboxCapacity(db,input.emailAccountId);
   const queued=enqueueEmail(input);const previous=receiptForJob(queued.id);if(previous)return{...previous,jobId:queued.id,status:"sent"};
-  const state=getDb().prepare("SELECT status,last_error FROM email_jobs WHERE id=?").get(queued.id) as {status:string;last_error:string|null};
+  const state=db.prepare("SELECT status,last_error,available_at,available_at<=datetime('now') AS due FROM email_jobs WHERE id=?").get(queued.id) as {status:string;last_error:string|null;available_at:string;due:number};
   if(state.status==="uncertain")throw new Error(`Delivery is uncertain and was not retried automatically: ${state.last_error??queued.id}`);
-  await dispatchEmailJob(queued.id,WORKER_ID);const receipt=receiptForJob(queued.id);if(!receipt){const final=getDb().prepare("SELECT status,last_error FROM email_jobs WHERE id=?").get(queued.id) as {status:string;last_error:string|null};throw new Error(final.last_error??`Email job ${final.status}`);}return{...receipt,jobId:queued.id,status:"sent"};
+  if(state.status==="pending"&&!state.due)throw new EmailRetryScheduledError(state.last_error??"Send is waiting for its retry window",sqliteToIso(state.available_at));
+  try{await dispatchEmailJob(queued.id,WORKER_ID);}catch(error){
+    // A transient provider error put the job back to 'pending' with a backoff. Surface that as
+    // "retry at", not a failure: the caller (the campaign step) owns the retry, so it happens
+    // inside the mailbox's window, cap and pacing, and the track advances only on the real send.
+    if(!(error instanceof SafeSendError)){const after=db.prepare("SELECT status,available_at FROM email_jobs WHERE id=?").get(queued.id) as {status:string;available_at:string};if(after.status==="pending")throw new EmailRetryScheduledError(message(error),sqliteToIso(after.available_at));}
+    throw error;
+  }
+  const receipt=receiptForJob(queued.id);if(!receipt){const final=getDb().prepare("SELECT status,last_error FROM email_jobs WHERE id=?").get(queued.id) as {status:string;last_error:string|null};throw new Error(final.last_error??`Email job ${final.status}`);}return{...receipt,jobId:queued.id,status:"sent"};
 }
 
 export async function dispatchEmailJob(jobId:string,owner=WORKER_ID){
@@ -41,7 +55,8 @@ export async function dispatchEmailJob(jobId:string,owner=WORKER_ID){
     const suppression=job.target_id?findTargetSuppression(job.workspace_id,job.target_id):isAddressSuppressed(job.workspace_id,job.recipient);if(suppression)throw new RecipientSuppressedError(`Recipient is suppressed: ${suppression.reason}`);
     const domain=(account.from_email.split("@")[1]||"linki.local").replace(/[^a-z0-9.-]/gi,"");const messageId=`<${job.id}@${domain}>`;
     db.prepare("UPDATE email_jobs SET status='sending',attempt=attempt+1,updated_at=datetime('now') WHERE id=? AND lease_owner=?").run(job.id,owner);
-    const headers={"X-Linki-Job-ID":job.id,"X-Linki-Workspace-ID":job.workspace_id,...parseHeaders(job.headers_json)};
+    const headers:Record<string,string>={"X-Linki-Job-ID":job.id,"X-Linki-Workspace-ID":job.workspace_id,...parseHeaders(job.headers_json)};
+    if(job.reply_to_message_id){const parent=asMessageId(job.reply_to_message_id);headers["In-Reply-To"]=parent;if(!headers.References)headers.References=parent;}
     const content=buildEmailContent(job.body_text,{mode:job.email_delivery_mode,jobId:job.id,trackOpens:job.track_opens===1,trackClicks:job.track_clicks===1});
     const receipt=account.provider==="gmail"||account.provider==="microsoft"?await sendOAuthEmail({connectionId:String(account.oauth_connection_id),fromName:account.from_name,to:job.recipient,subject:job.subject,body:content.text,html:content.html,messageId,headers}):await sendEmail({...account,password:decryptSecret(account.password)!},job.recipient,job.subject,content.text,{messageId,headers,html:content.html});
     db.transaction(()=>{
@@ -65,7 +80,10 @@ export async function dispatchEmailJob(jobId:string,owner=WORKER_ID){
   }
 }
 
-export async function processEmailJobs(limit=20){recoverStaleEmailJobs();const rows=getDb().prepare("SELECT id FROM email_jobs WHERE status='pending' AND available_at<=datetime('now') ORDER BY created_at LIMIT ?").all(limit) as Array<{id:string}>;let processed=0;for(const row of rows){try{await dispatchEmailJob(row.id);}catch{}processed++;}return processed;}
+// Campaign jobs are never dispatched from here: their retries belong to the campaign step,
+// which re-sends only inside the mailbox's working hours, daily cap and pacing, counts the
+// send and advances the track. Sending them here put mail out off-schedule and uncounted.
+export async function processEmailJobs(limit=20){recoverStaleEmailJobs();const rows=getDb().prepare("SELECT id FROM email_jobs WHERE status='pending' AND source<>'campaign' AND available_at<=datetime('now') ORDER BY created_at LIMIT ?").all(limit) as Array<{id:string}>;let processed=0;for(const row of rows){try{await dispatchEmailJob(row.id);}catch{}processed++;}return processed;}
 export function recoverStaleEmailJobs(){const db=getDb();db.prepare("UPDATE email_jobs SET status='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=datetime('now') WHERE status='leased' AND lease_expires_at<datetime('now')").run();db.prepare("UPDATE email_jobs SET status='uncertain',last_error=COALESCE(last_error,'Worker stopped during provider handoff; manual reconciliation required'),lease_owner=NULL,lease_expires_at=NULL,updated_at=datetime('now') WHERE status='sending' AND lease_expires_at<datetime('now')").run();}
 
 export function acquireWorkerLease(name:string,owner=WORKER_ID,ttlSeconds=45){return acquireLease(name,owner,ttlSeconds)!==null;}
@@ -202,6 +220,10 @@ export function evaluateSenderHealth(emailAccountId:string){const db=getDb();con
 
 function assertSenderHealthy(account:Account){if(account.paused_at)throw new SenderPausedError(account.paused_reason??"Sender is paused by the health policy");}
 function receiptForJob(id:string):SendReceipt|null{const row=getDb().prepare("SELECT message_id,provider_message_id,smtp_response FROM sent_messages WHERE job_id=?").get(id) as {message_id:string;provider_message_id:string|null;smtp_response:string|null}|undefined;return row?{messageId:row.message_id,providerMessageId:row.provider_message_id??undefined,response:row.smtp_response??undefined}:null;}
+function jobHeaders(input:QueueEmailInput):string|null{const refs=(input.references??[]).filter(Boolean).map(asMessageId);const headers={...(input.headers??{}),...(refs.length?{References:refs.join(" ")}:{})};return Object.keys(headers).length?JSON.stringify(headers):null;}
+/** RFC 5322 msg-id form: angle brackets, no whitespace. */
+export function asMessageId(value:string):string{const v=value.trim().replace(/\s+/g,"");return v.startsWith("<")?v:`<${v}>`;}
+function sqliteToIso(value:string):string{return /[TZ]/.test(value)?value:`${value.replace(" ","T")}Z`;}
 function parseHeaders(value:string|null):Record<string,string>{if(!value)return{};try{return JSON.parse(value);}catch{return{};}}
 function isAmbiguous(error:unknown){const code=String((error as {code?:string})?.code??"");return ["ETIMEDOUT","ECONNRESET","EPIPE","ESOCKET"].includes(code)||/timeout|connection.*closed|socket/i.test(message(error));}
 function message(error:unknown){return error instanceof Error?error.message:String(error);}
@@ -215,3 +237,5 @@ export class SafeSendError extends Error{}
 export class SenderPausedError extends SafeSendError{}
 /** The recipient is on the do-not-send list. This contact is permanently out of this channel. */
 export class RecipientSuppressedError extends SafeSendError{}
+/** A transient provider error: the job is queued again and may be retried from `retryAt` (ISO). */
+export class EmailRetryScheduledError extends Error{constructor(reason:string,public readonly retryAt:string){super(`Send will be retried: ${reason}`);}}
