@@ -84,5 +84,5 @@ export function scheduleUpdateCheck() {
   checkForUpdate();
 
   // Then every 12 hours
-  setInterval(checkForUpdate, POLL_INTERVAL_MS);
+  setInterval(checkForUpdate, POLL_INTERVAL_MS).unref();
 }

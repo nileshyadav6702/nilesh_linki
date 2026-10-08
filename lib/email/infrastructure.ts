@@ -68,7 +68,62 @@ export async function dispatchEmailJob(jobId:string,owner=WORKER_ID){
 export async function processEmailJobs(limit=20){recoverStaleEmailJobs();const rows=getDb().prepare("SELECT id FROM email_jobs WHERE status='pending' AND available_at<=datetime('now') ORDER BY created_at LIMIT ?").all(limit) as Array<{id:string}>;let processed=0;for(const row of rows){try{await dispatchEmailJob(row.id);}catch{}processed++;}return processed;}
 export function recoverStaleEmailJobs(){const db=getDb();db.prepare("UPDATE email_jobs SET status='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=datetime('now') WHERE status='leased' AND lease_expires_at<datetime('now')").run();db.prepare("UPDATE email_jobs SET status='uncertain',last_error=COALESCE(last_error,'Worker stopped during provider handoff; manual reconciliation required'),lease_owner=NULL,lease_expires_at=NULL,updated_at=datetime('now') WHERE status='sending' AND lease_expires_at<datetime('now')").run();}
 
-export function acquireWorkerLease(name:string,owner=WORKER_ID,ttlSeconds=45){const db=getDb();const expires=new Date(Date.now()+ttlSeconds*1000).toISOString();return db.transaction(()=>{const current=db.prepare("SELECT owner_id,expires_at FROM worker_leases WHERE name=?").get(name) as {owner_id:string;expires_at:string}|undefined;if(current&&current.owner_id!==owner&&Date.parse(current.expires_at)>Date.now())return false;db.prepare(`INSERT INTO worker_leases(name,owner_id,expires_at,heartbeat_at) VALUES(?,?,?,datetime('now')) ON CONFLICT(name) DO UPDATE SET owner_id=excluded.owner_id,expires_at=excluded.expires_at,heartbeat_at=datetime('now')`).run(name,owner,expires);return true;})();}
+export function acquireWorkerLease(name:string,owner=WORKER_ID,ttlSeconds=45){return acquireLease(name,owner,ttlSeconds)!==null;}
+
+// ─── leases with renewal + fencing ───────────────────────────────────────────
+// A lease's TTL (45s) is far shorter than the work done under it (an 8-minute LinkedIn tick),
+// so a lease that is only taken at the top of a pass expires mid-pass and a second process
+// can take it and start driving the same session. withLease() renews it on a heartbeat while
+// the work runs, and the fencing token (bumped whenever the lease changes hands) lets the
+// work check, before each state change, that it still owns the lease it started under.
+
+/** Proof of lease ownership. `token` is the fencing generation this holder acquired. */
+export type LeaseHandle={name:string;owner:string;token:number};
+/** A held lease inside withLease(): isHeld() re-reads the row, so it sees a takeover. */
+export type ActiveLease=LeaseHandle&{isHeld():boolean};
+
+export function acquireLease(name:string,owner=WORKER_ID,ttlSeconds=45):LeaseHandle|null{
+  const db=getDb();const expires=new Date(Date.now()+ttlSeconds*1000).toISOString();
+  return db.transaction(()=>{
+    const current=db.prepare("SELECT owner_id,expires_at,token FROM worker_leases WHERE name=?").get(name) as {owner_id:string;expires_at:string;token:number}|undefined;
+    if(current&&current.owner_id!==owner&&Date.parse(current.expires_at)>Date.now())return null;
+    // Same holder keeps its generation; a change of hands (or a first grant) bumps it, which
+    // invalidates every handle the previous holder still has.
+    const token=!current?1:current.owner_id===owner?current.token:current.token+1;
+    db.prepare(`INSERT INTO worker_leases(name,owner_id,expires_at,heartbeat_at,token) VALUES(?,?,?,datetime('now'),?)
+      ON CONFLICT(name) DO UPDATE SET owner_id=excluded.owner_id,expires_at=excluded.expires_at,heartbeat_at=datetime('now'),token=excluded.token`).run(name,owner,expires,token);
+    return{name,owner,token};
+  })();
+}
+
+/** Extend a held lease. False when it changed hands: the caller must stop mutating state. */
+export function renewLease(lease:LeaseHandle,ttlSeconds=45):boolean{
+  const expires=new Date(Date.now()+ttlSeconds*1000).toISOString();
+  return getDb().prepare("UPDATE worker_leases SET expires_at=?,heartbeat_at=datetime('now') WHERE name=? AND owner_id=? AND token=?").run(expires,lease.name,lease.owner,lease.token).changes>0;
+}
+
+/** Fencing check: this handle still owns the lease and it has not expired. */
+export function holdsLease(lease:LeaseHandle):boolean{
+  const row=getDb().prepare("SELECT owner_id,expires_at,token FROM worker_leases WHERE name=?").get(lease.name) as {owner_id:string;expires_at:string;token:number}|undefined;
+  return!!row&&row.owner_id===lease.owner&&row.token===lease.token&&Date.parse(row.expires_at)>Date.now();
+}
+
+/**
+ * Run `fn` while holding lease `name`, renewing it every `renewEveryMs` until fn settles.
+ * Returns {acquired:false} without running fn when another live holder has it. If a renewal
+ * finds the lease taken over, renewal stops and lease.isHeld() turns false for fn to see.
+ */
+export async function withLease<T>(name:string,fn:(lease:ActiveLease)=>Promise<T>,opts:{owner?:string;ttlSeconds?:number;renewEveryMs?:number}={}):Promise<{acquired:false}|{acquired:true;value:T}>{
+  const ttl=opts.ttlSeconds??45;const handle=acquireLease(name,opts.owner??WORKER_ID,ttl);if(!handle)return{acquired:false};
+  let lost=false;
+  const timer=setInterval(()=>{
+    try{if(!renewLease(handle,ttl)){lost=true;clearInterval(timer);console.warn(`[lease] ${name} was taken over (token ${handle.token}); stopping renewal`);}}
+    catch(err){console.warn(`[lease] ${name} renewal failed:`,message(err));}
+  },opts.renewEveryMs??15_000);
+  timer.unref?.();
+  const lease:ActiveLease={...handle,isHeld:()=>!lost&&holdsLease(handle)};
+  try{return{acquired:true,value:await fn(lease)};}finally{clearInterval(timer);}
+}
 
 /**
  * Engagement events (opens, clicks) are classified before they are stored, because a raw

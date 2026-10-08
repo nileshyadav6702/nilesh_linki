@@ -1,11 +1,12 @@
 import type Database from "better-sqlite3";
+import { execMigration, rebuildTable } from "@/lib/db/migrate";
 
 /**
  * Schema for the AI SDR layer (ICP, agents, signal engine, approvals, enrichment).
  * See docs/prd/ai-signal-sdr-prd.md. Kept out of lib/db.ts so that file stops growing.
  *
  * Every statement is idempotent: CREATE ... IF NOT EXISTS, and ALTERs that throw on
- * re-run are swallowed, matching the pattern used by runMigrations() in lib/db.ts.
+ * re-run ("duplicate column name") are ignored via execMigration; any other error is rethrown.
  */
 const STATEMENTS: string[] = [
   `CREATE TABLE IF NOT EXISTS ai_usage (
@@ -147,37 +148,29 @@ function widenSignalTypes(db: Database.Database) {
   if (done) return;
   const info = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='signals'").get() as { sql: string } | undefined;
   if (!info) return;
-  db.exec(`
-    PRAGMA foreign_keys = OFF;
-    CREATE TABLE signals_open (
+  // Copies every column the old table shares with the new one (agent_id etc. included when a
+  // previous partial run added them), inside one transaction with the flag write.
+  rebuildTable(db, {
+    table: "signals",
+    tempTable: "signals_open",
+    createTempSql: `CREATE TABLE signals_open (
       id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       target_id TEXT REFERENCES targets(id) ON DELETE CASCADE, company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
       type TEXT NOT NULL, title TEXT NOT NULL, description TEXT, score REAL NOT NULL DEFAULT 0, source TEXT,
       occurred_at TEXT NOT NULL, metadata_json TEXT, processed_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
       agent_id TEXT, source_url TEXT, snippet TEXT, weight REAL, detector_run_id TEXT, dedupe_key TEXT
-    );
-    INSERT INTO signals_open (id, workspace_id, target_id, company_id, type, title, description, score, source, occurred_at, metadata_json, processed_at, created_at)
-      SELECT id, workspace_id, target_id, company_id, type, title, description, score, source, occurred_at, metadata_json, processed_at, created_at FROM signals;
-    DROP TABLE signals;
-    ALTER TABLE signals_open RENAME TO signals;
-    PRAGMA foreign_keys = ON;
-    INSERT INTO _migration_flags (key) VALUES ('signals_open_types_v1');
-  `);
+    )`,
+    after: () => db.exec("INSERT INTO _migration_flags (key) VALUES ('signals_open_types_v1')"),
+  });
 }
 
 export function runAiSdrMigrations(db: Database.Database): void {
-  for (const sql of STATEMENTS) {
-    try { db.exec(sql); } catch { /* already applied */ }
-  }
-  try { splitOutreachFlag(db); } catch { /* agents/_migration_flags not present yet */ }
-  try { widenSignalTypes(db); } catch (err) {
-    console.error("[db] signals widen migration failed:", err instanceof Error ? err.message : err);
-  }
+  for (const sql of STATEMENTS) execMigration(db, sql);
+  splitOutreachFlag(db);
+  widenSignalTypes(db);
   for (const sql of [
     "CREATE INDEX IF NOT EXISTS idx_signals_target ON signals(target_id, occurred_at)",
     "CREATE INDEX IF NOT EXISTS idx_signals_ws ON signals(workspace_id, created_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_dedupe ON signals(workspace_id, dedupe_key) WHERE dedupe_key IS NOT NULL",
-  ]) {
-    try { db.exec(sql); } catch { /* already applied */ }
-  }
+  ]) execMigration(db, sql);
 }

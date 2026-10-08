@@ -1,4 +1,4 @@
-import { startImport } from "@/lib/import-jobs";
+import { hasActiveImport, startImport } from "@/lib/import-jobs";
 import type { SourceRunner } from "@/lib/signals/sources/types";
 
 /**
@@ -31,8 +31,9 @@ export const linkedinImportRunner: SourceRunner = async (ctx) => {
   if (!url || !/linkedin\.com\/sales\//.test(url)) throw new Error("Paste a Sales Navigator list or search URL");
   if (!ctx.agent.linkedin_account_id || !ctx.agent.list_id) throw new Error("This source needs a LinkedIn account on the agent");
   if (ctx.cursor.imported_url === url) return; // one-shot per URL
-  const active = ctx.db.prepare("SELECT 1 FROM list_imports WHERE list_id = ? AND status IN ('running','scheduled')").get(ctx.agent.list_id);
-  if (active) return;
+  // A dead "running" import (worker stopped) no longer counts as active, or it would block
+  // this source forever.
+  if (hasActiveImport(ctx.db, ctx.agent.list_id)) return;
   startImport(ctx.db, { listId: ctx.agent.list_id, accountId: ctx.agent.linkedin_account_id, salesNavUrl: url, enrich: false });
   ctx.cursor.imported_url = url;
 };

@@ -33,33 +33,83 @@ export interface ImportRow {
 
 // ─── settings ────────────────────────────────────────────────────────────────
 
-export function getDailyImportCap(db: DB = getDb()): number {
-  const row = db.prepare("SELECT value FROM app_settings WHERE key = 'daily_import_cap'").get() as
-    | { value: string }
-    | undefined;
-  const n = row ? parseInt(row.value, 10) : NaN;
-  return Number.isFinite(n) && n > 0 ? n : DEFAULT_DAILY_CAP;
+const GLOBAL_CAP_KEY = "daily_import_cap";
+const workspaceCapKey = (workspaceId: string) => `daily_import_cap:${workspaceId}`;
+
+/**
+ * The daily import cap. Per workspace: one tenant's setting must not change another's quota.
+ * Without a workspace (legacy callers) or when the workspace never set one, falls back to the
+ * old instance-wide value, then to DEFAULT_DAILY_CAP.
+ */
+export function getDailyImportCap(db: DB = getDb(), workspaceId?: string | null): number {
+  const keys = workspaceId ? [workspaceCapKey(workspaceId), GLOBAL_CAP_KEY] : [GLOBAL_CAP_KEY];
+  for (const key of keys) {
+    const row = db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as { value: string } | undefined;
+    const n = row ? parseInt(row.value, 10) : NaN;
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return DEFAULT_DAILY_CAP;
 }
 
-export function setDailyImportCap(db: DB, n: number): void {
+/** Set the cap for one workspace (or, without one, the legacy instance-wide fallback). */
+export function setDailyImportCap(db: DB, n: number, workspaceId?: string | null): void {
   const v = String(Math.max(1, Math.floor(n)));
   db.prepare(
-    `INSERT INTO app_settings (key, value, updated_at) VALUES ('daily_import_cap', ?, datetime('now'))
+    `INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, datetime('now'))
      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
-  ).run(v);
+  ).run(workspaceId ? workspaceCapKey(workspaceId) : GLOBAL_CAP_KEY, v);
 }
 
 // ─── quota ───────────────────────────────────────────────────────────────────
 
-/** Contacts imported across ALL lists today (the global daily budget). */
-export function importedToday(db: DB): number {
-  const row = db
-    .prepare(
-      `SELECT COALESCE(SUM(imported), 0) c FROM list_imports
-       WHERE status IN ('done', 'running') AND date(COALESCE(finished_at, started_at)) = date('now')`
-    )
-    .get() as { c: number };
+/**
+ * Contacts imported today (UTC day). With a workspace, only that workspace's lists count -
+ * the cap is per workspace, so the quota must be too. Without one: every list (legacy).
+ */
+export function importedToday(db: DB, workspaceId?: string | null): number {
+  const base = `SELECT COALESCE(SUM(li.imported), 0) c FROM list_imports li
+       WHERE li.status IN ('done', 'running') AND date(COALESCE(li.finished_at, li.started_at)) = date('now')`;
+  const row = (workspaceId
+    ? db.prepare(`${base} AND li.list_id IN (SELECT id FROM lists WHERE workspace_id = ?)`).get(workspaceId)
+    : db.prepare(base).get()) as { c: number };
   return row.c;
+}
+
+// ─── liveness ────────────────────────────────────────────────────────────────
+
+/** A 'running' import whose heartbeat is older than this is dead, not active. */
+export const IMPORT_STALE_MINUTES = 15;
+
+/**
+ * Is an import queued or genuinely in progress for this list? A 'running' row whose worker
+ * died (crash, restart, wedged loop) is NOT active - counting it blocked every later import
+ * for that list forever.
+ */
+export function hasActiveImport(db: DB, listId: string): boolean {
+  return !!db.prepare(
+    `SELECT 1 FROM list_imports WHERE list_id = ? AND cancel_requested = 0 AND (
+       status = 'scheduled'
+       OR (status = 'running' AND heartbeat_at IS NOT NULL AND heartbeat_at >= datetime('now', ?))
+     ) LIMIT 1`
+  ).get(listId, `-${IMPORT_STALE_MINUTES} minutes`);
+}
+
+/**
+ * Put dead 'running' imports back in the queue (or close them, if a cancel was requested).
+ * A row with no heartbeat predates heartbeats or never got going; a row whose heartbeat is
+ * stale lost its worker. Its contacts were not inserted (insert happens at the end of a
+ * batch), so resuming from the same start_page loses nothing. Returns rows recovered.
+ */
+export function recoverStaleImports(db: DB): number {
+  return db.prepare(
+    `UPDATE list_imports SET
+       status = CASE WHEN cancel_requested = 1 THEN 'canceled' ELSE 'scheduled' END,
+       scheduled_for = CASE WHEN cancel_requested = 1 THEN scheduled_for ELSE date('now') END,
+       finished_at = CASE WHEN cancel_requested = 1 THEN datetime('now') ELSE finished_at END,
+       error = CASE WHEN cancel_requested = 1 THEN error ELSE 'Interrupted (worker stopped); resumed automatically' END,
+       phase = NULL
+     WHERE status = 'running' AND (heartbeat_at IS NULL OR heartbeat_at < datetime('now', ?))`
+  ).run(`-${IMPORT_STALE_MINUTES} minutes`).changes;
 }
 
 function todayStr(): string {
@@ -114,64 +164,102 @@ export function cancelImport(db: DB, importId: string): void {
 
 // ─── scheduler + executor ────────────────────────────────────────────────────
 
+/** Pages one pass may scrape. Each page waits 60-120s, so this bounds a pass to minutes. */
+export const IMPORT_PAGES_PER_PASS = 4;
+/** Cooperative deadline for a pass: no new page is started after it. */
+export const IMPORT_PASS_BUDGET_MS = 6 * 60_000;
+
 let importRunning = false;
 
-/** Runner hook (called each tick): start the next due batch if none is running. */
-export async function processScheduledImports(db: DB): Promise<void> {
+/**
+ * Runner hook, called from the LinkedIn loop - in sequence with outreach, never alongside
+ * it, because both drive the same browser session. Runs at most one bounded pass of the next
+ * due batch and AWAITS it; the remainder is chained as a new batch (today while quota lasts,
+ * else tomorrow). `importRunning` is reset in finally, so a crashed pass cannot wedge imports.
+ */
+export async function processScheduledImports(db: DB, opts: { budgetMs?: number } = {}): Promise<void> {
   if (importRunning) return;
-  const due = db
-    .prepare(
-      `SELECT * FROM list_imports
-       WHERE status = 'scheduled' AND cancel_requested = 0
-         AND (scheduled_for IS NULL OR scheduled_for <= date('now'))
-       ORDER BY scheduled_for ASC, batch_index ASC LIMIT 1`
-    )
-    .get() as ImportRow | undefined;
-  if (!due) return;
-
   importRunning = true;
-  db.prepare("UPDATE list_imports SET status = 'running', started_at = datetime('now') WHERE id = ?").run(due.id);
-  runBatch(due.id)
-    .catch((e) => console.error("[import] batch crashed:", e))
-    .finally(() => { importRunning = false; });
+  try {
+    recoverStaleImports(db);
+    const due = db
+      .prepare(
+        `SELECT * FROM list_imports
+         WHERE status = 'scheduled' AND cancel_requested = 0
+           AND (scheduled_for IS NULL OR scheduled_for <= date('now'))
+         ORDER BY scheduled_for ASC, batch_index ASC LIMIT 1`
+      )
+      .get() as ImportRow | undefined;
+    if (!due) return;
+
+    // Shares the per-account lock with bulk profile enrichment (lib/linkedin/enrich.ts), so an
+    // import pass never drives the session while a bulk enrich run is using it.
+    const { acquireEnrichLock } = await import("@/lib/linkedin/enrich");
+    const release = due.account_id ? acquireEnrichLock(`import:${due.list_id}`, due.account_id) : () => {};
+    if (!release) return; // account busy - stays scheduled for the next pass
+
+    try {
+      const claimed = db.prepare(
+        "UPDATE list_imports SET status = 'running', started_at = datetime('now'), heartbeat_at = datetime('now') WHERE id = ? AND status = 'scheduled'"
+      ).run(due.id);
+      if (!claimed.changes) return;
+      await runBatch(due.id, Date.now() + (opts.budgetMs ?? IMPORT_PASS_BUDGET_MS));
+    } finally {
+      release();
+    }
+  } finally {
+    importRunning = false;
+  }
 }
 
-async function runBatch(importId: string): Promise<void> {
+async function runBatch(importId: string, deadline: number): Promise<void> {
   const db = getDb();
   const job = db.prepare("SELECT * FROM list_imports WHERE id = ?").get(importId) as ImportRow | undefined;
-  if (!job || !job.account_id || !job.sales_nav_url) return;
+  if (!job) return;
+  if (!job.account_id || !job.sales_nav_url) {
+    // Previously left 'running' forever, which also blocked every later import of the list.
+    db.prepare("UPDATE list_imports SET status = 'error', error = 'Import has no LinkedIn account or Sales Navigator URL', finished_at = datetime('now') WHERE id = ?").run(importId);
+    return;
+  }
 
   // List deleted out from under us?
-  const list = db.prepare("SELECT id FROM lists WHERE id = ?").get(job.list_id);
+  const list = db.prepare("SELECT id, workspace_id FROM lists WHERE id = ?").get(job.list_id) as { id: string; workspace_id: string | null } | undefined;
   if (!list) {
     db.prepare("UPDATE list_imports SET status = 'canceled', finished_at = datetime('now') WHERE id = ?").run(importId);
     return;
   }
 
-  // Today's remaining budget → max whole pages this run
-  const cap = getDailyImportCap(db);
-  const remaining = cap - importedToday(db);
-  const maxPages = Math.floor(remaining / PAGE_SIZE);
-  if (maxPages < 1) {
-    db.prepare("UPDATE list_imports SET status = 'scheduled', scheduled_for = ? WHERE id = ?").run(
+  // Today's remaining budget for THIS workspace → max whole pages this pass
+  const cap = getDailyImportCap(db, list.workspace_id);
+  const remaining = cap - importedToday(db, list.workspace_id);
+  const quotaPages = Math.floor(remaining / PAGE_SIZE);
+  if (quotaPages < 1) {
+    db.prepare("UPDATE list_imports SET status = 'scheduled', scheduled_for = ?, heartbeat_at = NULL WHERE id = ?").run(
       addDaysStr(todayStr(), 1),
       importId
     );
     return;
   }
+  const maxPages = Math.min(quotaPages, IMPORT_PAGES_PER_PASS);
 
   console.log(`[import] batch ${importId} (b${job.batch_index}) start_page=${job.start_page} maxPages=${maxPages} cap=${cap}`);
   const { getSessionContext } = await import("@/lib/linkedin/session");
   const { scrapeNavigatorUrl } = await import("@/lib/linkedin/scraper");
 
   const updateProgress = db.prepare(
-    "UPDATE list_imports SET phase = ?, page = ?, total_pages = ?, count = ?, total = ? WHERE id = ?"
+    "UPDATE list_imports SET phase = ?, page = ?, total_pages = ?, count = ?, total = ?, heartbeat_at = datetime('now') WHERE id = ?"
   );
-  const isCanceled = () => {
+  const userCanceled = () => {
     const r = db.prepare("SELECT cancel_requested FROM list_imports WHERE id = ?").get(importId) as
       | { cancel_requested: number }
       | undefined;
     return !r || r.cancel_requested === 1; // row deleted (list cascade) or explicit cancel
+  };
+  // Polled between pages: stamps liveness, and ends the pass at the deadline so the LinkedIn
+  // loop gets the session back. A deadline stop is a normal partial pass, not a cancel.
+  const isCanceled = () => {
+    db.prepare("UPDATE list_imports SET heartbeat_at = datetime('now') WHERE id = ?").run(importId);
+    return userCanceled() || Date.now() > deadline;
   };
 
   try {
@@ -183,7 +271,7 @@ async function runBatch(importId: string): Promise<void> {
       isCanceled,
     });
 
-    if (isCanceled()) {
+    if (userCanceled()) {
       if (db.prepare("SELECT id FROM list_imports WHERE id = ?").get(importId)) {
         db.prepare("UPDATE list_imports SET status = 'canceled', finished_at = datetime('now') WHERE id = ?").run(importId);
       }
@@ -193,31 +281,36 @@ async function runBatch(importId: string): Promise<void> {
     const { imported, skipped } = insertProfiles(db, job.list_id, profiles);
     console.log(`[import] batch ${importId} inserted ${imported} new, skipped ${skipped} (lastPage=${lastPage}, exhausted=${exhausted})`);
 
-    db.prepare(
-      `UPDATE list_imports
-         SET status = 'done', imported = ?, skipped = ?, count = ?, total = ?, page = ?, total_pages = ?, finished_at = datetime('now')
-       WHERE id = ?`
-    ).run(imported, skipped, profiles.length, knownTotal, lastPage, Math.ceil(knownTotal / PAGE_SIZE), importId);
-
-    // More of the list left → chain the remainder to the next day
-    if (!exhausted) {
+    // Close this batch and chain the remainder atomically: a crash between the two used to
+    // leave a 'done' batch with no continuation, silently ending a half-imported list.
+    db.transaction(() => {
       db.prepare(
-        `INSERT INTO list_imports
-           (id, list_id, account_id, sales_nav_url, status, scheduled_for, start_page, batch_index, enrich, total, total_pages, started_at)
-         VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, datetime('now'))`
-      ).run(
-        randomUUID(),
-        job.list_id,
-        job.account_id,
-        job.sales_nav_url,
-        addDaysStr(todayStr(), 1),
-        lastPage + 1,
-        job.batch_index + 1,
-        job.enrich,
-        knownTotal,
-        Math.ceil(knownTotal / PAGE_SIZE)
-      );
-    }
+        `UPDATE list_imports
+           SET status = 'done', imported = ?, skipped = ?, count = ?, total = ?, page = ?, total_pages = ?, finished_at = datetime('now')
+         WHERE id = ?`
+      ).run(imported, skipped, profiles.length, knownTotal, lastPage, Math.ceil(knownTotal / PAGE_SIZE), importId);
+
+      // More of the list left → chain the remainder: later today while quota remains, else tomorrow.
+      if (!exhausted) {
+        const quotaLeft = getDailyImportCap(db, list.workspace_id) - importedToday(db, list.workspace_id) >= PAGE_SIZE;
+        db.prepare(
+          `INSERT INTO list_imports
+             (id, list_id, account_id, sales_nav_url, status, scheduled_for, start_page, batch_index, enrich, total, total_pages, started_at)
+           VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, datetime('now'))`
+        ).run(
+          randomUUID(),
+          job.list_id,
+          job.account_id,
+          job.sales_nav_url,
+          quotaLeft ? todayStr() : addDaysStr(todayStr(), 1),
+          lastPage + 1,
+          job.batch_index + 1,
+          job.enrich,
+          knownTotal,
+          Math.ceil(knownTotal / PAGE_SIZE)
+        );
+      }
+    })();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[import] FAILED:", message);

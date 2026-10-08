@@ -4,6 +4,8 @@ import { randomUUID } from "crypto";
 import { scheduleUpdateCheck } from "@/lib/update-check";
 import { encryptSecret, isEncrypted } from "@/lib/crypto";
 import { runAiSdrMigrations } from "@/lib/db/ai-sdr-schema";
+import { runRobustnessMigrations } from "@/lib/db/robustness-schema";
+import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
 
 const DB_PATH = process.env.LINKI_DB_PATH || path.join(process.cwd(), "linki.db");
 
@@ -12,11 +14,18 @@ let db: Database.Database;
 export function getDb(): Database.Database {
   if (!db) {
     db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
+    // WAL lets the UI read while the runner writes; busy_timeout makes a writer WAIT for a
+    // concurrent writer (a second process, a checkpoint) instead of failing with SQLITE_BUSY
+    // mid-step; synchronous=NORMAL is the recommended durability level under WAL.
+    const mode = db.pragma("journal_mode = WAL", { simple: true });
+    if (String(mode).toLowerCase() !== "wal") console.warn(`[db] journal_mode is ${mode}, expected wal`);
+    db.pragma("busy_timeout = 5000");
+    db.pragma("synchronous = NORMAL");
     db.pragma("foreign_keys = ON");
     initDb(db);
     runMigrations(db);
     runAiSdrMigrations(db);
+    runRobustnessMigrations(db);
     scheduleUpdateCheck();
   }
   return db;
@@ -196,24 +205,38 @@ function dropDeprecatedRunProfileColumns(db: Database.Database) {
   } catch { return; }
 
   // SQLite requires a table rebuild to drop columns
-  try {
-    db.exec(`
-      PRAGMA foreign_keys = OFF;
-      CREATE TABLE run_profiles_new (
+  rebuildTable(db, {
+    table: "run_profiles",
+    tempTable: "run_profiles_new",
+    createTempSql: `CREATE TABLE run_profiles_new (
         id TEXT PRIMARY KEY,
         run_id TEXT REFERENCES runs(id) ON DELETE CASCADE,
         target_id TEXT REFERENCES targets(id),
         email_account_id TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         UNIQUE(run_id, target_id)
-      );
-      INSERT INTO run_profiles_new (id, run_id, target_id, email_account_id, created_at)
-        SELECT id, run_id, target_id, email_account_id, created_at FROM run_profiles;
-      DROP TABLE run_profiles;
-      ALTER TABLE run_profiles_new RENAME TO run_profiles;
-      PRAGMA foreign_keys = ON;
-    `);
-  } catch { /* ignore — may already be done */ }
+      )`,
+  });
+}
+
+const STEP_TYPES = ["visit", "connect", "message", "sales_inmail", "delay", "email"];
+
+/**
+ * Widen workflow_steps.step_type's CHECK to every step type the runner knows. The new table
+ * is the CURRENT table's own DDL with only the CHECK list swapped, so every column - including
+ * the ones later ALTERs added (email_subject/email_body, ai_*, track, delivery settings) - and
+ * every other constraint survives. An earlier hard-coded rebuild here copied only the original
+ * columns and wrote NULL into email_subject/email_body.
+ */
+function widenWorkflowStepTypes(db: Database.Database) {
+  const sql = tableSql(db, "workflow_steps");
+  if (!sql || STEP_TYPES.every((t) => sql.includes(`'${t}'`))) return;
+  const check = /CHECK\s*\(\s*step_type\s+IN\s*\([^)]*\)\s*\)/i;
+  if (!check.test(sql)) throw new Error("workflow_steps has no recognisable step_type CHECK to widen");
+  const createTempSql = sql
+    .replace(/^CREATE TABLE\s+("?)workflow_steps\1/i, "CREATE TABLE workflow_steps_new")
+    .replace(check, `CHECK(step_type IN (${STEP_TYPES.map((t) => `'${t}'`).join(", ")}))`);
+  rebuildTable(db, { table: "workflow_steps", tempTable: "workflow_steps_new", createTempSql });
 }
 
 function runMigrations(db: Database.Database) {
@@ -899,9 +922,9 @@ function runMigrations(db: Database.Database) {
     "ALTER TABLE sender_events ADD COLUMN user_agent TEXT",
     "CREATE INDEX IF NOT EXISTS idx_sender_events_engagement ON sender_events(sent_message_id, event_type, is_bot)",
   ];
-  for (const sql of migrations) {
-    try { db.exec(sql); } catch { /* column already exists */ }
-  }
+  // Only "duplicate column"/"already exists" (a re-run) is ignored; anything else is logged
+  // and rethrown rather than leaving the schema silently half-migrated.
+  for (const sql of migrations) execMigration(db, sql);
 
   // Freeze the legacy-workspace bootstrap after its first run. From here on, new users
   // get their own workspace via createWorkspaceForUser() and are never added to the
@@ -994,120 +1017,42 @@ function runMigrations(db: Database.Database) {
 
   // integrations was historically keyed globally by provider name. Rebuild it with a
   // workspace/provider composite key so tenants can configure independent credentials.
-  try {
+  {
     const info = db.prepare("PRAGMA table_info(integrations)").all() as Array<{ name: string; pk: number }>;
     if (info.find((c) => c.name === "key")?.pk === 1) {
-      db.exec(`
-        PRAGMA foreign_keys = OFF;
-        CREATE TABLE integrations_workspace (
+      rebuildTable(db, {
+        table: "integrations",
+        tempTable: "integrations_workspace",
+        createTempSql: `CREATE TABLE integrations_workspace (
           key TEXT NOT NULL,
           workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
           api_key TEXT,
           created_at TEXT DEFAULT (datetime('now')),
           updated_at TEXT DEFAULT (datetime('now')),
           PRIMARY KEY (workspace_id, key)
-        );
-        INSERT INTO integrations_workspace (key, workspace_id, api_key, created_at, updated_at)
-          SELECT key, COALESCE(workspace_id, '00000000-0000-4000-8000-000000000001'), api_key, created_at, updated_at FROM integrations;
-        DROP TABLE integrations;
-        ALTER TABLE integrations_workspace RENAME TO integrations;
-        PRAGMA foreign_keys = ON;
-      `);
+        )`,
+        copyTransform: { workspace_id: "COALESCE(workspace_id, '00000000-0000-4000-8000-000000000001')" },
+      });
     }
-  } catch { /* already migrated */ }
+  }
 
   // Parallel tracks: assign email steps to email track, re-number step_order, backfill run_profile_tracks
   runParallelTracksMigration(db);
   // Drop deprecated run_profiles columns (state, current_step, etc.) — consumers now read track-runs
   dropDeprecatedRunProfileColumns(db);
 
-  // Migrate workflow_steps CHECK constraint to allow 'delay' and 'email' step_types
-  try {
-    const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_steps'").get() as { sql: string } | undefined;
-    if (tableInfo && (!tableInfo.sql.includes("'delay'") || !tableInfo.sql.includes("'email'"))) {
-      db.exec(`
-        PRAGMA foreign_keys = OFF;
-        CREATE TABLE workflow_steps_new (
-          id TEXT PRIMARY KEY,
-          workflow_id TEXT REFERENCES workflows(id) ON DELETE CASCADE,
-          step_order INTEGER NOT NULL,
-          step_type TEXT NOT NULL CHECK(step_type IN ('visit', 'connect', 'message', 'delay', 'email')),
-          template_id TEXT REFERENCES templates(id),
-          delay_seconds INTEGER DEFAULT 0,
-          connect_note TEXT,
-          message_body TEXT,
-          email_subject TEXT,
-          email_body TEXT,
-          enabled INTEGER DEFAULT 1,
-          email_delivery_mode TEXT NOT NULL DEFAULT 'plain' CHECK(email_delivery_mode IN ('plain','enhanced')),
-          email_track_opens INTEGER NOT NULL DEFAULT 0,
-          email_track_clicks INTEGER NOT NULL DEFAULT 0
-        );
-        INSERT INTO workflow_steps_new
-          (id, workflow_id, step_order, step_type, template_id, delay_seconds,
-           connect_note, message_body, email_subject, email_body, enabled)
-          SELECT id, workflow_id, step_order, step_type, template_id, delay_seconds,
-                 connect_note, message_body,
-                 NULL, NULL,
-                 enabled
-          FROM workflow_steps;
-        DROP TABLE workflow_steps;
-        ALTER TABLE workflow_steps_new RENAME TO workflow_steps;
-        PRAGMA foreign_keys = ON;
-      `);
-    }
-  } catch { /* migration already done */ }
-
-  // Allow the 'sales_inmail' step_type (Sales Navigator InMail). Rebuilds the
-  // table preserving EVERY current column (the historical rebuild above only
-  // copied the original columns — do NOT reuse it). InMail reuses message_body
-  // for the body and email_subject for the required subject.
-  try {
-    const ti = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_steps'").get() as { sql: string } | undefined;
-    if (ti && !ti.sql.includes("'sales_inmail'")) {
-      const cols = (db.prepare("PRAGMA table_info(workflow_steps)").all() as Array<{ name: string }>).map((c) => c.name);
-      const colList = cols.join(", ");
-      db.exec(`
-        PRAGMA foreign_keys = OFF;
-        CREATE TABLE workflow_steps_new (
-          id TEXT PRIMARY KEY,
-          workflow_id TEXT REFERENCES workflows(id) ON DELETE CASCADE,
-          step_order INTEGER NOT NULL,
-          step_type TEXT NOT NULL CHECK(step_type IN ('visit', 'connect', 'message', 'sales_inmail', 'delay', 'email')),
-          template_id TEXT REFERENCES templates(id),
-          delay_seconds INTEGER DEFAULT 0,
-          connect_note TEXT,
-          message_body TEXT,
-          email_subject TEXT,
-          email_body TEXT,
-          enabled INTEGER DEFAULT 1,
-          ai_enabled INTEGER DEFAULT 0,
-          ai_model TEXT,
-          ai_prompt TEXT,
-          ai_max_words INTEGER,
-          email_position INTEGER DEFAULT 1,
-          message_position INTEGER DEFAULT 1,
-          ai_language TEXT DEFAULT 'English',
-          track TEXT NOT NULL DEFAULT 'linkedin' CHECK(track IN ('linkedin', 'email')),
-          email_signature TEXT,
-          email_delivery_mode TEXT NOT NULL DEFAULT 'plain' CHECK(email_delivery_mode IN ('plain','enhanced')),
-          email_track_opens INTEGER NOT NULL DEFAULT 0,
-          email_track_clicks INTEGER NOT NULL DEFAULT 0
-        );
-        INSERT INTO workflow_steps_new (${colList}) SELECT ${colList} FROM workflow_steps;
-        DROP TABLE workflow_steps;
-        ALTER TABLE workflow_steps_new RENAME TO workflow_steps;
-        PRAGMA foreign_keys = ON;
-      `);
-    }
-  } catch { /* migration already done */ }
+  // Widen the step_type CHECK (delay, email, sales_inmail) preserving every column. Replaces two
+  // hard-coded rebuilds; the first of them wrote NULL over email_subject/email_body and dropped
+  // every column added after the base schema. InMail reuses message_body for the body and
+  // email_subject for the required subject.
+  widenWorkflowStepTypes(db);
 
   // CSV import: allow email-only targets (no LinkedIn URL). targets.linkedin_url was
   // NOT NULL UNIQUE from the base schema — rebuild to make it nullable (still UNIQUE,
   // SQLite allows multiple NULLs under UNIQUE) preserving EVERY current column, same
   // pattern as the sales_inmail rebuild above (do not reuse the older historical rebuilds
   // that only copied the original columns).
-  try {
+  {
     const ti = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='targets'").get() as { sql: string } | undefined;
     if (ti && ti.sql.includes("linkedin_url TEXT NOT NULL")) {
       const cols = (db.prepare("PRAGMA table_info(targets)").all() as Array<{ name: string; type: string; notnull: number; dflt_value: string | null }>);
@@ -1120,24 +1065,14 @@ function runMigrations(db: Database.Database) {
         const dflt = c.dflt_value !== null ? ` DEFAULT ${isLiteral ? c.dflt_value : `(${c.dflt_value})`}` : "";
         return `${c.name} ${c.type}${notnull}${dflt}`;
       });
-      const colList = cols.map((c) => c.name).join(", ");
-      db.exec(`
-        PRAGMA foreign_keys = OFF;
-        CREATE TABLE targets_new (
-          ${colDefs.join(",\n          ")}
-        );
-        INSERT INTO targets_new (${colList}) SELECT ${colList} FROM targets;
-        DROP TABLE targets;
-        ALTER TABLE targets_new RENAME TO targets;
-        PRAGMA foreign_keys = ON;
-      `);
+      rebuildTable(db, { table: "targets", tempTable: "targets_new", createTempSql: `CREATE TABLE targets_new (${colDefs.join(",\n")})` });
     }
-  } catch { /* migration already done */ }
+  }
 
   // Multi-tenant contacts may legitimately share a LinkedIn profile URL across
   // isolated workspaces. Remove the historical global UNIQUE constraint and
   // replace it with a workspace-scoped partial unique index.
-  try {
+  {
     const ti = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='targets'").get() as { sql: string } | undefined;
     if (ti && /linkedin_url\s+TEXT\s+UNIQUE/i.test(ti.sql)) {
       const cols = db.prepare("PRAGMA table_info(targets)").all() as Array<{ name: string; type: string; notnull: number; dflt_value: string | null }>;
@@ -1148,20 +1083,12 @@ function runMigrations(db: Database.Database) {
         const dflt = c.dflt_value !== null ? ` DEFAULT ${isLiteral ? c.dflt_value : `(${c.dflt_value})`}` : "";
         return `${c.name} ${c.type}${notnull}${dflt}`;
       });
-      const colList = cols.map((c) => c.name).join(", ");
-      db.exec(`
-        PRAGMA foreign_keys = OFF;
-        CREATE TABLE targets_workspace (${colDefs.join(",\n")});
-        INSERT INTO targets_workspace (${colList}) SELECT ${colList} FROM targets;
-        DROP TABLE targets;
-        ALTER TABLE targets_workspace RENAME TO targets;
-        PRAGMA foreign_keys = ON;
-      `);
+      rebuildTable(db, { table: "targets", tempTable: "targets_workspace", createTempSql: `CREATE TABLE targets_workspace (${colDefs.join(",\n")})` });
     }
-    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_targets_workspace_linkedin ON targets(workspace_id, linkedin_url) WHERE linkedin_url IS NOT NULL");
-    db.exec("CREATE INDEX IF NOT EXISTS idx_targets_workspace_email ON targets(workspace_id, email)");
-    db.exec("CREATE INDEX IF NOT EXISTS idx_targets_messaging_urn ON targets(messaging_urn)");
-  } catch { /* already workspace-scoped */ }
+    execMigration(db, "CREATE UNIQUE INDEX IF NOT EXISTS idx_targets_workspace_linkedin ON targets(workspace_id, linkedin_url) WHERE linkedin_url IS NOT NULL");
+    execMigration(db, "CREATE INDEX IF NOT EXISTS idx_targets_workspace_email ON targets(workspace_id, email)");
+    execMigration(db, "CREATE INDEX IF NOT EXISTS idx_targets_messaging_urn ON targets(messaging_urn)");
+  }
 
   // A reply is the durable record of a conversation and must outlive the contact row it was
   // filed under. email_replies.target_id was `NOT NULL ... ON DELETE CASCADE`, so deleting a
@@ -1169,7 +1096,7 @@ function runMigrations(db: Database.Database) {
   // could not bring them back, because the rows were gone. target_id is now nullable and
   // `ON DELETE SET NULL`: deleting a contact detaches their replies instead of deleting them,
   // and a detached reply can be re-linked (automatically by email match, or from the inbox).
-  try {
+  {
     const ri = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='email_replies'").get() as { sql: string } | undefined;
     if (ri && /target_id\s+TEXT\s+NOT\s+NULL/i.test(ri.sql)) {
       const cols = db.prepare("PRAGMA table_info(email_replies)").all() as Array<{ name: string; type: string; notnull: number; dflt_value: string | null; pk: number }>;
@@ -1190,22 +1117,23 @@ function runMigrations(db: Database.Database) {
         const dflt = c.dflt_value !== null ? ` DEFAULT ${isLiteral ? c.dflt_value : `(${c.dflt_value})`}` : "";
         return `${c.name} ${c.type}${notnull}${dflt}${references[c.name] ?? ""}`;
       });
-      const colList = cols.map((c) => c.name).join(", ");
-      db.exec(`
-        PRAGMA foreign_keys = OFF;
-        CREATE TABLE email_replies_detachable (${colDefs.join(",\n")});
-        INSERT INTO email_replies_detachable (${colList}) SELECT ${colList} FROM email_replies;
-        DROP TABLE email_replies;
-        ALTER TABLE email_replies_detachable RENAME TO email_replies;
-        PRAGMA foreign_keys = ON;
-      `);
-      db.exec("CREATE INDEX IF NOT EXISTS idx_email_replies_target_id ON email_replies(target_id)");
-      db.exec("CREATE INDEX IF NOT EXISTS idx_email_replies_dispatched_at ON email_replies(dispatched_at)");
-      db.exec("CREATE INDEX IF NOT EXISTS idx_replies_team ON email_replies(workspace_id, inbox_status, assigned_to, sla_due_at)");
-      db.exec("CREATE INDEX IF NOT EXISTS idx_email_replies_message_id ON email_replies(email_account_id, message_id)");
-      db.exec("CREATE INDEX IF NOT EXISTS idx_email_replies_from_email ON email_replies(workspace_id, from_email)");
+      rebuildTable(db, {
+        table: "email_replies",
+        tempTable: "email_replies_detachable",
+        createTempSql: `CREATE TABLE email_replies_detachable (${colDefs.join(",\n")})`,
+        // Indexes are dropped with the old table; recreate them inside the same transaction.
+        after: () => {
+          for (const sql of [
+            "CREATE INDEX IF NOT EXISTS idx_email_replies_target_id ON email_replies(target_id)",
+            "CREATE INDEX IF NOT EXISTS idx_email_replies_dispatched_at ON email_replies(dispatched_at)",
+            "CREATE INDEX IF NOT EXISTS idx_replies_team ON email_replies(workspace_id, inbox_status, assigned_to, sla_due_at)",
+            "CREATE INDEX IF NOT EXISTS idx_email_replies_message_id ON email_replies(email_account_id, message_id)",
+            "CREATE INDEX IF NOT EXISTS idx_email_replies_from_email ON email_replies(workspace_id, from_email)",
+          ]) execMigration(db, sql);
+        },
+      });
     }
-  } catch { /* already detachable */ }
+  }
 
   // Backfill: move company_description and company_size from targets into companies
   try {

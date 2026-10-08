@@ -77,6 +77,20 @@ sqlite3 /opt/linki/data/linki.db "SELECT id, recipient, subject, last_error, upd
 ```
   For each, check the recipient inbox or the `sent_messages` table for a matching send. If it was not sent, requeue by setting `status='pending', available_at=datetime('now'), lease_owner=NULL`. If it was sent, mark `status='sent'`. Only do this after confirming, and back up first.
 
+### Uncertain LinkedIn actions
+
+LinkedIn connect/message/InMail/visit actions are claimed in `linkedin_actions` before the browser is driven (one row per run, track and step). A row left in `sending` (step watchdog timeout, crash, page closed mid-send) becomes `uncertain` and is never resent automatically: the runner moves the track on, sets the track `error_message`, and logs a `warn` "Delivery of the ... is uncertain". Reconcile by checking the LinkedIn conversation/invitations for that contact:
+```bash
+sqlite3 /opt/linki/data/linki.db "SELECT id, type, target_id, run_id, last_error, updated_at FROM linkedin_actions WHERE status='uncertain' ORDER BY updated_at DESC;"
+```
+If it went out, set `status='sent'`. If it did not, send it by hand (the track has already moved on). Daily LinkedIn caps count `sending`, `sent` and `uncertain` rows on the account's local day.
+
+### Stuck imports and track claims
+
+- A `list_imports` row in `running` whose `heartbeat_at` is older than 15 minutes (or missing) is requeued as `scheduled` at runner boot and before every import pass; one with a pending cancel is closed as `canceled`. It no longer blocks agent import sources.
+- Imports run inside the LinkedIn loop (never alongside outreach), at most 4 pages / about 6 minutes per pass; the remainder is chained as a new batch later the same day while the workspace quota lasts, else the next day. The daily import cap is per workspace (`app_settings` key `daily_import_cap:<workspace_id>`, falling back to the old global `daily_import_cap`).
+- `run_profile_tracks.claimed_by/claimed_at` mark the worker executing a track. A claim older than 15 minutes is treated as abandoned and taken over automatically; no manual action is needed.
+
 ## Repeated failed jobs
 
 Symptom: jobs in `failed` with a repeating error.
@@ -117,7 +131,7 @@ Symptom: new image starts unhealthy or crash-loops.
 
 ## Failed migration
 
-Migrations are idempotent `CREATE/ALTER` statements that run on boot; there is no destructive migration path. If boot fails during migration:
+Migrations are idempotent `CREATE/ALTER` statements that run on boot; there is no destructive migration path. Only "duplicate column name"/"already exists" errors are ignored; any other error is logged as `[db] migration failed: ... statement: ...` and stops boot (a plain `CREATE INDEX` over a column a legacy table lacks is logged as `[db] index skipped` instead). Table rebuilds run in one transaction, drop a leftover `*_new` table first and always restore `foreign_keys`, so a failed rebuild leaves the old table intact. If boot fails during migration:
 1. Read the exact SQL error in the logs.
 2. Restore the pre-deploy database backup (DEPLOYMENT.md, Restore) and roll back to the previous image.
 3. Report the failing statement for a code fix. Do not hand-edit the schema in production without a backup.
@@ -146,5 +160,8 @@ With no heavy observability stack, poll these on a small interval from the host 
 - `free -h` / `docker stats` (high memory, OOM risk).
 - `df -h /` and `du -sh /opt/linki/data` (disk and DB growth).
 - `email_jobs` counts by status (rising `failed`/`uncertain` means a provider or reconciliation problem).
+- `linkedin_actions` rows in `uncertain` (each needs a human check, see Stuck jobs).
+- `worker_leases`: `heartbeat_at` advances about every 15s while a loop works; `token` increases when a lease changes hands between processes.
+- Tracks with `run_profile_tracks.error_message LIKE 'AI writing blocked%'`: AI steps are held and retried every 6h until the OpenRouter key, model, credit or spend cap is fixed, instead of being skipped.
 - Accounts flagged as needing re-auth (LinkedIn checkpoints).
 - Backup job success.
