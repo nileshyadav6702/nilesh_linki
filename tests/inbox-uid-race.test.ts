@@ -1,7 +1,5 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { EventEmitter } from "events";
-import os from "os";
-import path from "path";
 
 // node-imap emits a message's `attributes` -- the event carrying the UID -- AFTER its body
 // stream has ended. The header scan read `uid` when the body stream ended, so it read 0, and
@@ -43,7 +41,7 @@ class FakeImap extends EventEmitter {
   fetch(source: unknown, options: { bodies?: unknown }) {
     capturedFetchUids.push(source);
     const fetch = new FakeFetch();
-    const isHeaderScan = options?.bodies === "HEADER.FIELDS (FROM)";
+    const isHeaderScan = Array.isArray(source) && typeof options?.bodies === "string" && options.bodies.startsWith("HEADER.FIELDS");
 
     setImmediate(() => {
       if (isHeaderScan) {
@@ -55,8 +53,9 @@ class FakeImap extends EventEmitter {
         body.emit("data", Buffer.from("From: Lead <lead@example.com>\r\n\r\n"));
         body.emit("end");
 
-        // The UID arrives only now -- after the body stream is done.
-        msg.emit("attributes", { uid: 7 });
+        // The UID arrives only now -- after the body stream is done. INTERNALDATE is after
+        // the campaign email, so the message counts as a reply.
+        msg.emit("attributes", { uid: 7, date: new Date(Date.now() + 60_000) });
         msg.emit("end");
       }
       fetch.emit("end");
@@ -75,14 +74,16 @@ class FakeImap extends EventEmitter {
 vi.mock("imap", () => ({ default: FakeImap }));
 
 describe("header scan UID handling", () => {
-  beforeAll(() => {
-    process.env.LINKI_DB_PATH = path.join(
-      os.tmpdir(),
-      `linki-uid-${process.pid}-${Math.random().toString(36).slice(2)}.db`,
-    );
-  });
+  let syncEmailInbox: typeof import("@/lib/email/inbox").syncEmailInbox;
 
-  it("hands capture the message's real UID, not zero", async () => {
+  // The slow part of this file is one-time setup, not the behaviour under test: transforming
+  // the inbox module graph on first import and running every migration against a fresh SQLite
+  // file took ~3.5s on an idle machine, and both used to sit inside the 5s test timeout, so
+  // under full-suite load the test timed out intermittently while the sync itself takes
+  // milliseconds (every fake IMAP callback is a setImmediate; there are no real waits). The
+  // setup now lives in a hook with a budget sized for that work, and the test times only the
+  // sync. (tests/setup.ts already points LINKI_DB_PATH at a throwaway file.)
+  beforeAll(async () => {
     const { getDb } = await import("@/lib/db");
     const db = getDb();
 
@@ -98,7 +99,10 @@ describe("header scan UID handling", () => {
       VALUES ('j1', 'ws1', 'acc1', 't1', 'k1', 'campaign', 'lead@example.com', 'Hi', 'Body', 'sent')
     `).run();
 
-    const { syncEmailInbox } = await import("@/lib/email/inbox");
+    ({ syncEmailInbox } = await import("@/lib/email/inbox"));
+  }, 60_000);
+
+  it("hands capture the message's real UID, not zero", async () => {
     await syncEmailInbox("acc1");
 
     // The first fetch is the header scan (an array of UIDs). The capture fetch that follows

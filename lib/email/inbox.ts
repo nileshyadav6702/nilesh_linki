@@ -1,11 +1,7 @@
 import Imap from "imap";
-import { simpleParser } from "mailparser";
-import { randomUUID } from "crypto";
 import { getDb } from "@/lib/db";
 import { premium } from "@/lib/premium";
 import { decryptSecret } from "@/lib/crypto";
-import { emitDomainEvent } from "@/lib/platform/events";
-import { recordInboundBounce } from "@/lib/email/infrastructure";
 
 const IMAP_POLL_INTERVAL_MS = 5 * 60 * 1000; // push/IDLE fallback reconciliation
 // Ceiling on one full IMAP session (connect + header scan + bounce scan). Generous:
@@ -24,34 +20,16 @@ const MAX_HEADER_SCAN = 3000;
 // handshakes at once and hand the origin exactly the load spike that returns 502s.
 const ACCOUNT_SWEEP_CONCURRENCY = 4;
 
-const BOUNCE_SENDER_PATTERNS = [
-  /mailer-daemon@/i,
-  /postmaster@/i,
-  /mail-delivery-subsystem@/i,
-  /delivery-status@/i,
-  /amazonses\.com$/i,
-];
+import {
+  BOUNCE_SENDER_PATTERNS, attributeReplies, extractEmails, hashStr, isBounce, parseDbTime,
+  parseHeaderValue, parseScannedHeader, REPLY_SCAN_FIELDS, type PendingTarget, type ScannedHeader,
+} from "@/lib/email/reply-attribution";
+import { captureReplyBody } from "@/lib/email/reply-capture";
+import { applyBounceCandidates } from "@/lib/email/bounces";
 
-function extractEmails(text: string): string[] {
-  return [...text.matchAll(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g)].map(m => m[0].toLowerCase());
-}
+export { attributeReplies, parseScannedHeader, REPLY_SCAN_FIELDS, captureReplyBody, applyBounceCandidates };
+export type { PendingTarget, ScannedHeader };
 
-function isBounce(fromEmail: string): boolean {
-  return BOUNCE_SENDER_PATTERNS.some(p => p.test(fromEmail));
-}
-
-function hashStr(s: string): number {
-  let h = 0;
-  for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0;
-  return Math.abs(h);
-}
-
-function parseHeaderValue(raw: string, field: string): string {
-  const regex = new RegExp(`^${field}:[ \\t]*(.+?)(?=\\r?\\n[^\\s]|$)`, "im");
-  const m = raw.match(regex);
-  if (!m) return "";
-  return m[1].replace(/\r?\n[\t ]+/g, " ").trim();
-}
 
 interface EmailAccount {
   id: string;
@@ -67,119 +45,6 @@ interface EmailAccount {
   inbox_synced_at: string | null;
 }
 
-/**
- * Fetches the body + headers for a given UID and inserts a row into `email_replies`.
- *
- * Idempotent on the message, not on the contact: the same message is recognised by its
- * Message-ID (falling back to sender + timestamp), so re-ingestion is blocked even when the
- * contact it was filed under has been deleted and recreated under a new id. A row that is
- * already stored but detached from any contact is RE-LINKED to `targetId` rather than skipped
- * — that is the path that brings a reply back into the inbox after the contact is recreated.
- * Best-effort: errors are swallowed by the caller.
- */
-export function captureReplyBody(
-  imap: Imap,
-  db: ReturnType<typeof getDb>,
-  targetId: string,
-  fromEmail: string,
-  uid: number,
-  emailAccountId: string,
-): Promise<string | null> {
-  return new Promise<string | null>((resolve) => {
-    // Fetch the full raw RFC822 message — mailparser handles MIME multipart,
-    // base64 / quoted-printable transfer encodings, and charset decoding. The
-    // old HEADER+TEXT regex approach stored raw base64 / =XX escapes for the
-    // common German auto-reply formats, feeding the classifier garbage.
-    const fetch = imap.fetch(uid, { bodies: [""], struct: false });
-
-    const chunks: Buffer[] = [];
-
-    fetch.on("message", (msg) => {
-      msg.on("body", (stream) => {
-        stream.on("data", (c: Buffer) => chunks.push(c));
-      });
-    });
-
-    fetch.once("error", () => resolve(null));
-    fetch.once("end", () => {
-      void (async () => {
-        try {
-          const raw = Buffer.concat(chunks);
-
-          // Never let a warmup message (or its auto-reply) enter the reply inbox — the
-          // inbox is for campaign replies only. Warmup mail carries these headers.
-          if (raw.toString("latin1", 0, 8000).match(/^X-Linki-Warmup(-Reply-To|-ID)?:/im)) {
-            resolve(null);
-            return;
-          }
-
-          const parsed = await simpleParser(raw);
-
-          const subject = parsed.subject ?? null;
-          const parsedFrom =
-            parsed.from?.value?.[0]?.address?.toLowerCase().trim() || fromEmail.toLowerCase();
-          const receivedAt = parsed.date ? parsed.date.toISOString() : new Date().toISOString();
-
-          // Prefer decoded plain text; fall back to stripping the HTML part.
-          const rawText =
-            parsed.text ??
-            (parsed.html ? parsed.html.replace(/<[^>]+>/g, " ") : "");
-          const bodyText = rawText
-            .replace(/\r\n/g, "\n")
-            .replace(/\n{3,}/g, "\n\n")
-            .replace(/[ \t]{2,}/g, " ")
-            .trim()
-            .slice(0, 16_000);
-
-          if (!bodyText) { resolve(null); return; }
-
-          const messageId = parsed.messageId?.trim() || null;
-          const targetRow = db.prepare("SELECT workspace_id FROM targets WHERE id = ?").get(targetId) as { workspace_id: string } | undefined;
-
-          // Identify the MESSAGE, never the contact. Message-ID is the mail system's own
-          // identifier and survives the contact being deleted and recreated; sender +
-          // timestamp is the fallback for the (rare) message that carries no Message-ID.
-          const existing = (messageId
-            ? db.prepare("SELECT id, target_id FROM email_replies WHERE email_account_id = ? AND message_id = ?").get(emailAccountId, messageId)
-            : db.prepare("SELECT id, target_id FROM email_replies WHERE email_account_id = ? AND from_email = ? AND received_at = ?").get(emailAccountId, parsedFrom, receivedAt)
-          ) as { id: string; target_id: string | null } | undefined;
-
-          if (existing) {
-            // Already filed against a live contact — a genuine duplicate, nothing to do.
-            if (existing.target_id) { resolve(null); return; }
-            // Detached (its contact was deleted). Re-attach it and hand it back so the
-            // classifier runs against the contact it now belongs to.
-            db.prepare("UPDATE email_replies SET target_id = ?, workspace_id = COALESCE(workspace_id, ?) WHERE id = ?")
-              .run(targetId, targetRow?.workspace_id ?? null, existing.id);
-            console.log(`[email-inbox] Re-linked detached reply ${existing.id} to target ${targetId}`);
-            resolve(existing.id);
-            return;
-          }
-
-          // Look up the most recent active run for this target — the dispatcher needs
-          // it to find the email track to reschedule / enroll a substitute into.
-          const runRow = db.prepare(
-            `SELECT r.id FROM runs r
-             JOIN run_profiles rp ON rp.run_id = r.id
-             WHERE rp.target_id = ? AND r.status IN ('running', 'paused')
-             ORDER BY r.created_at DESC LIMIT 1`
-          ).get(targetId) as { id: string } | undefined;
-
-          const replyId = randomUUID();
-          db.prepare(
-            `INSERT INTO email_replies (id, workspace_id, target_id, run_id, email_account_id, from_email, subject, body_text, received_at, message_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          ).run(replyId, targetRow?.workspace_id ?? null, targetId, runRow?.id ?? null, emailAccountId, parsedFrom, subject, bodyText, receivedAt, messageId);
-          if (targetRow?.workspace_id) emitDomainEvent({ workspaceId: targetRow.workspace_id, type: "reply.received", entityType: "email_reply", entityId: replyId, payload: { target_id: targetId, from_email: parsedFrom, subject, received_at: receivedAt } });
-          resolve(replyId);
-        } catch (err) {
-          console.warn(`[email-inbox] captureReplyBody parse/insert failed:`, err);
-          resolve(null);
-        }
-      })();
-    });
-  });
-}
 
 export function shouldSyncEmailInbox(emailAccountId: string): boolean {
   const db = getDb();
@@ -215,7 +80,12 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
   // campaign email step, and (b) campaign emails recorded in the durable mail plane
   // (source='campaign'), so replies still surface after a run is deleted.
   // `IS NOT 'invalid'` is null-safe: a contact with an unset email_status is NOT excluded.
+  // Each contact carries its first and latest send FROM THIS MAILBOX (sent_messages, with
+  // email_jobs as the fallback for a send whose receipt row is missing): mail from a contact
+  // that predates our first email is not a reply, and when several contacts share an address
+  // the one emailed most recently is the one a reply answers. Scoped to the mailbox's workspace.
   const pendingTargets = db.prepare(`
+    WITH pending AS (
     SELECT DISTINCT t.id, t.email FROM targets t
     JOIN run_profiles rp ON rp.target_id = t.id
     JOIN run_profile_tracks rt ON rt.run_profile_id = rp.id
@@ -225,6 +95,7 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
       AND rt.track = 'email'
       AND rt.state NOT IN ('pending')
       AND rp.email_account_id = ?
+      AND t.workspace_id = ?
     UNION
     SELECT DISTINCT t.id, t.email FROM targets t
     JOIN email_jobs ej ON ej.target_id = t.id
@@ -234,14 +105,27 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
       AND ej.email_account_id = ?
       AND ej.source = 'campaign'
       AND ej.status = 'sent'
-  `).all(emailAccountId, emailAccountId) as { id: string; email: string }[];
+      AND t.workspace_id = ?
+    ),
+    sent AS (
+      SELECT target_id, MIN(accepted_at) first_sent, MAX(accepted_at) last_sent FROM sent_messages
+      WHERE email_account_id = ? AND target_id IS NOT NULL GROUP BY target_id
+    ),
+    jobs AS (
+      SELECT target_id, MIN(updated_at) first_sent, MAX(updated_at) last_sent FROM email_jobs
+      WHERE email_account_id = ? AND status = 'sent' AND target_id IS NOT NULL GROUP BY target_id
+    )
+    SELECT p.id, p.email,
+      COALESCE(s.first_sent, j.first_sent) first_sent, COALESCE(s.last_sent, j.last_sent) last_sent
+    FROM pending p LEFT JOIN sent s ON s.target_id = p.id LEFT JOIN jobs j ON j.target_id = p.id
+  `).all(emailAccountId, account.workspace_id, emailAccountId, account.workspace_id, emailAccountId, emailAccountId) as PendingTarget[];
 
   if (pendingTargets.length === 0) {
     db.prepare("UPDATE email_accounts SET inbox_synced_at = datetime('now') WHERE id = ?").run(emailAccountId);
     return { replies: 0, bounces: 0 };
   }
 
-  console.log(`[email-inbox] Checking ${pendingTargets.length} leads via IMAP FROM search`);
+  console.log(`[email-inbox] Checking ${pendingTargets.length} leads via one IMAP header scan`);
 
   const imapUser = account.imap_username ?? account.username;
   const imapPass = decryptSecret(account.imap_password) ?? decryptSecret(account.password)!;
@@ -322,11 +206,21 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
         // longer detected, where the per-lead search scanned the mailbox back to its first
         // message. Replies that old are not actionable, and the window is far wider than any
         // sequence's follow-up horizon.
-        const targetsByEmail = new Map<string, { id: string; email: string }>();
-        for (const t of pendingTargets) targetsByEmail.set(t.email.toLowerCase(), t);
+        const pendingById = new Map(pendingTargets.map((t) => [t.id, t]));
+        // Several contacts can share an address (re-imports, two campaigns, a shared inbox):
+        // keep them all, and decide per message which one it answers.
+        const targetsByEmail = new Map<string, PendingTarget[]>();
+        for (const t of pendingTargets) {
+          const key = t.email.toLowerCase();
+          targetsByEmail.set(key, [...(targetsByEmail.get(key) ?? []), t]);
+        }
 
-        const since = new Date(Date.now() - REPLY_LOOKBACK_DAYS * 86_400_000);
-        const candidateUids = await new Promise<number[]>((resSearch) => {
+        // Nothing can be a reply before the earliest first send to a pending contact, so the
+        // window starts there (less a day: SINCE is date-granular) when that is later than the
+        // lookback ceiling. No recorded send at all means nothing to match.
+        const firstSends = pendingTargets.map((t) => parseDbTime(t.first_sent)).filter((n): n is number => n !== null);
+        const since = new Date(Math.max(Date.now() - REPLY_LOOKBACK_DAYS * 86_400_000, Math.min(...firstSends, Date.now()) - 86_400_000));
+        const candidateUids = firstSends.length === 0 ? [] : await new Promise<number[]>((resSearch) => {
           imap.search([["SINCE", since]], (searchErr, uids) => resSearch(searchErr || !uids ? [] : uids));
         });
 
@@ -334,17 +228,23 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
         // newest slice now and the remainder on the next pass.
         const scanUids = candidateUids.slice(-MAX_HEADER_SCAN);
 
-        // sender address -> highest (newest) UID from that sender
-        const latestUidByEmail = new Map<string, number>();
+        // Header fields only: FROM for address matching, DATE as a fallback when the server
+        // gives no INTERNALDATE, and IN-REPLY-TO/REFERENCES to tie a reply sent from another
+        // address (an alias, a colleague, an assistant) to the message it answers.
+        const scanned: ScannedHeader[] = [];
 
         if (scanUids.length > 0) {
           await new Promise<void>((resScan) => {
-            const fetch = imap.fetch(scanUids, { bodies: "HEADER.FIELDS (FROM)", struct: false });
+            const fetch = imap.fetch(scanUids, { bodies: REPLY_SCAN_FIELDS, struct: false });
             const pending: Promise<void>[] = [];
 
             fetch.on("message", (msg) => {
               let uid = 0;
-              msg.on("attributes", (attrs) => { uid = attrs.uid; });
+              let internalDate: Date | null = null;
+              msg.on("attributes", (attrs) => {
+                uid = attrs.uid;
+                internalDate = attrs.date instanceof Date ? attrs.date : null;
+              });
               // Settled on the message's own `end`, never on the body stream's.
               //
               // `attributes` is what carries the UID, and it arrives *after* the body
@@ -364,14 +264,13 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
                 const finish = () => {
                   if (handled) return;
                   handled = true;
-                  const fromRaw = parseHeaderValue(Buffer.concat(chunks).toString(), "From");
-                  const emailMatch = fromRaw.match(/<([^>]+)>/) ?? fromRaw.match(/([^\s]+@[^\s]+)/);
-                  const from = emailMatch?.[1]?.toLowerCase().trim();
                   // A UID of 0 means the attributes never arrived; capture cannot work
-                  // from it, so leave the sender out rather than record an unusable one.
-                  if (from && uid > 0 && targetsByEmail.has(from)) {
-                    const prev = latestUidByEmail.get(from);
-                    if (prev === undefined || uid > prev) latestUidByEmail.set(from, uid);
+                  // from it, so leave the message out rather than record an unusable one.
+                  // Our own mail and DSNs are never replies (DSNs often carry In-Reply-To).
+                  const header = parseScannedHeader(Buffer.concat(chunks).toString(), uid, internalDate);
+                  if (header && uid > 0 && !ourAddresses.has(header.from) && !isBounce(header.from)
+                      && (targetsByEmail.has(header.from) || header.refs.length > 0)) {
+                    scanned.push(header);
                   }
                   resMsg();
                 };
@@ -387,9 +286,15 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
           });
         }
 
-        for (const [fromEmail, latestUid] of latestUidByEmail) {
-          const target = targetsByEmail.get(fromEmail)!;
-          console.log(`[email-inbox] Reply detected for ${target.email} (target ${target.id})`);
+        // target id -> newest (highest UID) message attributed to it
+        const latestByTarget = attributeReplies(db, {
+          workspaceId: account.workspace_id, emailAccountId, scanned, targetsByEmail, pendingById,
+        });
+
+        for (const [targetId, hit] of latestByTarget) {
+          const target = pendingById.get(targetId)!;
+          const via = hit.from !== target.email.toLowerCase() ? ` (sent from ${hit.from})` : "";
+          console.log(`[email-inbox] Reply detected for ${target.email} (target ${target.id})${via}`);
           replies++;
 
           // Capture the body, then let the classifier+dispatcher decide the action.
@@ -398,7 +303,7 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
           // unset for OOO follow-ups so the runner keeps the contact enrolled.
           // On any failure the contact stays enrolled (safe fallback, plan §3.2).
           try {
-            const replyId = await captureReplyBody(imap, db, target.id, target.email, latestUid, emailAccountId);
+            const replyId = await captureReplyBody(imap, db, target.id, hit.from, hit.uid, emailAccountId);
             // The reply is always stored. Classification and automatic follow-up
             // run only when a reply processor is configured.
             if (replyId && premium?.replies) {
@@ -489,75 +394,6 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
   return { replies, bounces };
 }
 
-/**
- * Act on one DSN's candidate recipients. Everything is scoped to the workspace that owns
- * the mailbox the DSN arrived in: a bounce landing in tenant A's inbox must never look up,
- * suppress, or invalidate tenant B's contacts, even when they share an address. Only the
- * bounced address itself is marked invalid — one hard bounce says nothing about other
- * people at the same company, so colleagues and the company row are left untouched.
- * Returns the number of newly recorded bounces (0 or 1).
- */
-export function applyBounceCandidates(db: ReturnType<typeof getDb>, input: {
-  account: { workspace_id: string; from_email: string | null };
-  emailAccountId: string;
-  dsnMessageId: string;
-  authoritative: string;
-  candidates: string[];
-  ourAddresses: Set<string>;
-}): number {
-  const { account, emailAccountId, dsnMessageId, authoritative, ourAddresses } = input;
-  for (const candidate of input.candidates) {
-    if (BOUNCE_SENDER_PATTERNS.some(p => p.test(candidate))) continue;
-    // Never suppress ourselves: our own from_email appears in most DSN bodies
-    // (it was the original sender), and suppressing it would silently kill the
-    // mailbox for every future send.
-    if (ourAddresses.has(candidate)) continue;
-
-    const target = db
-      .prepare("SELECT id, email_status, company_id FROM targets WHERE workspace_id = ? AND lower(email) = ?")
-      .get(account.workspace_id, candidate) as { id: string; email_status: string | null; company_id: string | null } | undefined;
-
-    // The Final-Recipient is trustworthy on its own. Anything merely scraped
-    // out of the body is only acted on when it matches a contact we know, which
-    // is what keeps quoted third-party addresses out of the suppression list.
-    const trusted = candidate === authoritative;
-    if (!trusted && !target) continue;
-
-    // Recorded even when the contact is already invalid, and even when there is
-    // no contact row at all. The suppression entry and the sender-health event
-    // are the durable half of this — `targets.email_status` is per-contact and
-    // does not survive a re-import, which is how a dead address gets re-sent to.
-    const outcome = recordInboundBounce({
-      workspaceId: account.workspace_id,
-      emailAccountId,
-      recipient: candidate,
-      targetId: target?.id,
-      companyId: target?.company_id,
-      detail: `Hard bounce received at ${account.from_email ?? emailAccountId}`,
-      dedupeKey: `${emailAccountId}:${dsnMessageId}:${candidate}`,
-    });
-    const recorded = outcome.recorded ? 1 : 0;
-
-    if (!target || target.email_status === "invalid") return recorded;
-
-    const note = `Email bounced on ${new Date().toISOString().slice(0, 10)} — marked invalid`;
-    db.prepare(`
-      UPDATE targets SET email_status = 'invalid',
-        notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || char(10) || ? END
-      WHERE id = ? AND workspace_id = ?
-    `).run(note, note, target.id, account.workspace_id);
-
-    db.prepare(`
-      UPDATE run_profile_tracks SET state = 'skipped', error_message = 'Email bounced — invalid address'
-      WHERE run_profile_id IN (SELECT id FROM run_profiles WHERE target_id = ?)
-      AND state IN ('pending', 'in_progress')
-    `).run(target.id);
-
-    console.log(`[email-inbox] Bounce for ${candidate} (target ${target.id}) — suppressed and marked invalid`);
-    return recorded;
-  }
-  return 0;
-}
 
 /** Every email account with IMAP configured (used by the always-on poller). */
 export function listImapEmailAccountIds(workspaceId?: string): string[] {
