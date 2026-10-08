@@ -10,9 +10,7 @@ import {
   RiCompassLine,
   RiContactsLine,
   RiFileList3Line,
-  RiFlowChart,
   RiInboxLine,
-  RiLayoutGridLine,
   RiLogoutBoxLine,
   RiMailCheckLine,
   RiPlayCircleLine,
@@ -23,33 +21,24 @@ import {
   RiCloseLine,
   RiShieldUserLine,
   RiRobot2Line,
-  RiRadarLine,
-  RiSteering2Line,
 } from "react-icons/ri";
 import { pathToTourPage, replayPageTour } from "@/lib/tour";
 
 const LEARNING_PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLBf6xNJOmsIQ";
 
-const workspaceNav = [
-  { href: "/", label: "Overview", icon: RiLayoutGridLine, tour: "nav-dashboard" },
-  { href: "/inbox", label: "Inbox", icon: RiInboxLine, tour: "nav-inbox" },
-  { href: "/todos", label: "Tasks", icon: RiCheckboxCircleLine, tour: "nav-todos", premium: true },
-];
-
-const agentNav = [
+const dailyNav = [
   { href: "/agents", label: "Agents", icon: RiRobot2Line, tour: "nav-agents" },
-  { href: "/leads", label: "Leads", icon: RiRadarLine, tour: "nav-leads" },
-  { href: "/copilot", label: "Copilot", icon: RiSteering2Line, tour: "nav-copilot" },
+  { href: "/inbox", label: "Inbox", icon: RiInboxLine, tour: "nav-inbox" },
 ];
 
-const growthNav = [
+const recordsNav = [
   { href: "/lists", label: "Lists", icon: RiFileList3Line, tour: "nav-lists" },
   { href: "/contacts", label: "People", icon: RiContactsLine, tour: "nav-contacts" },
   { href: "/companies", label: "Companies", icon: RiBuildingLine, tour: "nav-companies" },
-  { href: "/workflows", label: "Campaigns", icon: RiFlowChart, tour: "nav-workflows" },
 ];
 
-const systemNav = [
+const operatorNav = [
+  { href: "/todos", label: "Tasks", icon: RiCheckboxCircleLine, tour: "nav-todos", premium: true },
   { href: "/email-health", label: "Deliverability", icon: RiMailCheckLine, tour: "nav-email-health" },
   { href: "/platform", label: "Platform", icon: RiStackLine, tour: "nav-platform" },
 ];
@@ -60,13 +49,13 @@ const adminNav = [
   { href: "/admin", label: "Platform admin", icon: RiShieldUserLine, tour: "nav-admin" },
 ];
 
-// Four primary shortcuts on the mobile bar; everything else lives in the "More" menu.
-const mobilePrimary = [workspaceNav[0], workspaceNav[1], growthNav[3], growthNav[0]];
+// Agents and Inbox sit on the phone bar. Records and workspace tools live in More.
+const mobilePrimary = [dailyNav[0], dailyNav[1]];
 
 export const SIDEBAR_WIDTH_EXPANDED = 264;
 export const SIDEBAR_WIDTH_COLLAPSED = 264;
 
-type NavItem = (typeof workspaceNav)[number] | (typeof agentNav)[number] | (typeof growthNav)[number] | (typeof systemNav)[number] | (typeof adminNav)[number];
+type NavItem = (typeof dailyNav)[number] | (typeof recordsNav)[number] | (typeof operatorNav)[number] | (typeof adminNav)[number];
 
 function initials(value?: string | null) {
   if (!value) return "LK";
@@ -140,16 +129,15 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col border-r border-[var(--border-subtle)] bg-base-200 md:flex">
-        <div className="flex h-16 shrink-0 items-center gap-3 px-5">
+        <Link href="/agents" className="flex h-16 shrink-0 items-center gap-3 px-5">
           <Image src="/logo_linki.svg" alt="Linki" width={28} height={28} priority />
           <span className="text-[19px] font-semibold tracking-[-0.02em] text-base-content">Linki</span>
-        </div>
+        </Link>
 
         <div className="flex-1 overflow-y-auto px-3 py-3">
-          <NavSection label="Workspace" items={workspaceNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
-          <NavSection label="AI SDR" items={agentNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
-          <NavSection label="Build pipeline" items={growthNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
-          <NavSection label="Operations" items={systemNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
+          <NavSection label="" items={dailyNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
+          <NavSection label="Records" items={recordsNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
+          <NavSection label="Workspace" items={operatorNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
           {isSuperadmin && (
             <NavSection label="Instance" items={adminNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
           )}
@@ -236,13 +224,12 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
               </button>
             </div>
             <div className="space-y-4">
-              <MobileSection label="Workspace" items={workspaceNav} render={(item) => <MobileLink key={item.href} item={item} />} />
-              <MobileSection label="AI SDR" items={agentNav} render={(item) => <MobileLink key={item.href} item={item} />} />
-              <MobileSection label="Build pipeline" items={growthNav} render={(item) => <MobileLink key={item.href} item={item} />} />
+              <MobileSection label="" items={dailyNav} render={(item) => <MobileLink key={item.href} item={item} />} />
+              <MobileSection label="Records" items={recordsNav} render={(item) => <MobileLink key={item.href} item={item} />} />
               <div>
-                <h3 className="mb-1 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">Operations</h3>
+                <h3 className="mb-1 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">Workspace</h3>
                 <div className="space-y-1">
-                  {systemNav.map((item) => <MobileLink key={item.href} item={item} />)}
+                  {operatorNav.map((item) => <MobileLink key={item.href} item={item} />)}
                   {isSuperadmin && adminNav.map((item) => <MobileLink key={item.href} item={item} />)}
                   <Link href="/settings" onClick={() => setMenuOpen(false)} className={`flex h-11 items-center gap-3 rounded-[10px] px-3 text-[15px] ${isActive("/settings") ? "bg-primary font-semibold text-primary-content" : "font-medium text-base-content/70 hover:bg-base-200"}`}>
                     <RiSettings4Line size={19} className={isActive("/settings") ? "text-primary-content" : "text-base-content/45"} /> Settings
@@ -277,7 +264,7 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
 function MobileSection({ label, items, render }: { label: string; items: readonly NavItem[]; render: (item: NavItem) => React.ReactNode }) {
   return (
     <div>
-      <h3 className="mb-1 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">{label}</h3>
+      {label ? <h3 className="mb-1 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">{label}</h3> : null}
       <div className="space-y-1">{items.map(render)}</div>
     </div>
   );
@@ -286,7 +273,7 @@ function MobileSection({ label, items, render }: { label: string; items: readonl
 function NavSection<T>({ label, items, renderItem }: { label: string; items: readonly T[]; renderItem: (item: T) => React.ReactNode }) {
   return (
     <section className="mb-6">
-      <h2 className="mb-2 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">{label}</h2>
+      {label ? <h2 className="mb-2 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">{label}</h2> : null}
       <nav className="space-y-1">{items.map(renderItem)}</nav>
     </section>
   );

@@ -1,4 +1,6 @@
+import type { GetServerSideProps } from "next";
 import Head from "next/head";
+import { getServerWorkspace } from "@/lib/server-workspace";
 import { useEffect, useState, useRef } from "react";
 import { FiUserPlus, FiMessageSquare, FiEye, FiRepeat, FiUsers, FiRefreshCw } from "react-icons/fi";
 import { RiMailSendLine, RiReplyLine, RiRobot2Line, RiLinkedinBoxLine, RiFilterLine } from "react-icons/ri";
@@ -698,3 +700,10 @@ export default function Dashboard() {
     </>
   );
 }
+
+/** The old pipeline dashboard is no longer the front door. Agents is. */
+export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
+  const workspace = await getServerWorkspace(req, res);
+  if (!workspace) return { redirect: { destination: "/login?callbackUrl=/agents", permanent: false } };
+  return { redirect: { destination: "/agents", permanent: false } };
+};

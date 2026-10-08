@@ -80,13 +80,13 @@ export default function NewAgent() {
 
   async function saveOutreach() {
     const o = s.outreach;
-    const needCampaign = o.build === "ai" && campaignChannel !== o.channel;
+    const needCampaign = campaignChannel !== o.channel;
     await api(`/api/agents/${s.agentId}`, "PATCH", {
       mode: o.mode, goal: o.goal, tone: o.tone, channel: o.channel, exclude_first_degree: o.exclude_first_degree, daily_lead_cap: o.daily_lead_cap,
       linkedin_account_id: o.channel === "email" ? null : o.linkedin_account_id || null,
       email_account_id: o.channel === "linkedin" ? null : o.email_account_id || null,
       booking_url: o.booking_url || null,
-      ...(o.build === "manual" ? { workflow_id: o.workflow_id } : needCampaign ? { workflow_id: null, create_default_campaign: true } : {}),
+      ...(needCampaign ? { create_default_campaign: true } : {}),
     });
     if (needCampaign) setCampaignChannel(o.channel);
   }

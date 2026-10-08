@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { RiCursorLine, RiInformationLine, RiLinkedinBoxLine, RiMailLine, RiSparkling2Line } from "react-icons/ri";
+import { RiInformationLine, RiLinkedinBoxLine, RiMailLine } from "react-icons/ri";
 import { campaignPlan } from "@/lib/agents/campaign-plan";
 import { Card, Field, inputCls } from "@/components/agents/ui";
 import type { OutreachChoice, WizardState } from "@/components/agents/wizard/types";
@@ -20,7 +19,6 @@ function Choice({ selected, onClick, title, text, badge, icon }: { selected: boo
 const LABEL: Record<string, string> = { connect: "Send invitation", message: "LinkedIn message", email: "Email", visit: "Visit profile" };
 
 export function outreachReady(o: OutreachChoice): string | null {
-  if (o.build === "manual" && !o.workflow_id) return "Pick the campaign this agent should use";
   if (o.channel !== "email" && !o.linkedin_account_id) return "Choose a LinkedIn sender (or pick Emails only)";
   if (o.channel !== "linkedin" && !o.email_account_id) return "Choose an email sender (or pick LinkedIn only)";
   return null;
@@ -31,11 +29,9 @@ export default function OutreachStep({ state, set }: { state: WizardState; set: 
   const put = (p: Partial<OutreachChoice>) => set({ outreach: { ...o, ...p } });
   const [accounts, setAccounts] = useState<Option[]>([]);
   const [emails, setEmails] = useState<Option[]>([]);
-  const [workflows, setWorkflows] = useState<Option[]>([]);
   useEffect(() => {
     fetch("/api/accounts").then((r) => r.json()).then(setAccounts).catch(() => {});
     fetch("/api/email-accounts").then((r) => r.json()).then(setEmails).catch(() => {});
-    fetch("/api/workflows").then((r) => r.json()).then(setWorkflows).catch(() => {});
   }, []);
 
   // Day each planned step runs, per track, to preview the generated sequence.
@@ -56,23 +52,7 @@ export default function OutreachStep({ state, set }: { state: WizardState; set: 
       </div>
       <p className="flex items-start gap-2 rounded-xl bg-warning/10 px-4 py-3 text-sm text-warning"><RiInformationLine size={16} className="mt-0.5 shrink-0" /><span><b>Nothing is sent without your green light.</b> At the end you can start outreach right away or keep it paused.</span></p>
 
-      <Card className="space-y-3">
-        <div className="font-semibold">How do you want to build your sequence?</div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Choice selected={o.build === "ai"} onClick={() => put({ build: "ai" })} badge="Recommended" icon={<RiSparkling2Line className="text-warning" size={18} />} title="Create with AI" text="Invitation, follow-ups, delays and a message drafted per lead. You can still tweak every step." />
-          <Choice selected={o.build === "manual"} onClick={() => put({ build: "manual" })} icon={<RiCursorLine size={18} />} title="Use one of my campaigns" text="Pick a campaign you built. AI steps in it are still drafted per lead in Copilot." />
-        </div>
-        {o.build === "manual" && (
-          <Field label="Campaign" hint={<Link className="underline" href="/workflows">Build or edit campaigns</Link>}>
-            <select className={inputCls} value={o.workflow_id} onChange={(e) => put({ workflow_id: e.target.value })}>
-              <option value="">Choose…</option>{workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
-          </Field>
-        )}
-      </Card>
-
-      {o.build === "ai" && (
-        <Card className="space-y-4">
+      <Card className="space-y-4">
           <div className="font-semibold">How do you want to reach your prospects?</div>
           <div className="grid gap-3 sm:grid-cols-3">
             <Choice selected={o.channel === "linkedin"} onClick={() => put({ channel: "linkedin" })} icon={<RiLinkedinBoxLine size={18} />} title="LinkedIn only" text="Connection requests and messages" />
@@ -108,8 +88,7 @@ export default function OutreachStep({ state, set }: { state: WizardState; set: 
               ))}
             </ol>
           </div>
-        </Card>
-      )}
+      </Card>
 
       <Card className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
@@ -129,7 +108,7 @@ export default function OutreachStep({ state, set }: { state: WizardState; set: 
           )}
         </div>
         <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="checkbox checkbox-sm mt-0.5" checked={o.exclude_first_degree} onChange={(e) => put({ exclude_first_degree: e.target.checked })} /><span><b className="font-medium">Exclude 1st-degree connections</b><span className="block text-xs text-base-content/50">Skip people you&apos;re already connected with on LinkedIn.</span></span></label>
-        <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="toggle toggle-sm mt-0.5" checked={o.mode === "copilot"} onChange={(e) => put({ mode: e.target.checked ? "copilot" : "autopilot" })} /><span><b className="font-medium">Review mode</b><span className="block text-xs text-base-content/50">{o.mode === "copilot" ? "You approve each contact and its messages in Copilot before anything is sent." : "Autopilot: drafts send 60 minutes after they're ready unless you reject them in Copilot."}</span></span></label>
+        <label className="flex items-start gap-3 text-sm"><input type="checkbox" className="toggle toggle-sm mt-0.5" checked={o.mode === "copilot"} onChange={(e) => put({ mode: e.target.checked ? "copilot" : "autopilot" })} /><span><b className="font-medium">Review mode</b><span className="block text-xs text-base-content/50">{o.mode === "copilot" ? "You approve each lead, and edit its messages, before anything is sent." : "Autopilot: drafts send 60 minutes after they're ready unless you reject them on the lead."}</span></span></label>
         <Field label="New contacts per day"><input type="number" min={1} max={500} className={`${inputCls} w-32`} value={o.daily_lead_cap} onChange={(e) => put({ daily_lead_cap: Number(e.target.value) })} /></Field>
       </Card>
     </div>

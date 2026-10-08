@@ -39,6 +39,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         linkedin: agent.linkedin_account_id ? db.prepare("SELECT id, name, email, daily_connection_limit, daily_message_limit, is_authenticated FROM accounts WHERE id = ?").get(agent.linkedin_account_id) ?? null : null,
         email: agent.email_account_id ? db.prepare("SELECT id, from_email, from_name, daily_email_limit, ramp_up_enabled, ramp_start_date FROM email_accounts WHERE id = ?").get(agent.email_account_id) ?? null : null,
       },
+      sender_pool: {
+        linkedin: (db.prepare("SELECT COUNT(*) n FROM accounts WHERE workspace_id = ?").get(ctx.workspaceId) as { n: number }).n,
+        email: (db.prepare("SELECT COUNT(*) n FROM email_accounts WHERE workspace_id = ?").get(ctx.workspaceId) as { n: number }).n,
+      },
     });
   }
   if (req.method === "PATCH") {
@@ -61,7 +65,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const merged = { ...agent, ...fields };
     // status = finding leads (discovery, scoring, drafting); outreach_enabled = sending.
     if (outreach_enabled === true) {
-      if (!merged.workflow_id) return res.status(400).json({ error: "Pick a campaign for the agent before starting outreach" });
+      if (!merged.workflow_id) return res.status(400).json({ error: "Create this agent's sequence before starting outreach" });
       if (!merged.linkedin_account_id && !merged.email_account_id) return res.status(400).json({ error: "Pick a LinkedIn or email sender before starting outreach" });
     }
     const patch: Record<string, unknown> = { ...fields };

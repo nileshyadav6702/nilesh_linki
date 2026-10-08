@@ -38,7 +38,7 @@ export default function ReviewStep({ state, startOutreach, setStartOutreach }: {
 
       <Block title="Outreach">
         <div>{o.build === "ai" ? `AI-generated ${o.channel === "multi" ? "multi-channel" : o.channel === "linkedin" ? "LinkedIn" : "email"} sequence · ${o.tone} tone · goal: ${o.goal === "meetings" ? "book meetings" : "start conversations"}` : "Your own campaign"}</div>
-        <div>{o.mode === "copilot" ? "Review mode: you approve each contact and its messages in Copilot." : "Autopilot: contacts are approved automatically after 60 minutes; you can still review them in Copilot first."}</div>
+        <div>{o.mode === "copilot" ? "Review mode: you approve each lead and its messages before anything is sent." : "Autopilot: leads are approved after 60 minutes unless you reject them first."}</div>
         <div className="text-xs text-base-content/45">Up to {o.daily_lead_cap} new contacts per day{o.exclude_first_degree ? " · 1st-degree connections excluded" : ""}</div>
       </Block>
 

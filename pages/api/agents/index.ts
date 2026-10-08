@@ -16,6 +16,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
     const linkedin = db.prepare("SELECT id, name, email FROM accounts WHERE id = ?");
     const mailbox = db.prepare("SELECT id, from_email, from_name FROM email_accounts WHERE id = ?");
+    const senderPool = {
+      linkedin: (db.prepare("SELECT COUNT(*) n FROM accounts WHERE workspace_id = ?").get(ctx.workspaceId) as { n: number }).n,
+      email: (db.prepare("SELECT COUNT(*) n FROM email_accounts WHERE workspace_id = ?").get(ctx.workspaceId) as { n: number }).n,
+    };
     return res.json(listAgents(ctx.workspaceId).map((a) => ({
       ...a,
       counts: agentCounts(db, a.id),
@@ -25,6 +29,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         linkedin: a.linkedin_account_id ? linkedin.get(a.linkedin_account_id) ?? null : null,
         email: a.email_account_id ? mailbox.get(a.email_account_id) ?? null : null,
       },
+      sender_pool: senderPool,
       sources: (db.prepare("SELECT source_type, enabled FROM agent_sources WHERE agent_id = ?").all(a.id) as Array<{ source_type: string; enabled: number }>),
     })));
   }

@@ -11,7 +11,7 @@ export default function LoginPage() {
   const router = useRouter();
   const callbackUrl = typeof router.query.callbackUrl === "string" && router.query.callbackUrl.startsWith("/")
     ? router.query.callbackUrl
-    : "/";
+    : "/agents";
   const [mode, setMode] = useState<Mode>("signin");
 
   const [email, setEmail] = useState("");

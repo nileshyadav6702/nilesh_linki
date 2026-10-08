@@ -8,9 +8,10 @@ import AgentOverview, { ActivityList, type ActivityItem, type Budget, type DayPo
 import AgentSettings, { type AgentForm } from "@/components/agents/AgentSettings";
 import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSources";
 import IcpEditor, { EMPTY_ICP } from "@/components/agents/IcpEditor";
+import AgentCampaign from "@/components/agents/AgentCampaign";
 import LeadsTable from "@/components/agents/LeadsTable";
 import type { Step } from "@/components/agents/SequenceEditor";
-import { Card, ghostBtn, primaryBtn, secondaryBtn, timeUntil } from "@/components/agents/ui";
+import { Card, ghostBtn, nextRunLabel, outreachLabel, primaryBtn, secondaryBtn, senderLine, sourcingLabel, timeUntil } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 import type { Icp } from "@/lib/icp/schema";
 
@@ -27,10 +28,10 @@ interface Detail {
     linkedin: { name: string | null; email: string | null; daily_connection_limit: number | null; daily_message_limit: number | null; is_authenticated: number } | null;
     email: { from_email: string | null; from_name: string | null; daily_email_limit: number | null; ramp_up_enabled: number | null; ramp_start_date: string | null } | null;
   };
+  sender_pool: { linkedin: number; email: number };
 }
 
 const TABS = ["Overview", "Leads", "Sources", "Campaign", "Activity", "Settings"] as const;
-const STEP_LABEL: Record<string, string> = { visit: "Visit profile", connect: "Connection request", message: "Message", sales_inmail: "Sales InMail", delay: "Wait", email: "Email" };
 
 export default function AgentDetail() {
   const router = useRouter();
@@ -62,6 +63,10 @@ export default function AgentDetail() {
     fetchDetail().then((x) => { if (alive) apply(x); });
     return () => { alive = false; };
   }, [fetchDetail, apply]);
+  useEffect(() => {
+    const requested = typeof router.query.tab === "string" ? router.query.tab : "";
+    if ((TABS as readonly string[]).includes(requested)) setTab(requested as (typeof TABS)[number]);
+  }, [router.query.tab]);
 
   async function patch(body: Record<string, unknown>, ok: string) {
     const r = await fetch(`/api/agents/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -99,7 +104,11 @@ export default function AgentDetail() {
   const finding = a.status === "active";
   const sending = !!a.outreach_enabled;
   const leadCount = Object.values(d.counts.by_status).reduce((x, y) => x + y, 0);
-  const senderName = d.senders.linkedin?.name || d.senders.email?.from_email || "No sender";
+  const pool = d.sender_pool ?? { linkedin: 0, email: 0 };
+  const attached = !!(d.senders.linkedin || d.senders.email);
+  const senderName = senderLine(d.senders.linkedin?.name, d.senders.email?.from_email, pool);
+  const soonest = d.sources.filter((s) => s.enabled && s.next_run_at).sort((x, y) => String(x.next_run_at).localeCompare(String(y.next_run_at)))[0];
+  const launch = !soonest ? "No source scheduled" : !soonest.last_run_at && timeUntil(soonest.next_run_at) === "due" ? "First run is scheduled now" : `Next launch ${nextRunLabel(soonest.next_run_at, soonest.last_run_at)}`;
 
   return (
     <>
@@ -113,9 +122,12 @@ export default function AgentDetail() {
               {d.senders.linkedin && <RiLinkedinBoxFill className="text-[#0a66c2]" size={16} />}
               {d.senders.email && <RiMailLine className="text-error" size={16} />}
               <span>{senderName}</span>
-              <span className="text-base-content/40">Next launch {timeUntil(d.next_run_at)}</span>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${finding ? "bg-info/10 text-info" : "bg-base-200"}`}>{finding ? "Finding leads" : "Sourcing paused"}</span>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${sending ? "bg-success/10 text-success" : "bg-base-200"}`}>{sending ? "Outreach on" : "Outreach paused"}</span>
+              {!attached && (pool.linkedin + pool.email > 0
+                ? <button type="button" className="text-primary" onClick={() => setTab("Settings")}>Choose a sender</button>
+                : <Link href="/settings" className="text-primary">Add a sender</Link>)}
+              <span className="text-base-content/40">{launch}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${finding ? "bg-info/10 text-info" : "bg-base-200"}`}>{sourcingLabel(a.status)}</span>
+              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${sending ? "bg-success/10 text-success" : "bg-base-200"}`}>{outreachLabel(sending)}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -145,7 +157,7 @@ export default function AgentDetail() {
         {tab === "Overview" && (
           <AgentOverview performance={d.performance} series={d.series} activity={d.activity} dueToday={d.due_today} budget={d.linkedin_budget} onReview={() => setTab("Leads")} onActivity={() => setTab("Activity")} />
         )}
-        {tab === "Leads" && <LeadsTable agentId={a.id} showAgent={false} />}
+        {tab === "Leads" && <LeadsTable agentId={a.id} showAgent={false} openLeadId={typeof router.query.lead === "string" ? router.query.lead : undefined} />}
         {tab === "Sources" && (
           <div className="space-y-4">
             {editingIcp && (
@@ -161,34 +173,12 @@ export default function AgentDetail() {
           </div>
         )}
         {tab === "Campaign" && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div><div className="font-semibold">{d.workflow?.name ?? "No campaign yet"}</div><div className="text-sm text-base-content/50">This agent owns the campaign. Leads enter it once they are approved.</div></div>
-              {d.workflow && <Link href={`/workflows/${d.workflow.id}`} className={secondaryBtn}>Edit steps</Link>}
-            </div>
-            {!d.steps.length && <Card><p className="text-sm text-base-content/55">No steps yet. Open Edit steps to add the LinkedIn and email sequence.</p></Card>}
-            {(["linkedin", "email"] as const).map((track) => {
-              const steps = d.steps.filter((s) => s.track === track);
-              if (!steps.length) return null;
-              return (
-                <div key={track} className="space-y-2">
-                  <h2 className="text-sm font-semibold capitalize">{track}</h2>
-                  {steps.map((s, i) => (
-                    <Card key={s.id} className="flex items-center justify-between !py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-base-200 text-xs font-semibold">{i + 1}</span>
-                        <div>
-                          <div className="font-medium">{STEP_LABEL[s.step_type] ?? s.step_type}</div>
-                          {s.step_type === "delay" && <div className="text-xs text-base-content/50">{Math.round(s.delay_seconds / 86400) || 1} day wait</div>}
-                        </div>
-                      </div>
-                      <div className="text-sm tabular-nums text-base-content/55">{s.contacts} contact{s.contacts === 1 ? "" : "s"}</div>
-                    </Card>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+          <AgentCampaign
+            workflowId={d.workflow?.id ?? null}
+            counts={Object.fromEntries(d.steps.map((s) => [s.id, s.contacts]))}
+            onChanged={load}
+            onCreate={async () => { await patch({ create_default_campaign: true }, "Sequence created"); }}
+          />
         )}
         {tab === "Activity" && (
           <div className="space-y-3">

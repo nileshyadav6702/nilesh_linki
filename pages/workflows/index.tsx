@@ -2,7 +2,6 @@ import Head from "next/head";
 import { useState } from "react";
 import { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
-import { getDb } from "@/lib/db";
 import { getServerWorkspace, loginRedirect } from "@/lib/server-workspace";
 import { toast } from "sonner";
 import {
@@ -79,97 +78,10 @@ const STEP_LABEL: Record<string, string> = {
 };
 
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
-  const db = getDb();
   const workspace = await getServerWorkspace(req, res);
   if (!workspace) return loginRedirect(req);
-  const { workspaceId } = workspace;
-
-  // Steps subquery — isolated to avoid row multiplication when joined with runs
-  const stepRows = db.prepare(
-    `SELECT workflow_id,
-       GROUP_CONCAT(step_type ORDER BY step_order) as step_types,
-       COUNT(*) as step_count,
-       SUM(CASE WHEN step_type != 'delay' THEN 1 ELSE 0 END) as action_step_count
-     FROM workflow_steps
-     GROUP BY workflow_id`
-  ).all() as { workflow_id: string; step_types: string; step_count: number; action_step_count: number }[];
-
-  const stepMap = Object.fromEntries(stepRows.map(s => [s.workflow_id, s]));
-
-  // Prospects/runs subquery — separate from steps to avoid GROUP_CONCAT multiplication
-  const prospectRows = db.prepare(
-    `SELECT r.workflow_id,
-       COUNT(DISTINCT rp.id) as total_prospects,
-       COUNT(DISTINCT CASE WHEN NOT EXISTS (
-         SELECT 1 FROM run_profile_tracks rt
-         WHERE rt.run_profile_id = rp.id AND rt.state NOT IN ('completed','failed','skipped')
-       ) AND EXISTS (
-         SELECT 1 FROM run_profile_tracks rt2
-         WHERE rt2.run_profile_id = rp.id AND rt2.state = 'completed'
-       ) THEN rp.id END) as completed_prospects,
-       COUNT(DISTINCT CASE WHEN t.connection_requested_at IS NOT NULL THEN rp.target_id END) as connections_sent,
-       COUNT(DISTINCT CASE WHEN t.connected_at IS NOT NULL THEN rp.target_id END) as connections_accepted,
-       MAX(CASE WHEN r.status = 'running' THEN r.id ELSE NULL END) as active_run_id,
-       MAX(CASE WHEN r.status IN ('running','paused') THEN r.status ELSE NULL END) as active_status
-     FROM runs r
-     LEFT JOIN run_profiles rp ON rp.run_id = r.id
-     LEFT JOIN targets t ON t.id = rp.target_id
-     GROUP BY r.workflow_id`
-  ).all() as {
-    workflow_id: string;
-    total_prospects: number;
-    completed_prospects: number;
-    connections_sent: number;
-    connections_accepted: number;
-    active_run_id: string | null;
-    active_status: string | null;
-  }[];
-
-  const prospectMap = Object.fromEntries(prospectRows.map(r => [r.workflow_id, r]));
-
-  // Conditional branches attached to a workflow's steps — a campaign that "has conditions"
-  const branchRows = db.prepare(
-    `SELECT workflow_id, COUNT(*) as branch_count FROM workflow_branches
-     WHERE workspace_id = ? GROUP BY workflow_id`
-  ).all(workspaceId) as { workflow_id: string; branch_count: number }[];
-  const branchMap = Object.fromEntries(branchRows.map(b => [b.workflow_id, b.branch_count]));
-
-  // Signal rules that ingest prospects into a workflow — an enabled rule means the
-  // campaign is live-triggered by incoming signals (job changes, funding, intent, etc.)
-  const signalRuleRows = db.prepare(
-    `SELECT workflow_id,
-       COUNT(*) as signal_rule_count,
-       SUM(CASE WHEN enabled = 1 THEN 1 ELSE 0 END) as active_signal_rule_count,
-       GROUP_CONCAT(DISTINCT signal_type) as signal_types
-     FROM signal_rules
-     WHERE workspace_id = ? AND workflow_id IS NOT NULL
-     GROUP BY workflow_id`
-  ).all(workspaceId) as { workflow_id: string; signal_rule_count: number; active_signal_rule_count: number; signal_types: string | null }[];
-  const signalRuleMap = Object.fromEntries(signalRuleRows.map(s => [s.workflow_id, s]));
-
-  const workflows = db.prepare(
-    "SELECT id, name, description, is_archived, created_at FROM workflows WHERE workspace_id=? ORDER BY created_at DESC"
-  ).all(workspaceId) as { id: string; name: string; description: string | null; is_archived: number; created_at: string }[];
-
-  const merged: WorkflowCard[] = workflows.map(w => ({
-    ...w,
-    is_archived: w.is_archived ?? 0,
-    step_count: stepMap[w.id]?.step_count ?? 0,
-    action_step_count: stepMap[w.id]?.action_step_count ?? 0,
-    step_types: stepMap[w.id]?.step_types ?? "",
-    total_prospects: prospectMap[w.id]?.total_prospects ?? 0,
-    completed_prospects: prospectMap[w.id]?.completed_prospects ?? 0,
-    connections_sent: prospectMap[w.id]?.connections_sent ?? 0,
-    connections_accepted: prospectMap[w.id]?.connections_accepted ?? 0,
-    active_run_id: prospectMap[w.id]?.active_run_id ?? null,
-    active_status: prospectMap[w.id]?.active_status ?? null,
-    branch_count: branchMap[w.id] ?? 0,
-    signal_rule_count: signalRuleMap[w.id]?.signal_rule_count ?? 0,
-    active_signal_rule_count: signalRuleMap[w.id]?.active_signal_rule_count ?? 0,
-    signal_types: signalRuleMap[w.id]?.signal_types ?? "",
-  }));
-
-  return { props: { initialWorkflows: merged } };
+  // The sequence belongs to an agent. This page stays only so old links land somewhere.
+  return { redirect: { destination: "/agents", permanent: false } };
 };
 
 export default function WorkflowsPage({ initialWorkflows }: { initialWorkflows: WorkflowCard[] }) {

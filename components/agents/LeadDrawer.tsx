@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { RiCloseLine, RiExternalLinkLine, RiMailLine, RiSearchLine } from "react-icons/ri";
-import type { Step } from "@/components/agents/SequenceEditor";
-import { Flames, ghostBtn, ScoreBadge, secondaryBtn, SignalChip, StatusDot, timeAgo } from "@/components/agents/ui";
+import { RiCheckLine, RiCloseLine, RiExternalLinkLine, RiMailLine, RiSearchLine } from "react-icons/ri";
+import SequenceEditor, { type Draft, type Step } from "@/components/agents/SequenceEditor";
+import { Flames, ghostBtn, primaryBtn, ScoreBadge, secondaryBtn, SignalChip, StatusDot, timeAgo } from "@/components/agents/ui";
 
 export interface LeadDetail {
   contact: Record<string, string | number | null>;
@@ -15,6 +15,14 @@ export interface LeadDetail {
 }
 
 const str = (v: unknown) => (v === null || v === undefined || v === "" ? null : String(v));
+
+function whenSends(iso: string | null): string | null {
+  if (!iso) return null;
+  const t = Date.parse(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
+  const m = Math.round((t - Date.now()) / 60_000);
+  if (Number.isNaN(m)) return null;
+  return m <= 0 ? "any moment" : m < 60 ? `in ${m} min` : `in ${Math.round(m / 60)} h`;
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -28,7 +36,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 /** Side panel with everything about a lead: signals, company, sequence and score. Opens from any list. */
 export default function LeadDrawer({ targetId, onClose, onChanged }: { targetId: string | null; onClose: () => void; onChanged?: () => void }) {
   const [d, setD] = useState<LeadDetail | null>(null);
-  const [openStep, setOpenStep] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     if (!targetId) return Promise.resolve();
@@ -36,7 +44,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged }: { targetId:
   }, [targetId]);
   useEffect(() => {
     let alive = true;
-    if (targetId) fetch(`/api/leads/${targetId}`).then((r) => r.ok ? r.json() : null).then((x) => { if (alive) { setD(x); setOpenStep(null); } });
+    if (targetId) fetch(`/api/leads/${targetId}`).then((r) => r.ok ? r.json() : null).then((x) => { if (alive) setD(x); });
     return () => { alive = false; };
   }, [targetId]);
   useEffect(() => {
@@ -55,15 +63,28 @@ export default function LeadDrawer({ targetId, onClose, onChanged }: { targetId:
     onChanged?.();
   }
 
+  async function decide(decision: "approve" | "reject") {
+    setBusy(true);
+    const r = await fetch(`/api/copilot/${targetId}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, reason: decision === "reject" ? "Rejected from the lead" : undefined }) });
+    const x = await r.json();
+    setBusy(false);
+    if (!r.ok) return toast.error(x.error ?? "Could not update this lead");
+    toast.success(decision === "approve" ? (x.enrolled ? "Approved — added to the sequence" : "Approved") : "Rejected");
+    await load();
+    onChanged?.();
+  }
+
+  const onDraftChange = (draft: Draft) => setD((cur) => cur ? { ...cur, sequence: cur.sequence.map((s) => s.draft?.id === draft.id ? { ...s, draft: { ...s.draft, ...draft } } : s) } : cur);
+
   if (!targetId) return null;
   const c = d?.contact;
   const pending = d?.sequence.some((s) => s.draft?.status === "pending");
-  const shown = d?.sequence.find((s) => s.id === openStep);
+  const sendsAt = d?.sequence.find((s) => s.draft?.status === "pending" && s.draft.auto_approve_at)?.draft?.auto_approve_at ?? null;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Lead details">
       <button className="absolute inset-0 bg-black/20" onClick={onClose} aria-label="Close" />
-      <aside className="relative flex h-full w-full max-w-[520px] flex-col bg-base-100 shadow-[var(--shadow-popover)]">
+      <aside className="relative flex h-full w-full max-w-[640px] flex-col bg-base-100 shadow-[var(--shadow-popover)]">
         {!d || !c ? <p className="p-6 text-sm text-base-content/40">Loading…</p> : (
           <>
             <header className="flex items-start justify-between gap-3 px-5 py-4">
@@ -113,23 +134,9 @@ export default function LeadDrawer({ targetId, onClose, onChanged }: { targetId:
               )}
 
               {d.agent && (
-                <Section title="Campaign sequence">
-                  <Link href={`/agents/${d.agent.id}`} className="text-sm text-[var(--viz-1,#2563eb)] hover:underline">{d.agent.workflow_name ?? d.agent.name}</Link>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {d.sequence.map((s) => (
-                      <button key={s.id} onClick={() => setOpenStep(openStep === s.id ? null : s.id)}
-                        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${openStep === s.id ? "border-[var(--border-strong)] bg-base-200" : "border-[var(--border-subtle)] hover:bg-base-200"}`}>
-                        {s.label}{s.draft ? " ✦" : ""}
-                      </button>
-                    ))}
-                  </div>
-                  {shown ? (
-                    <div className="rounded-xl bg-base-200 p-3 text-sm whitespace-pre-wrap">
-                      {shown.draft ? <>{shown.draft.subject && <div className="mb-1 font-medium">{shown.draft.subject}</div>}{shown.draft.body}<div className="mt-2 text-[11px] uppercase text-base-content/40">{shown.draft.status === "consumed" ? "sent" : shown.draft.status}</div></>
-                        : <span className="text-base-content/50">{shown.channel ? "Written at send time by the campaign." : "No message for this step."}</span>}
-                    </div>
-                  ) : <p className="text-xs text-base-content/40">Click a step to see its message.</p>}
-                  {pending && <Link href={`/copilot?contact=${targetId}`} className={`${secondaryBtn} h-8 text-xs`}>Review drafts in Copilot</Link>}
+                <Section title="What this lead will receive">
+                  <p className="text-xs text-base-content/50">{d.agent.name}. Edit a draft before you approve. Steps run on the days shown after approval.</p>
+                  <SequenceEditor steps={d.sequence} onDraftChange={onDraftChange} />
                 </Section>
               )}
 
@@ -141,10 +148,14 @@ export default function LeadDrawer({ targetId, onClose, onChanged }: { targetId:
               </Section>
             </div>
 
-            <footer className="flex items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-5 py-3">
-              {c.agent_status !== "skipped" && c.agent_status !== "enrolled" && c.agent_id
-                ? <button className={secondaryBtn} onClick={() => act("skip", "Rejected from lead panel")}>Reject</button> : <span />}
-              <Link href={`/contacts/${targetId}`} className={ghostBtn}>Open full profile <RiExternalLinkLine size={12} /></Link>
+            <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-5 py-3">
+              <span className="text-xs text-base-content/45">{pending ? (whenSends(sendsAt) ? `Autopilot sends ${whenSends(sendsAt)} unless you reject` : "Waiting for your approval") : ""}</span>
+              <span className="flex gap-2">
+                <Link href={`/contacts/${targetId}`} className={ghostBtn}>Profile</Link>
+                {pending && <button className={secondaryBtn} disabled={busy} onClick={() => decide("reject")}><RiCloseLine size={16} /> Reject</button>}
+                {pending && <button className={primaryBtn} disabled={busy} onClick={() => decide("approve")}><RiCheckLine size={16} /> Approve</button>}
+                {!pending && c.agent_status !== "skipped" && c.agent_status !== "enrolled" && c.agent_id && <button className={secondaryBtn} disabled={busy} onClick={() => act("skip", "Rejected from the lead")}>Reject</button>}
+              </span>
             </footer>
           </>
         )}

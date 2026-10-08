@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { RiEditLine, RiPlayLine } from "react-icons/ri";
 import SourcePicker, { countSignals, type SourceDraft } from "@/components/agents/SourcePicker";
-import { Card, ghostBtn, primaryBtn, secondaryBtn, SIGNAL_LABEL, timeAgo, timeUntil } from "@/components/agents/ui";
+import { Card, ghostBtn, nextRunLabel, primaryBtn, secondaryBtn, SIGNAL_LABEL, timeAgo } from "@/components/agents/ui";
 import type { Icp } from "@/lib/icp/schema";
 
 export interface AgentSourceRow { id: string; source_type: string; config_json: string; enabled: number; last_run_at: string | null; next_run_at: string | null; last_error: string | null; leads: number }
@@ -85,7 +85,7 @@ export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChange
                   {s.last_error && <div className="truncate text-xs text-error" title={s.last_error}>{s.last_error}</div>}
                 </div>
                 <div className="text-right text-sm tabular-nums">{s.leads}</div>
-                <div className="text-xs text-base-content/50">{s.enabled ? timeUntil(s.next_run_at) : "off"}</div>
+                <div className="text-xs text-base-content/50">{s.enabled ? nextRunLabel(s.next_run_at, s.last_run_at) : "Off"}</div>
                 <button className={ghostBtn + " justify-self-start border border-[var(--border-subtle)]"} disabled={!s.enabled} onClick={() => launch(s)}><RiPlayLine size={13} /> Launch now</button>
                 <input type="checkbox" className="toggle toggle-sm" checked={!!s.enabled} onChange={() => toggle(s)} aria-label={`Toggle ${s.source_type}`} />
               </div>

@@ -1,10 +1,10 @@
 import Head from "next/head";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
-import { RiAddLine, RiDeleteBinLine, RiFileCopyLine, RiLinkedinBoxFill, RiMailLine, RiMore2Fill, RiPauseLine } from "react-icons/ri";
-import { Card, Empty, PageHeader, primaryBtn, timeAgo } from "@/components/agents/ui";
+import { RiAddLine, RiArrowRightLine, RiDeleteBinLine, RiFileCopyLine, RiLinkedinBoxFill, RiMailLine, RiMore2Fill, RiPauseLine, RiPlayLine, RiSearchLine, RiSendPlane2Line } from "react-icons/ri";
+import { Card, Empty, outreachLabel, PageHeader, primaryBtn, secondaryBtn, senderLine, sourcingLabel, timeAgo } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 
 export const getServerSideProps = requireSignedIn;
@@ -15,6 +15,7 @@ interface AgentRow {
   id: string; name: string; status: string; outreach_enabled: number; created_at: string;
   performance: { found: number; contacted: number; accepted: number; replied: number; interested: number };
   senders: { linkedin: SenderLinkedIn | null; email: SenderEmail | null };
+  sender_pool: { linkedin: number; email: number };
 }
 
 const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 1000) / 10}%` : "—");
@@ -56,70 +57,95 @@ export default function AgentsPage() {
   return (
     <>
       <Head><title>Outreach Agents — Linki</title></Head>
-      <div className="space-y-6" onClick={() => { setMenu(null); setStatusFor(null); }}>
-        <PageHeader eyebrow="AI SDR" title="Outreach Agents" subtitle="Manage your automated outreach agents"
+      <div className="space-y-8" onClick={() => { setMenu(null); setStatusFor(null); }}>
+        <PageHeader eyebrow="AI SDR" title="Outreach Agents" subtitle="Each agent finds people and runs its own sequence."
           actions={
             <>
-              <span className="inline-flex items-center gap-2 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-sm">{running} / {agents?.length ?? 0} running</span>
+              {!!agents?.length && (
+                <span className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3 text-sm text-base-content/70">
+                  <span className={`h-1.5 w-1.5 rounded-full ${running ? "bg-success" : "bg-base-content/25"}`} />
+                  {running} running
+                </span>
+              )}
               <Link href="/agents/new" className={primaryBtn}><RiAddLine size={16} /> Create an agent</Link>
             </>
           } />
         {agents === null ? <p className="text-sm text-base-content/40">Loading…</p> : agents.length === 0 ? (
           <Empty title="No agents yet">
-            <p>Create an agent and it will find leads and run LinkedIn and email from one campaign.</p>
+            <p>Create an agent and it will find leads and run LinkedIn and email from one sequence.</p>
             <Link href="/agents/new" className={`${primaryBtn} mt-4`}><RiAddLine size={16} /> Create an agent</Link>
           </Empty>
         ) : (
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid items-stretch gap-4 lg:grid-cols-2">
             {agents.map((a) => {
               const p = a.performance;
-              const live = a.status === "active" || !!a.outreach_enabled;
-              const sender = a.senders.linkedin?.name || a.senders.email?.from_email || "No sender";
+              const sourcing = a.status === "active";
+              const outreach = !!a.outreach_enabled;
+              const live = sourcing || outreach;
+              const pool = a.sender_pool ?? { linkedin: 0, email: 0 };
+              const sender = senderLine(a.senders.linkedin?.name, a.senders.email?.from_email, pool);
+              const attached = !!(a.senders.linkedin || a.senders.email);
               return (
-                <Card key={a.id} className="!p-0">
-                  <div className="flex items-start justify-between gap-3 px-5 pt-5">
-                    <h2 className="min-w-0 truncate text-base font-semibold text-primary">{a.name}</h2>
-                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <div className="relative">
-                        <button className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${live ? "bg-success/15 text-success" : "bg-base-200 text-base-content/55"}`} onClick={() => { setStatusFor(statusFor === a.id ? null : a.id); setMenu(null); }}>
-                          <span className="h-1.5 w-1.5 rounded-full bg-current" />{live ? "Active" : a.status === "draft" ? "Draft" : "Paused"}
+                <Card key={a.id} className="flex flex-col !p-0">
+                  <div className="flex items-start justify-between gap-4 px-5 pt-5">
+                    <div className="min-w-0">
+                      <Link href={`/agents/${a.id}`} className="block truncate text-[17px] font-semibold tracking-[-0.02em] text-base-content hover:text-primary">{a.name}</Link>
+                      <div className="relative mt-3" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="flex items-center gap-2"
+                          aria-expanded={statusFor === a.id}
+                          aria-label={`${sourcingLabel(a.status)}. ${outreachLabel(outreach)}`}
+                          onClick={() => { setStatusFor(statusFor === a.id ? null : a.id); setMenu(null); }}
+                        >
+                          <Chip on={sourcing} icon={<RiSearchLine size={13} />} label="Sourcing" />
+                          <Chip on={outreach} icon={<RiSendPlane2Line size={13} />} label="Outreach" />
                         </button>
                         {statusFor === a.id && (
-                          <div className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-[var(--border-subtle)] bg-base-100 p-3 shadow-[var(--shadow-overlay)]">
-                            <div className="mb-2 flex items-center justify-between">
-                              <div><div className="text-[11px] uppercase tracking-wide text-base-content/40">Agent status</div><div className="font-medium">{live ? "Active" : "Paused"}</div></div>
-                              <button className="inline-flex items-center gap-1 rounded-[8px] border border-[var(--border-subtle)] px-2 py-1 text-xs" onClick={() => patch(a.id, live ? { status: "paused", outreach_enabled: false } : { status: "active" }, live ? "Agent paused" : "Lead sourcing on")}><RiPauseLine />{live ? "Pause" : "Resume"}</button>
-                            </div>
-                            <Toggle label="Leads sourcing" hint="AI is finding new leads matching your criteria" on={a.status === "active"} onChange={() => patch(a.id, { status: a.status === "active" ? "paused" : "active" }, a.status === "active" ? "Lead sourcing paused" : "Lead sourcing on")} />
-                            <Toggle label="Outreach" hint="AI is sending messages to contacted leads" on={!!a.outreach_enabled} onChange={() => patch(a.id, { outreach_enabled: !a.outreach_enabled }, a.outreach_enabled ? "Outreach paused" : "Outreach on")} />
+                          <div className="absolute left-0 z-40 mt-2 w-[320px] rounded-2xl border border-[var(--border-subtle)] bg-base-100 p-3 shadow-[var(--shadow-overlay)]">
+                            <p className="px-1 text-sm leading-5 text-base-content/70">{sourcingLabel(a.status)}. {outreachLabel(outreach)}.</p>
+                            <Toggle label="Lead sourcing" hint="Finds new leads that match this agent" on={sourcing} onChange={() => patch(a.id, { status: sourcing ? "paused" : "active" }, sourcing ? "Lead sourcing paused" : "Lead sourcing on")} />
+                            <Toggle label="Outreach" hint="Sends the sequence to approved leads" on={outreach} onChange={() => patch(a.id, { outreach_enabled: !outreach }, outreach ? "Outreach paused" : "Outreach on")} />
+                            <button type="button" className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[10px] border border-[var(--border-subtle)] text-xs font-medium hover:bg-base-200" onClick={() => patch(a.id, live ? { status: "paused", outreach_enabled: false } : { status: "active" }, live ? "Lead sourcing and outreach paused" : "Lead sourcing on")}>
+                              {live ? <RiPauseLine size={13} /> : <RiPlayLine size={13} />}
+                              {live ? "Pause both" : "Start sourcing"}
+                            </button>
                           </div>
                         )}
                       </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <Link href={`/agents/${a.id}`} className={secondaryBtn + " !h-9"}>Open <RiArrowRightLine size={15} /></Link>
                       <div className="relative">
-                        <button className="rounded-[8px] p-1.5 text-base-content/50 hover:bg-base-200" aria-label="Agent actions" onClick={() => { setMenu(menu === a.id ? null : a.id); setStatusFor(null); }}><RiMore2Fill size={18} /></button>
+                        <button type="button" className="flex h-9 w-9 items-center justify-center rounded-[10px] text-base-content/45 hover:bg-base-200 hover:text-base-content" aria-label="Agent actions" onClick={() => { setMenu(menu === a.id ? null : a.id); setStatusFor(null); }}>
+                          <RiMore2Fill size={18} />
+                        </button>
                         {menu === a.id && (
-                          <div className="absolute right-0 z-20 mt-1 w-36 rounded-xl border border-[var(--border-subtle)] bg-base-100 py-1 shadow-[var(--shadow-overlay)]">
-                            <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-base-200" onClick={() => duplicate(a.id)}><RiFileCopyLine /> Duplicate</button>
-                            <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-error hover:bg-base-200" onClick={() => remove(a)}><RiDeleteBinLine /> Delete</button>
+                          <div className="absolute right-0 z-40 mt-1 w-40 rounded-xl border border-[var(--border-subtle)] bg-base-100 py-1 shadow-[var(--shadow-overlay)]">
+                            <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-base-200" onClick={() => duplicate(a.id)}><RiFileCopyLine size={15} /> Duplicate</button>
+                            <button type="button" className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-error hover:bg-base-200" onClick={() => remove(a)}><RiDeleteBinLine size={15} /> Delete</button>
                           </div>
                         )}
                       </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 px-5 py-4">
-                    <Metric label="Contacted" value={`${p.contacted}`} sub={`${p.found ? Math.round((p.contacted / p.found) * 100) : 0}% contacted`} extra={` / ${p.found}`} />
-                    <Metric label="Accepted" value={pct(p.accepted, p.contacted)} sub="accept rate" />
-                    <Metric label="Replied" value={p.replied ? pct(p.replied, p.contacted) : "—"} sub="reply rate" />
-                    <Metric label="Interested" value={p.interested ? String(p.interested) : "—"} sub="interested leads" />
+
+                  <div className="grid grid-cols-4 gap-3 px-5 pb-5 pt-6">
+                    <Metric label="Contacted" value={String(p.contacted)} />
+                    <Metric label="Accepted" value={pct(p.accepted, p.contacted)} />
+                    <Metric label="Replied" value={p.contacted ? pct(p.replied, p.contacted) : "—"} />
+                    <Metric label="Interested" value={String(p.interested)} />
                   </div>
-                  <div className="relative z-30 flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] bg-base-100 px-5 py-3">
-                    <div className="flex min-w-0 items-center gap-2 text-sm">
+                  <p className="px-5 pb-4 text-xs text-base-content/45">{activityLine(p)}</p>
+
+                  <div className="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] px-5 py-3.5">
+                    <div className="flex min-w-0 items-center gap-2 text-sm text-base-content/75">
                       {a.senders.linkedin && <RiLinkedinBoxFill className="shrink-0 text-[#0a66c2]" size={16} />}
                       {a.senders.email && <RiMailLine className="shrink-0 text-error" size={16} />}
+                      {!attached && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />}
                       <span className="truncate">{sender}</span>
-                      <span className="hidden text-base-content/40 sm:inline">Created {timeAgo(a.created_at)}</span>
                     </div>
-                    <Link href={`/agents/${a.id}`} className={primaryBtn + " !h-9"}>Open</Link>
+                    <span className="shrink-0 text-xs text-base-content/40">Created {timeAgo(a.created_at)}</span>
                   </div>
                 </Card>
               );
@@ -131,20 +157,42 @@ export default function AgentsPage() {
   );
 }
 
-function Metric({ label, value, sub, extra }: { label: string; value: string; sub: string; extra?: string }) {
+function activityLine(p: AgentRow["performance"]): string {
+  if (!p.found && !p.contacted) return "No leads yet";
+  if (!p.contacted) return `${p.found} found · nothing sent yet`;
+  const parts = [`${p.contacted} of ${p.found} contacted`];
+  if (p.accepted) parts.push(`${pct(p.accepted, p.contacted)} accepted`);
+  if (p.replied) parts.push(`${pct(p.replied, p.contacted)} replied`);
+  if (p.interested) parts.push(`${p.interested} interested`);
+  return parts.join(" · ");
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="text-[10px] font-medium uppercase tracking-wide text-base-content/40">{label}</div>
-      <div className="text-2xl font-semibold tabular-nums leading-tight">{value}{extra && <span className="text-sm font-normal text-base-content/35">{extra}</span>}</div>
-      <div className="text-[11px] text-base-content/45">{sub}</div>
+    <div className="min-w-0">
+      <div className="text-[11px] font-medium text-base-content/45">{label}</div>
+      <div className="mt-1.5 text-[22px] font-semibold tabular-nums leading-none tracking-[-0.03em]">{value}</div>
     </div>
+  );
+}
+
+function Chip({ on, icon, label }: { on: boolean; icon: ReactNode; label: string }) {
+  return (
+    <span className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium ${on ? "border-success/30 bg-success/10 text-success" : "border-[var(--border-subtle)] bg-base-200/70 text-base-content/50"}`}>
+      {icon}
+      {label}
+      <span className={`h-1.5 w-1.5 rounded-full ${on ? "bg-success" : "bg-base-content/25"}`} />
+    </span>
   );
 }
 
 function Toggle({ label, hint, on, onChange }: { label: string; hint: string; on: boolean; onChange: () => void }) {
   return (
-    <div className="mt-2 flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] p-3">
-      <div className="min-w-0 flex-1"><div className="text-sm font-medium">{label} <span className={`ml-1 text-[10px] font-semibold ${on ? "text-success" : "text-base-content/35"}`}>{on ? "ACTIVE" : "OFF"}</span></div><div className="text-xs text-base-content/50">{hint}</div></div>
+    <div className="mt-2 flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] px-3 py-2.5">
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium">{label} <span className={`ml-1 text-xs font-medium ${on ? "text-success" : "text-base-content/35"}`}>{on ? "On" : "Off"}</span></div>
+        <div className="text-xs text-base-content/50">{hint}</div>
+      </div>
       <input type="checkbox" className="toggle toggle-sm toggle-success" checked={on} onChange={onChange} aria-label={label} />
     </div>
   );

@@ -10,16 +10,16 @@ export interface AgentForm {
   goal: string; tone: string; exclude_first_degree: number;
 }
 
-const FORM_KEYS = ["name", "mode", "min_score", "fit_weight", "daily_lead_cap", "autopilot_delay_minutes", "linkedin_account_id", "email_account_id", "workflow_id", "booking_url", "enrich_emails", "goal", "tone", "exclude_first_degree"] as const;
+const FORM_KEYS = ["name", "mode", "min_score", "fit_weight", "daily_lead_cap", "autopilot_delay_minutes", "linkedin_account_id", "email_account_id", "booking_url", "enrich_emails", "goal", "tone", "exclude_first_degree"] as const;
 
-/** Agent settings: senders, campaign, thresholds and mode. */
+/** Agent settings: senders, thresholds and review mode. The sequence is edited on the Campaign tab. */
 export default function AgentSettings({ agentId, initial, onSaved }: { agentId: string; initial: AgentForm; onSaved: () => void }) {
   const [f, setF] = useState(initial);
-  const [opts, setOpts] = useState<{ accounts: Option[]; email: Option[]; workflows: Option[] }>({ accounts: [], email: [], workflows: [] });
+  const [opts, setOpts] = useState<{ accounts: Option[]; email: Option[] }>({ accounts: [], email: [] });
   const [saving, setSaving] = useState(false);
   useEffect(() => {
-    Promise.all([fetch("/api/accounts"), fetch("/api/email-accounts"), fetch("/api/workflows")].map((p) => p.then((r) => r.json()).catch(() => [])))
-      .then(([accounts, email, workflows]) => setOpts({ accounts, email, workflows }));
+    Promise.all([fetch("/api/accounts"), fetch("/api/email-accounts")].map((p) => p.then((r) => r.json()).catch(() => [])))
+      .then(([accounts, email]) => setOpts({ accounts, email }));
   }, []);
 
   async function save() {
@@ -39,8 +39,8 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
     <Card className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name"><input className={inputCls} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
-        <Field label="Mode" hint="Copilot: you approve each first message. Autopilot: drafts send after the delay unless rejected.">
-          <select className={inputCls} value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value })}><option value="copilot">Copilot</option><option value="autopilot">Autopilot</option></select>
+        <Field label="Review" hint="Review: you approve each lead before it is sent. Autopilot: drafts send after the delay unless you reject them on the lead.">
+          <select className={inputCls} value={f.mode} onChange={(e) => setF({ ...f, mode: e.target.value })}><option value="copilot">Review each lead</option><option value="autopilot">Autopilot</option></select>
         </Field>
         <Field label="LinkedIn account">
           <select className={inputCls} value={f.linkedin_account_id ?? ""} onChange={(e) => setF({ ...f, linkedin_account_id: e.target.value || null })}>
@@ -50,11 +50,6 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
         <Field label="Email account">
           <select className={inputCls} value={f.email_account_id ?? ""} onChange={(e) => setF({ ...f, email_account_id: e.target.value || null })}>
             <option value="">None</option>{opts.email.map((a) => <option key={a.id} value={a.id}>{a.from_email ?? a.name}</option>)}
-          </select>
-        </Field>
-        <Field label="Campaign">
-          <select className={inputCls} value={f.workflow_id ?? ""} onChange={(e) => setF({ ...f, workflow_id: e.target.value || null })}>
-            <option value="">None</option>{opts.workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
         </Field>
         <Field label="Meeting link"><input className={inputCls} value={f.booking_url ?? ""} onChange={(e) => setF({ ...f, booking_url: e.target.value })} placeholder="https://cal.com/you" /></Field>

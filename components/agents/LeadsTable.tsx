@@ -15,11 +15,11 @@ interface Row {
 
 const STEP: Record<string, string> = { visit: "Visit", connect: "Connect", message: "Message", sales_inmail: "InMail", delay: "Wait", email: "Email" };
 
-const STATUS: Record<string, string> = { new: "Scoring", qualified: "Qualified", drafted: "In Copilot", approved: "Approved", enrolled: "In sequence", skipped: "Rejected", disqualified: "Not a fit" };
-const FILTERS = [["", "Active"], ["drafted", "In Copilot"], ["qualified", "Qualified"], ["enrolled", "In sequence"], ["disqualified", "Not a fit"], ["all", "All"]] as const;
+const STATUS: Record<string, string> = { new: "Scoring", qualified: "Qualified", drafted: "To review", approved: "Approved", enrolled: "In sequence", skipped: "Rejected", disqualified: "Not a fit" };
+const FILTERS = [["", "Active"], ["drafted", "To review"], ["qualified", "Qualified"], ["enrolled", "In sequence"], ["disqualified", "Not a fit"], ["all", "All"]] as const;
 
 /** Agent leads as a table: contact, signal, AI score, email, outreach state. Rows open the lead drawer. */
-export default function LeadsTable({ agentId, showAgent = !agentId, initialAgentId }: { agentId?: string; showAgent?: boolean; initialAgentId?: string }) {
+export default function LeadsTable({ agentId, showAgent = !agentId, initialAgentId, openLeadId }: { agentId?: string; showAgent?: boolean; initialAgentId?: string; openLeadId?: string }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState("");
@@ -27,7 +27,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(openLeadId ?? null);
   const [menu, setMenu] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const limit = 50;
@@ -36,6 +36,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
   const query = useMemo(() => new URLSearchParams(Object.entries({ agent_id: agent, status, signal_type: signal, q, limit: String(limit), offset: String(page * limit) }).filter(([, v]) => v)).toString(), [agent, status, signal, q, page]);
   const load = useCallback(() => fetch(`/api/leads?${query}`).then((r) => r.json()).then((d) => { setRows(d.leads ?? []); setTotal(d.total ?? 0); }), [query]);
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [load]);
+  useEffect(() => { if (openLeadId) setOpen(openLeadId); }, [openLeadId]);
 
   async function bulk(action: "find_email" | "skip") {
     const ids = [...selected];
@@ -80,6 +81,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
 
   const toggle = (id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const pages = Math.ceil(total / limit);
+  const showPhone = (rows ?? []).some((r) => r.phone);
 
   return (
     <div className="space-y-3">
@@ -113,7 +115,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
               <tr className="border-b border-[var(--border-subtle)]">
                 <th className="w-10 px-3 py-3"><input type="checkbox" className="checkbox checkbox-xs" aria-label="Select all" checked={selected.size === rows.length} onChange={() => setSelected(selected.size === rows.length ? new Set() : new Set(rows.map((r) => r.id)))} /></th>
                 <th className="py-3 font-medium">Contact</th><th className="py-3 font-medium">Signals</th><th className="py-3 font-medium">AI score</th>
-                <th className="py-3 font-medium">Email</th><th className="py-3 font-medium">Phone</th><th className="py-3 font-medium">Step</th><th className="py-3 font-medium">Approval</th>{showAgent && <th className="py-3 font-medium">Agent</th>}<th />
+                <th className="py-3 font-medium">Email</th>{showPhone && <th className="py-3 font-medium">Phone</th>}<th className="py-3 font-medium">Step</th><th className="py-3 font-medium">Approval</th>{showAgent && <th className="py-3 font-medium">Agent</th>}<th />
               </tr>
             </thead>
             <tbody>
@@ -133,7 +135,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
                   </td>
                   <td className="py-3" title={r.fit_reason ?? undefined}><Flames score={r.lead_score ?? r.intent_score} /></td>
                   <td className="max-w-[180px] truncate py-3 pr-3 text-xs">{r.email ? <span className="rounded-full bg-success/10 px-2 py-0.5 text-success">{r.email}</span> : <span className="text-base-content/30">—</span>}</td>
-                  <td className="max-w-[120px] truncate py-3 pr-3 text-xs">{r.phone || <span className="text-base-content/30">—</span>}</td>
+                  {showPhone && <td className="max-w-[120px] truncate py-3 pr-3 text-xs">{r.phone}</td>}
                   <td className="py-3 text-xs">{STEP[r.outreach_step ?? ""] ?? <span className="text-base-content/30">—</span>}</td>
                   <td className="py-3 text-xs text-base-content/60" onClick={(e) => e.stopPropagation()}>
                     {STATUS[r.agent_status ?? ""] ?? "—"}

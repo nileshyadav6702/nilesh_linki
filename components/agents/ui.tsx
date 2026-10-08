@@ -135,3 +135,28 @@ export function timeUntil(iso: string | null | undefined): string {
   if (s < 86400) return `in ${Math.round(s / 3600)}h`;
   return `in ${Math.round(s / 86400)}d`;
 }
+
+/** A source that has never run is scheduled for now. It is not late. */
+export function nextRunLabel(nextAt: string | null | undefined, lastAt: string | null | undefined): string {
+  if (!nextAt) return "Not scheduled";
+  if (!lastAt && timeUntil(nextAt) === "due") return "Scheduled now";
+  return timeUntil(nextAt);
+}
+
+export function sourcingLabel(status: string): string {
+  if (status === "active") return "Lead sourcing on";
+  if (status === "draft") return "Lead sourcing not started";
+  return "Lead sourcing paused";
+}
+
+export function outreachLabel(on: boolean): string {
+  return on ? "Outreach on" : "Outreach paused";
+}
+
+/** Name of the attached sender. Accounts that exist but are not on this agent are not "no sender". */
+export function senderLine(linkedinName: string | null | undefined, emailFrom: string | null | undefined, pool: { linkedin: number; email: number }): string {
+  const attached = linkedinName || emailFrom;
+  if (attached) return attached;
+  if (pool.linkedin + pool.email > 0) return "No sender attached";
+  return "No sender yet";
+}

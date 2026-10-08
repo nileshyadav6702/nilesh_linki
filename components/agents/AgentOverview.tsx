@@ -16,6 +16,12 @@ export default function AgentOverview({ performance, series, activity, dueToday,
 }) {
   const p = performance;
   const max = Math.max(1, ...series.map((d) => d.found + d.invitations + d.messages + d.emails));
+  const bars = [
+    { key: "found" as const, label: "Leads found", className: "bg-primary" },
+    { key: "invitations" as const, label: "Invitations", className: "bg-info" },
+    { key: "messages" as const, label: "Messages", className: "bg-success" },
+    { key: "emails" as const, label: "Emails", className: "bg-warning" },
+  ];
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
       <div className="space-y-4">
@@ -40,24 +46,31 @@ export default function AgentOverview({ performance, series, activity, dueToday,
             <Stat label="Found" value={String(p.found)} />
             <Stat label="Contacted" value={String(p.contacted)} hint={pct(p.contacted, p.found)} />
             <Stat label="Accepted" value={String(p.accepted)} hint={`${pct(p.accepted, p.contacted)} acceptance`} />
-            <Stat label="Replied" value={p.replied ? String(p.replied) : "—"} hint="reply rate" />
+            <Stat label="Replied" value={p.replied ? String(p.replied) : "—"} hint={p.contacted ? pct(p.replied, p.contacted) : undefined} />
             <Stat label="Interested" value={p.interested ? String(p.interested) : "—"} />
           </div>
         </div>
         <Card>
           <div className="mb-3 text-sm font-semibold">Last {series.length} days</div>
           <div className="flex h-28 items-end gap-1">
-            {series.map((d) => (
-              <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${d.found} found, ${d.invitations} invitations, ${d.messages} messages, ${d.emails} emails`}>
-                <div className="flex w-full items-end" style={{ height: 96 }}>
-                  <div className="w-full rounded-t bg-primary/70" style={{ height: `${Math.max(2, ((d.found + d.invitations + d.messages + d.emails) / max) * 96)}px` }} />
+            {series.map((d) => {
+              const total = d.found + d.invitations + d.messages + d.emails;
+              return (
+                <div key={d.day} className="flex flex-1 flex-col items-center gap-1" title={`${d.day}: ${d.found} leads found, ${d.invitations} invitations, ${d.messages} messages, ${d.emails} emails`}>
+                  <div className="flex w-full flex-col-reverse justify-start" style={{ height: 96 }}>
+                    {total === 0
+                      ? <div className="h-px w-full bg-base-300" />
+                      : bars.map((bar) => d[bar.key] > 0 ? <div key={bar.key} className={`w-full ${bar.className}`} style={{ height: `${(d[bar.key] / max) * 96}px` }} /> : null)}
+                  </div>
+                  <span className="text-[10px] text-base-content/40">{d.day.slice(5)}</span>
                 </div>
-                <span className="text-[10px] text-base-content/40">{d.day.slice(5)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
-          <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-base-content/50">
-            <span>Leads, invitations, messages, and emails, stacked per day</span>
+          <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-base-content/55">
+            {bars.map((bar) => (
+              <span key={bar.key} className="inline-flex items-center gap-1.5"><span className={`h-2 w-2 rounded-sm ${bar.className}`} />{bar.label}</span>
+            ))}
           </div>
         </Card>
       </div>

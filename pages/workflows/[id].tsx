@@ -482,120 +482,14 @@ function formatNextAction(next_step_at: string | null, state: string): string {
 
 // ─── Server-side ──────────────────────────────────────────────────────────────
 
-export const getServerSideProps: GetServerSideProps = async ({ params, query, req, res }) => {
+export const getServerSideProps: GetServerSideProps = async ({ params, req, res }) => {
   const db = getDb();
   const workspace = await getServerWorkspace(req, res);
   if (!workspace) return loginRedirect(req);
   const { workspaceId } = workspace;
   const id = params?.id as string;
-  const workflow = db.prepare("SELECT * FROM workflows WHERE id = ? AND workspace_id = ?").get(id,workspaceId);
-  if (!workflow) return { notFound: true };
-
-  const rawSteps = db
-    .prepare(
-      `SELECT ws.*, t.name as template_name
-       FROM workflow_steps ws
-       LEFT JOIN templates t ON t.id = ws.template_id
-       WHERE ws.workflow_id = ? ORDER BY ws.track, ws.step_order`
-    )
-    .all(id);
-
-  const getStepTemplates = db.prepare(
-    `SELECT wst.template_id, t.name FROM workflow_step_templates wst JOIN templates t ON t.id = wst.template_id WHERE wst.step_id = ?`
-  );
-  const getStepEmailVariants = db.prepare(
-    `SELECT id, subject, body FROM workflow_step_email_variants WHERE step_id = ? ORDER BY position`
-  );
-  const steps = (rawSteps as Array<Record<string, unknown>>).map((s) => {
-    const rows = getStepTemplates.all(s.id) as Array<{ template_id: string; name: string }>;
-    return {
-      ...s,
-      template_ids: rows.map((r) => r.template_id),
-      template_names: rows.map((r) => r.name),
-      email_variants: getStepEmailVariants.all(s.id) as Array<{ id: string; subject: string; body: string }>,
-    };
-  });
-
-  const activeRun = db
-    .prepare(
-      `SELECT r.id, r.status, r.list_id, l.name as list_name, a.name as account_name,
-              r.last_tick_at,
-              CASE WHEN r.status = 'running'
-                     AND (r.last_tick_at IS NULL
-                          OR r.last_tick_at < datetime('now', '-12 minutes'))
-                   THEN 1 ELSE 0 END as runner_stale
-       FROM runs r
-       LEFT JOIN lists l ON l.id = r.list_id
-       LEFT JOIN accounts a ON a.id = r.account_id
-       WHERE r.workflow_id = ? AND r.status IN ('running','paused')
-       LIMIT 1`
-    )
-    .get(id) as { id: string; status: string; list_id: string; list_name: string; account_name: string; last_tick_at: string | null; runner_stale: number } | undefined;
-
-  const lists = db
-    .prepare(
-      `SELECT l.id, l.name, COUNT(lt.target_id) as target_count
-       FROM lists l LEFT JOIN list_targets lt ON lt.list_id = l.id
-       WHERE l.workspace_id = ?
-       GROUP BY l.id ORDER BY l.name`
-    )
-    .all(workspaceId);
-  const accounts = db
-    .prepare(
-      `SELECT a.id, a.name, a.is_authenticated, a.daily_connection_limit, a.daily_message_limit, a.daily_inmail_limit,
-         (SELECT COUNT(*) FROM logs l JOIN runs r ON r.id = l.run_id
-          WHERE r.account_id = a.id AND l.message LIKE 'Connection request sent%' AND date(l.created_at) = date('now')) as connections_today,
-         (SELECT COUNT(*) FROM logs l JOIN runs r ON r.id = l.run_id
-          WHERE r.account_id = a.id AND l.message LIKE 'Message sent%' AND date(l.created_at) = date('now')) as messages_today,
-         (SELECT COUNT(*) FROM logs l JOIN runs r ON r.id = l.run_id
-          WHERE r.account_id = a.id AND l.message LIKE 'InMail sent%' AND date(l.created_at) = date('now')) as inmails_today
-       FROM accounts a WHERE a.workspace_id=? ORDER BY a.name`
-    )
-    .all(workspaceId);
-
-  const templates = db.prepare("SELECT id, name FROM templates WHERE workspace_id=? ORDER BY name").all(workspaceId);
-  const emailAccounts = db.prepare(`
-    SELECT ea.id, ea.name, ea.from_email, ea.is_verified, ea.signature,
-           (SELECT COUNT(DISTINCT rp.run_id) FROM run_profiles rp
-            JOIN runs r ON rp.run_id = r.id
-            WHERE rp.email_account_id = ea.id
-            AND r.status IN ('running', 'paused')) AS active_run_count
-    FROM email_accounts ea WHERE ea.workspace_id=? ORDER BY ea.name
-  `).all(workspaceId);
-
-  // Email accounts currently assigned to the active run's profiles (locked during edit)
-  const activeRunEmailAccountIds: string[] = activeRun
-    ? (db.prepare(
-        `SELECT DISTINCT email_account_id FROM run_profiles WHERE run_id = ? AND email_account_id IS NOT NULL`
-      ).all(activeRun.id) as Array<{ email_account_id: string }>).map((r) => r.email_account_id)
-    : [];
-
-  // Conditional branches attached to this campaign's steps
-  const branches = db.prepare(
-    `SELECT id, source_step_id, conditions_json, true_step_id, false_step_id FROM workflow_branches
-     WHERE workflow_id = ? AND workspace_id = ?`
-  ).all(id, workspaceId) as Array<{ id: string; source_step_id: string | null; conditions_json: string; true_step_id: string | null; false_step_id: string | null }>;
-
-  // Signal rules that ingest prospects into this campaign — "Live" when enabled
-  const signalRules = db.prepare(
-    `SELECT id, name, signal_type, min_score, enabled, auto_start FROM signal_rules
-     WHERE workflow_id = ? AND workspace_id = ? ORDER BY enabled DESC, created_at`
-  ).all(id, workspaceId) as Array<{ id: string; name: string; signal_type: string; min_score: number; enabled: number; auto_start: number }>;
-
-  return {
-    props: {
-      workflow: { ...(workflow as object), steps, active_run: activeRun ?? null },
-      lists,
-      accounts,
-      templates,
-      emailAccounts,
-      activeRunEmailAccountIds,
-      branches,
-      signalRules,
-      // auto-open wizard if ?setup=1 (redirected from create)
-      autoSetup: query.setup === "1",
-    },
-  };
+  const owner = db.prepare("SELECT id FROM agents WHERE workflow_id = ? AND workspace_id = ? LIMIT 1").get(id, workspaceId) as { id: string } | undefined;
+  return { redirect: { destination: owner ? `/agents/${owner.id}?tab=Campaign` : "/agents", permanent: false } };
 };
 
 // ─── Wizard ───────────────────────────────────────────────────────────────────
