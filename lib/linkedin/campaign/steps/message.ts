@@ -1,0 +1,117 @@
+import { getSessionPage } from "@/lib/linkedin/session";
+import { sendMessage } from "@/lib/linkedin/message";
+import { settledPriorAction } from "@/lib/linkedin/actions";
+import { peekApprovedDraft, consumeDraft } from "@/lib/linkedin/step-drafts";
+import { premium } from "@/lib/premium";
+import { decryptSecret } from "@/lib/crypto";
+import { emitDomainEvent } from "@/lib/platform/events";
+import { renderOutreachTemplate } from "@/lib/outreach/render";
+import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
+import { CONNECTION_MAX_WAIT_DAYS, CONNECTION_RECHECK_HOURS } from "../constants";
+import { actionInput, holdForAi, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction, stepTemplateBody } from "../step-helpers";
+import { ensureSalesNavEnriched } from "../pre-enrich";
+import { enforceSchedule, hoursSince, log, nowIso, trAdvance, trFail, trRecordContext, trSkip, trWait } from "../track-state";
+import type { Target } from "../types";
+import type { StepContext } from "./context";
+
+export async function runMessageStep(ctx: StepContext): Promise<void> {
+  const { db, runId, tr, target, steps, step, name, accountId, accountLimits, campaignPrompt } = ctx;
+  await ensureSalesNavEnriched(db, target, accountId);
+  if (!enforceSchedule(db, tr, runId, target.id, name, accountLimits)) return;
+
+  const freshTarget = db.prepare("SELECT * FROM targets WHERE id = ?").get(target.id) as Target;
+  if (freshTarget.degree !== 1) {
+    const requested = freshTarget.connection_requested_at;
+    if (requested && hoursSince(requested) / 24 > CONNECTION_MAX_WAIT_DAYS) {
+      log(db, runId, target.id, "warn", `${name} never accepted — skipping message step`);
+      trSkip(db, tr, "Never accepted connection");
+      return;
+    }
+    log(db, runId, target.id, "info", `${name} not yet connected — rescheduling message in ${CONNECTION_RECHECK_HOURS}h`);
+    trWait(db, tr, CONNECTION_RECHECK_HOURS);
+    return;
+  }
+
+  const messageAction = actionInput("message", runId, tr, step, accountId, target.id);
+  if (settlePriorLinkedinAction(db, runId, tr, steps, target.id, name, "message", settledPriorAction(db, messageAction.key))) return;
+
+  let messageText = "";
+  // An AI agent's approved draft for this step replaces the step's own content. Read now,
+  // consumed only after the send succeeds, so a failed send keeps the approved copy.
+  const approvedDraft = peekApprovedDraft(db, target.id, "linkedin_message", step.id, (step.message_position ?? 1) === 1);
+  if (approvedDraft) {
+    messageText = approvedDraft.body;
+    log(db, runId, target.id, "info", `Using the approved agent draft for ${name}`);
+  } else if (step.ai_enabled) {
+    // Missing AI setup is the user's to fix: hold the step, never skip it as if it were done.
+    if (!premium?.ai) {
+      holdForAi(db, runId, tr, target.id, name, "the AI writer is unavailable in this build");
+      return;
+    }
+    const integration = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?").get(target.workspace_id) as { api_key: string } | undefined;
+    const agentCfgForMsg = premium.ai.getAgentConfig(target.workspace_id);
+    const resolvedMsgModel = step.ai_model || agentCfgForMsg.default_model;
+    if (!integration?.api_key || !resolvedMsgModel) {
+      holdForAi(db, runId, tr, target.id, name, "the OpenRouter key or model is missing");
+      return;
+    }
+    const contactData = premium.ai.getContactWithCompany(target.id);
+    if (!contactData) {
+      log(db, runId, target.id, "error", `Could not load contact data for AI message — failing step for ${name}`);
+      trFail(db, tr, "Contact data unavailable for AI message");
+      return;
+    }
+    log(db, runId, target.id, "info", `Generating AI message for ${name} with ${resolvedMsgModel}`);
+    const msgPosition = step.message_position ?? 1;
+    let previousMessageContext: { followupNumber: number; previousMessage: string } | undefined;
+    if (msgPosition > 1 && tr.last_linkedin_message) {
+      previousMessageContext = { followupNumber: msgPosition - 1, previousMessage: tr.last_linkedin_message };
+    }
+    const result = await premium.ai.writeLinkedInMessage({
+      apiKey: decryptSecret(integration.api_key)!,
+      model: resolvedMsgModel,
+      stepType: "message",
+      stepPrompt: step.ai_prompt ?? "",
+      maxWords: step.ai_max_words ?? undefined,
+      language: step.ai_language ?? undefined,
+      campaignPrompt: campaignPrompt ?? undefined,
+      contact: contactData.contact,
+      company: contactData.company,
+      agentConfig: agentCfgForMsg,
+      previousMessageContext,
+      runId,
+      targetId: target.id,
+      stepId: step.id,
+    });
+    messageText = result.body;
+  } else {
+    const customVals = loadTargetCustomValues(db, target.workspace_id, target.id);
+    const tmplBody = stepTemplateBody(db, step, runId);
+    if (tmplBody) messageText = renderOutreachTemplate(tmplBody, freshTarget, customVals);
+    if (!messageText && step.message_body) messageText = renderOutreachTemplate(step.message_body, freshTarget, customVals);
+  }
+  if (!messageText) {
+    log(db, runId, target.id, "warn", `No message body for message step — skipping ${name}`);
+    trAdvance(db, tr, steps);
+    return;
+  }
+
+  if (!target.full_name) throw new Error(`Target ${target.id} has no full_name — cannot search messaging`);
+  const fullName = target.full_name;
+  db.prepare("UPDATE run_profile_tracks SET last_step_at = datetime('now') WHERE id = ?").run(tr.id);
+  log(db, runId, target.id, "info", `Sending message to ${name}`);
+  const sent = await sendLinkedinAction(db, messageAction, async () => {
+    const page = await getSessionPage(accountId);
+    try { await sendMessage(page, fullName, messageText); } finally { await page.close(); }
+  });
+  if (!sent.claimed) { settlePriorLinkedinAction(db, runId, tr, steps, target.id, name, "message", sent.status); return; }
+  await saveSessionAfterSend(accountId);
+  db.transaction(() => {
+    db.prepare("UPDATE targets SET message_sent_at = ? WHERE id = ?").run(nowIso(), target.id);
+    consumeDraft(db, approvedDraft);
+    trRecordContext(db, tr, { linkedinMessage: messageText });
+    trAdvance(db, tr, steps);
+    log(db, runId, target.id, "info", `Message sent to ${name}`);
+  })();
+  emitDomainEvent({ workspaceId: target.workspace_id, type: "linkedin.message_sent", entityType: "contact", entityId: target.id, payload: { run_id: runId } });
+}
