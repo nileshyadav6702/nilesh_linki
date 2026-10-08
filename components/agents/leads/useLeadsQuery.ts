@@ -11,9 +11,16 @@ export function leadsParams(agent: string, filters: Filters, q: string, extra: R
   }).filter(([, v]) => v));
 }
 
+/** Default filters, with the signal type from `?signal=` (Activity → View leads) when present. */
+function initialFilters(): Filters {
+  if (typeof window === "undefined") return DEFAULT_FILTERS;
+  const signal = new URLSearchParams(window.location.search).get("signal") ?? "";
+  return /^[a-z_]{1,40}$/.test(signal) ? { ...DEFAULT_FILTERS, signal } : DEFAULT_FILTERS;
+}
+
 /** Filters, paging and the fetched page (with facet counts) for the Leads table. */
 export function useLeadsQuery(agent: string) {
-  const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<Filters>(initialFilters);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const [rows, setRows] = useState<LeadRowData[] | null>(null);

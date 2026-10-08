@@ -166,7 +166,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
 }
 
 /** Numbered pages with a window around the current one; the active page is coral. */
-function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (p: number) => void }) {
+export function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (p: number) => void }) {
   const start = Math.max(0, Math.min(page - 2, pages - 5));
   const nums = Array.from({ length: Math.min(5, pages) }, (_, i) => start + i);
   const btn = "inline-flex h-8 min-w-8 items-center justify-center rounded-[6px] px-2 text-[13px] tabular-nums transition-colors disabled:opacity-35";

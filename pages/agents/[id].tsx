@@ -6,10 +6,11 @@ import { toast } from "sonner";
 import type { ReactNode } from "react";
 import {
   RiArrowLeftSLine, RiFlowChart, RiCheckboxCircleFill, RiDashboardLine, RiDeleteBinLine, RiErrorWarningLine, RiFocus3Line, RiHistoryLine, RiLineChartLine,
-  RiLinkedinBoxFill, RiLoader4Line, RiMailLine, RiPauseCircleLine, RiPlayLine, RiRadarLine, RiRocketLine, RiSearchEyeLine, RiSendPlaneLine, RiSettings3Line,
+  RiLinkedinBoxFill, RiLoader4Line, RiMailLine, RiPauseCircleLine, RiPlayLine, RiRadarLine, RiRocketLine, RiSendPlaneLine, RiSettings3Line,
   RiTeamLine, RiTimeLine, RiUserAddLine,
 } from "react-icons/ri";
-import AgentOverview, { ActivityList, type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
+import ActivityFeed from "@/components/agents/activity/ActivityFeed";
+import AgentOverview, { type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
 import AgentSettings, { type AgentForm } from "@/components/agents/AgentSettings";
 import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSources";
 import { EMPTY_ICP } from "@/components/agents/IcpEditor";
@@ -18,7 +19,7 @@ import AgentCampaign from "@/components/agents/AgentCampaign";
 import LeadsTable from "@/components/agents/LeadsTable";
 import type { Step } from "@/components/agents/SequenceEditor";
 import {
-  Avatar, Callout, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, RunSwitch, secondaryBtn, SectionHeading, Segmented, senderLine, TabBar, timeUntil, type Tone,
+  Avatar, Callout, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, RunSwitch, secondaryBtn, SectionHeading, senderLine, TabBar, timeUntil, type Tone,
 } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 import type { Icp } from "@/lib/icp/schema";
@@ -44,7 +45,6 @@ const TAB_ICONS: Partial<Record<(typeof TABS)[number], ReactNode>> = {
   Overview: <RiDashboardLine size={15} />, Leads: <RiTeamLine size={15} />, Sources: <RiRadarLine size={15} />,
   Campaign: <RiFlowChart size={15} />, Activity: <RiHistoryLine size={15} />, Settings: <RiSettings3Line size={15} />,
 };
-const ACTIVITY_FILTERS = ["all", "discovery", "campaign", "setup"] as const;
 
 function SenderRow({ icon, tone, name, kind, status, limits }: { icon: ReactNode; tone: Tone; name: string; kind: string; status: "connected" | "logged_out" | "none"; limits: ReactNode[] }) {
   return (
@@ -74,7 +74,6 @@ export default function AgentDetail() {
   const [icp, setIcp] = useState<Icp>(EMPTY_ICP);
   const [icpWebsite, setIcpWebsite] = useState<string | null>(null);
   const [editingIcp, setEditingIcp] = useState(false);
-  const [activityFilter, setActivityFilter] = useState<"all" | "discovery" | "campaign" | "setup">("all");
   const [busy, setBusy] = useState(false);
 
   const fetchDetail = useCallback(async (): Promise<{ data: Detail; icp: Icp | null; website: string | null } | null> => {
@@ -229,15 +228,9 @@ export default function AgentDetail() {
           />
         )}
         {tab === "Activity" && (
-          <div className="space-y-4">
-            <Segmented options={ACTIVITY_FILTERS} value={activityFilter} onChange={setActivityFilter} labels={{
-              all: "All",
-              discovery: <><RiSearchEyeLine size={14} /> Lead discovery</>,
-              campaign: <><RiSendPlaneLine size={14} /> Campaign</>,
-              setup: <><RiSettings3Line size={14} /> Setup</>,
-            }} />
-            <ActivityList items={d.activity} filter={activityFilter} />
-          </div>
+          <ActivityFeed agentId={a.id} onViewLeads={(signal) => {
+            void router.replace({ pathname: router.pathname, query: { ...router.query, tab: "Leads", signal } }, undefined, { shallow: true }).then(() => setTab("Leads"));
+          }} />
         )}
         {tab === "Settings" && (
           <div className="space-y-6">
