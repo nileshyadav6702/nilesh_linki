@@ -130,15 +130,15 @@ function addDaysStr(base: string, days: number): string {
  */
 export function startImport(
   db: DB,
-  opts: { listId: string; accountId: string; salesNavUrl: string; enrich?: boolean }
+  opts: { listId: string; accountId: string; salesNavUrl: string; enrich?: boolean; /** Stop after this many contacts (all batches together). */ cap?: number | null }
 ): { importId: string } {
   cancelImportsForList(db, opts.listId); // supersede any prior import for this list
   const importId = randomUUID();
   db.prepare(
     `INSERT INTO list_imports
-       (id, list_id, account_id, sales_nav_url, status, scheduled_for, start_page, batch_index, enrich, started_at)
-     VALUES (?, ?, ?, ?, 'scheduled', ?, 1, 1, ?, datetime('now'))`
-  ).run(importId, opts.listId, opts.accountId, opts.salesNavUrl, todayStr(), opts.enrich ? 1 : 0);
+       (id, list_id, account_id, sales_nav_url, status, scheduled_for, start_page, batch_index, enrich, cap, started_at)
+     VALUES (?, ?, ?, ?, 'scheduled', ?, 1, 1, ?, ?, datetime('now'))`
+  ).run(importId, opts.listId, opts.accountId, opts.salesNavUrl, todayStr(), opts.enrich ? 1 : 0, opts.cap && opts.cap > 0 ? Math.floor(opts.cap) : null);
   return { importId };
 }
 
@@ -268,7 +268,9 @@ async function runBatch(importId: string, deadline: number, shouldStop?: () => b
     );
     return;
   }
-  const maxPages = Math.min(quotaPages, IMPORT_PAGES_PER_PASS);
+  // A capped import ("import 100 leads") never reads pages it cannot keep.
+  const capPages = job.cap && job.cap > 0 ? Math.ceil(job.cap / PAGE_SIZE) : Infinity;
+  const maxPages = Math.min(quotaPages, IMPORT_PAGES_PER_PASS, capPages);
 
   console.log(`[import] batch ${importId} (b${job.batch_index}) start_page=${job.start_page} maxPages=${maxPages} cap=${cap}`);
   const { getSessionContext } = await import("@/lib/linkedin/session");
@@ -306,7 +308,9 @@ async function runBatch(importId: string, deadline: number, shouldStop?: () => b
       return;
     }
 
-    const { imported, skipped } = insertProfiles(db, job.list_id, profiles);
+    const kept = job.cap && job.cap > 0 ? profiles.slice(0, job.cap) : profiles;
+    const capLeft = job.cap && job.cap > 0 ? job.cap - kept.length : null;
+    const { imported, skipped } = insertProfiles(db, job.list_id, kept);
     console.log(`[import] batch ${importId} inserted ${imported} new, skipped ${skipped} (lastPage=${lastPage}, exhausted=${exhausted})`);
 
     // Close this batch and chain the remainder atomically: a crash between the two used to
@@ -316,15 +320,15 @@ async function runBatch(importId: string, deadline: number, shouldStop?: () => b
         `UPDATE list_imports
            SET status = 'done', imported = ?, skipped = ?, count = ?, total = ?, page = ?, total_pages = ?, finished_at = datetime('now')
          WHERE id = ?`
-      ).run(imported, skipped, profiles.length, knownTotal, lastPage, Math.ceil(knownTotal / PAGE_SIZE), importId);
+      ).run(imported, skipped, kept.length, knownTotal, lastPage, Math.ceil(knownTotal / PAGE_SIZE), importId);
 
       // More of the list left → chain the remainder: later today while quota remains, else tomorrow.
-      if (!exhausted) {
+      if (!exhausted && (capLeft === null || capLeft > 0)) {
         const quotaLeft = getDailyImportCap(db, list.workspace_id) - importedToday(db, list.workspace_id) >= PAGE_SIZE;
         db.prepare(
           `INSERT INTO list_imports
-             (id, list_id, account_id, sales_nav_url, status, scheduled_for, start_page, batch_index, enrich, total, total_pages, started_at)
-           VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, datetime('now'))`
+             (id, list_id, account_id, sales_nav_url, status, scheduled_for, start_page, batch_index, enrich, total, total_pages, cap, started_at)
+           VALUES (?, ?, ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
         ).run(
           randomUUID(),
           job.list_id,
@@ -335,7 +339,8 @@ async function runBatch(importId: string, deadline: number, shouldStop?: () => b
           job.batch_index + 1,
           job.enrich,
           knownTotal,
-          Math.ceil(knownTotal / PAGE_SIZE)
+          Math.ceil(knownTotal / PAGE_SIZE),
+          capLeft
         );
       }
     })();

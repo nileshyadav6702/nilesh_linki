@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
-  RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiBriefcase4Line, RiChat3Line, RiCloseLine, RiCodeSSlashLine, RiFileList3Line, RiFocus3Line,
+  RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiBriefcase4Line, RiChat3Line, RiCodeSSlashLine, RiFileList3Line, RiFocus3Line,
   RiGlobalLine, RiGroupLine, RiHashtag, RiMoneyDollarCircleLine, RiPencilLine, RiPlayLine, RiRadarLine, RiUserSearchLine, RiUserStarLine,
 } from "react-icons/ri";
-import SourcePicker, { countSignals, type SourceDraft } from "@/components/agents/SourcePicker";
-import { Avatar, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, secondaryBtn, SectionHeading, SIGNAL_LABEL, timeAgo, Toggle, type Tone } from "@/components/agents/ui";
+import LeadSourcesDrawer from "@/components/agents/sources/LeadSourcesDrawer";
+import { draftsFromRows, totalSignals } from "@/components/agents/sources/catalog";
+import { Avatar, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, SectionHeading, SIGNAL_LABEL, timeAgo, Toggle, type Tone } from "@/components/agents/ui";
 import type { Icp } from "@/lib/icp/schema";
 import { roleTitles, sizeLabel } from "@/lib/icp/targeting";
 
@@ -58,10 +59,10 @@ function tracked(s: AgentSourceRow): string {
 }
 
 /** "Who this agent targets" + "How this agent finds leads", with per-source counts, Launch now and toggles. */
-export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChanged, onEditTargeting }: { agentId: string; icp: Icp; rows: AgentSourceRow[]; hasLinkedIn: boolean; onChanged: () => void; onEditTargeting?: () => void }) {
+export default function AgentSources({ agentId, agentName, ownListId, autoEnrichEmails, icp, rows, hasLinkedIn, onChanged, onEditTargeting }: {
+  agentId: string; agentName: string; ownListId: string | null; autoEnrichEmails: boolean; icp: Icp; rows: AgentSourceRow[]; hasLinkedIn: boolean; onChanged: () => void; onEditTargeting?: () => void;
+}) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<SourceDraft[]>(() => rows.map((s) => ({ source_type: s.source_type, enabled: !!s.enabled, config: JSON.parse(s.config_json || "{}") })));
-  const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const chips = [...new Set([...roleTitles(icp), ...icp.industries, ...icp.company_types, ...icp.company_sizes.map(sizeLabel), ...icp.geographies])];
   const modeNote = icp.match_mode === "skip" ? "ICP filtering skipped" : icp.match_mode === "broader" ? "Broader matching" : null;
@@ -79,20 +80,6 @@ export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChange
     toast.success(d.linkedin_sources_queued ? "Queued for the next LinkedIn pass" : `${d.http_sources?.[0]?.ingested ?? 0} new signal(s)`);
     onChanged();
   }
-  async function save() {
-    setBusy(true);
-    for (const s of draft) {
-      const existing = rows.find((x) => x.source_type === s.source_type);
-      const r = existing
-        ? await fetch(`/api/agents/${agentId}/sources`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source_id: existing.id, enabled: s.enabled, config: s.config }) })
-        : s.enabled ? await fetch(`/api/agents/${agentId}/sources`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(s) }) : null;
-      if (r && !r.ok) { toast.error((await r.json()).error ?? `Could not save ${s.source_type}`); setBusy(false); return; }
-    }
-    setBusy(false); setEditing(false);
-    toast.success("Signals saved");
-    onChanged();
-  }
-
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -109,18 +96,14 @@ export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChange
       <section className="space-y-3">
         <SectionHeading
           title="How this agent finds leads"
-          subtitle={`${active} active source${active === 1 ? "" : "s"} · ${countSignals(draft)} signals`}
-          actions={editing
-            ? <button type="button" className={secondaryBtn} onClick={() => setEditing(false)}><RiCloseLine size={15} /> Cancel</button>
-            : <button type="button" className={`${primaryBtn} !bg-neutral !text-neutral-content hover:!bg-[#252320]`} onClick={() => setEditing(true)}><RiAddLine size={16} /> Lead sources</button>}
+          subtitle={`${active} active source${active === 1 ? "" : "s"} · ${totalSignals(draftsFromRows(rows))} signals`}
+          actions={<button type="button" className={`${primaryBtn} !bg-neutral !text-neutral-content hover:!bg-[#252320]`} onClick={() => setEditing(true)}><RiAddLine size={16} /> Lead sources</button>}
         />
-        {editing ? (
-          <Panel className="space-y-4 p-5">
-            <SourcePicker value={draft} onChange={setDraft} hasLinkedIn={hasLinkedIn} suggestions={{ keywords: icp.keywords, competitorUrls: icp.competitors.map((c) => c.linkedin_url).filter((u): u is string => !!u) }} />
-            <button type="button" className={primaryBtn} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save signals"}</button>
-          </Panel>
-        ) : (
-          <Panel className="overflow-hidden">
+        {editing && (
+          <LeadSourcesDrawer agentId={agentId} agentName={agentName} ownListId={ownListId} rows={rows} icp={icp} hasLinkedIn={hasLinkedIn}
+            autoEnrichEmails={autoEnrichEmails} onClose={() => setEditing(false)} onChanged={onChanged} />
+        )}
+        <Panel className="overflow-hidden">
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border-subtle)] bg-base-200/60 px-5 py-4">
               <div>
                 <div className="flex items-center gap-2 text-[15px] font-medium text-base-content">Signals <Pill>{active} of {rows.length}</Pill></div>
@@ -130,7 +113,7 @@ export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChange
                 <span className="text-right">Leads</span><span>Next run</span><span /><span />
               </div>
             </div>
-            {rows.length === 0 && <p className="px-5 py-8 text-center text-sm text-base-content/45">No sources yet. Add lead sources to start finding people.</p>}
+            {rows.length === 0 && <p className="px-5 py-8 text-center text-sm text-base-content/45">No sources yet. Click Lead sources to start finding people.</p>}
             {rows.map((s) => {
               const list = items(s);
               const expanded = !!open[s.id];
@@ -171,8 +154,7 @@ export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChange
                 </div>
               );
             })}
-          </Panel>
-        )}
+        </Panel>
       </section>
     </div>
   );

@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
-import { importCsv, importCsvWithMapping, type ColumnMapping } from "@/lib/csv-import";
+import { importCsv, importCsvWithMapping, validateMapping } from "@/lib/csv-import";
 import { requireWorkspace } from "@/lib/workspace";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -39,34 +39,3 @@ export const config = {
   api: { bodyParser: { sizeLimit: "25mb" }, responseLimit: false },
 };
 
-const STANDARD_FIELDS = new Set([
-  "linkedin_url", "sales_nav_url", "email",
-  "first_name", "last_name", "title", "company", "location",
-  "city", "country", "phone", "headline", "summary", "notes",
-]);
-const CUSTOM_KEY_RE = /^[a-z][a-z0-9_]*$/;
-
-// Defensive shape validation for a user-supplied column mapping.
-function validateMapping(input: unknown): { mapping: ColumnMapping[] } | { error: string } {
-  if (!Array.isArray(input)) return { error: "mapping must be an array" };
-  const out: ColumnMapping[] = [];
-  for (const raw of input) {
-    if (!raw || typeof raw !== "object") return { error: "each mapping entry must be an object" };
-    const m = raw as Record<string, unknown>;
-    if (typeof m.column !== "string" || !m.column) return { error: "each mapping entry needs a column name" };
-    if (m.kind === "ignore") {
-      out.push({ column: m.column, kind: "ignore" });
-    } else if (m.kind === "standard") {
-      if (typeof m.field !== "string" || !STANDARD_FIELDS.has(m.field)) return { error: `unknown standard field for column "${m.column}"` };
-      out.push({ column: m.column, kind: "standard", field: m.field as never });
-    } else if (m.kind === "custom") {
-      if (typeof m.key !== "string" || !CUSTOM_KEY_RE.test(m.key)) return { error: `invalid variable key for column "${m.column}"` };
-      const fieldType = m.fieldType === "number" || m.fieldType === "boolean" ? m.fieldType : "text";
-      const name = typeof m.name === "string" && m.name ? m.name : m.key;
-      out.push({ column: m.column, kind: "custom", key: m.key, name, fieldType });
-    } else {
-      return { error: `invalid mapping kind for column "${m.column}"` };
-    }
-  }
-  return { mapping: out };
-}

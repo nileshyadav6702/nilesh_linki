@@ -1,12 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { ZodError } from "zod";
 import { addSource, deleteSource, getAgent, listSources, updateSource } from "@/lib/agents/store";
+import { LeadSourceError, leadSourcesSaveSchema, saveLeadSources } from "@/lib/agents/lead-sources";
+import { getDb } from "@/lib/db";
 import { isSourceType } from "@/lib/signals/types";
 import { firstIssue } from "@/lib/validation";
 import { recordAudit, requireWorkspace } from "@/lib/workspace";
 
 // GET    /api/agents/:id/sources
 // POST   /api/agents/:id/sources { source_type, config, interval_hours }
+// PUT    /api/agents/:id/sources { sources: [{ source_type, enabled, config }], attach_list_ids, detach_list_ids } (Lead sources drawer)
 // PATCH  /api/agents/:id/sources { source_id, config?, enabled?, interval_hours? }
 // DELETE /api/agents/:id/sources?source_id=
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -23,6 +26,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       recordAudit(ctx, "agent.source_added", "agent_source", source.id, { type: body.source_type });
       return res.status(201).json(source);
     }
+    if (req.method === "PUT") {
+      const parsed = leadSourcesSaveSchema.safeParse(body);
+      if (!parsed.success) return res.status(400).json({ error: firstIssue(parsed.error, "Invalid lead sources") });
+      const sources = saveLeadSources(getDb(), agentId, ctx.workspaceId, parsed.data);
+      recordAudit(ctx, "agent.sources_saved", "agent", agentId, {
+        types: parsed.data.sources.map((s) => s.source_type), attached: parsed.data.attach_list_ids.length, detached: parsed.data.detach_list_ids.length,
+      });
+      return res.json(sources);
+    }
     if (req.method === "PATCH") {
       const sourceId = String(body.source_id ?? "");
       const updated = updateSource(sourceId, ctx.workspaceId, {
@@ -37,9 +49,10 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(204).end();
     }
   } catch (err) {
+    if (err instanceof LeadSourceError) return res.status(err.status).json({ error: err.message });
     if (err instanceof ZodError) return res.status(400).json({ error: firstIssue(err, "Invalid source config") });
     throw err;
   }
-  res.setHeader("Allow", ["GET", "POST", "PATCH", "DELETE"]);
+  res.setHeader("Allow", ["GET", "POST", "PUT", "PATCH", "DELETE"]);
   return res.status(405).end();
 }

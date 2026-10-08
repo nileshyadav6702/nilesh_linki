@@ -1,6 +1,7 @@
 import Papa from "papaparse";
 import type DatabaseType from "better-sqlite3";
 import { randomUUID } from "crypto";
+import { canonicalProfileUrl, EMAIL_RE, normalizeHeader } from "@/lib/csv-rows";
 
 type DB = DatabaseType.Database;
 
@@ -12,6 +13,11 @@ const EDITABLE_FIELDS = [
   "city", "country", "phone", "headline", "summary", "notes",
 ] as const;
 type EditableField = (typeof EDITABLE_FIELDS)[number];
+
+// Company columns a CSV may carry on top of the editable set (mapping import only fills them
+// when mapped; the plain template does not list them).
+const IMPORT_FIELDS = [...EDITABLE_FIELDS, "company_linkedin_url", "company_industry"] as const;
+type ImportField = (typeof IMPORT_FIELDS)[number];
 
 // One template covers every case: a pure LinkedIn list, a pure email list (incl.
 // generic inboxes like info@company.com), or an export that already has both
@@ -48,10 +54,12 @@ export interface CsvImportResult {
   updated: number;
   skipped: number;
   errors: string[];
+  /** Rows that matched a contact already in the workspace (or an earlier row): merged, not re-created. */
+  duplicates: number;
 }
 
 // The full set of user-mappable standard target fields.
-const STANDARD_FIELDS = ["linkedin_url", "sales_nav_url", "email", ...EDITABLE_FIELDS] as const;
+export const STANDARD_FIELDS = ["linkedin_url", "sales_nav_url", "email", ...IMPORT_FIELDS] as const;
 export type StandardField = (typeof STANDARD_FIELDS)[number];
 
 // Describes what each normalized CSV column becomes on import.
@@ -67,12 +75,30 @@ export interface CsvImportWithMappingResult extends CsvImportResult {
 // Same rule the platform custom-fields endpoint enforces for keys.
 const CUSTOM_KEY_RE = /^[a-z][a-z0-9_]*$/;
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function normalizeLinkedinUrl(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed || !trimmed.includes("linkedin.com/in/")) return null;
-  return trimmed;
+/** Defensive shape validation for a user-supplied column mapping. */
+export function validateMapping(input: unknown): { mapping: ColumnMapping[] } | { error: string } {
+  if (!Array.isArray(input)) return { error: "mapping must be an array" };
+  if (input.length > 500) return { error: "too many mapped columns" };
+  const out: ColumnMapping[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") return { error: "each mapping entry must be an object" };
+    const m = raw as Record<string, unknown>;
+    if (typeof m.column !== "string" || !m.column || m.column.length > 200) return { error: "each mapping entry needs a column name" };
+    if (m.kind === "ignore") {
+      out.push({ column: m.column, kind: "ignore" });
+    } else if (m.kind === "standard") {
+      if (typeof m.field !== "string" || !(STANDARD_FIELDS as readonly string[]).includes(m.field)) return { error: `unknown standard field for column "${m.column}"` };
+      out.push({ column: m.column, kind: "standard", field: m.field as StandardField });
+    } else if (m.kind === "custom") {
+      if (typeof m.key !== "string" || !CUSTOM_KEY_RE.test(m.key) || m.key.length > 80) return { error: `invalid variable key for column "${m.column}"` };
+      const fieldType = m.fieldType === "number" || m.fieldType === "boolean" ? m.fieldType : "text";
+      const name = typeof m.name === "string" && m.name ? m.name.slice(0, 120) : m.key;
+      out.push({ column: m.column, kind: "custom", key: m.key, name, fieldType });
+    } else {
+      return { error: `invalid mapping kind for column "${m.column}"` };
+    }
+  }
+  return { mapping: out };
 }
 
 interface ParsedRow {
@@ -80,7 +106,7 @@ interface ParsedRow {
   sales_nav_url: string | null;
   email: string | null;
   full_name: string | null;
-  fields: Record<EditableField, string | null>;
+  fields: Record<ImportField, string | null>;
 }
 
 function get(row: Record<string, string>, key: string): string | null {
@@ -89,93 +115,97 @@ function get(row: Record<string, string>, key: string): string | null {
   return t.length > 0 ? t : null;
 }
 
+const parseCsv = (csvText: string) => Papa.parse<Record<string, string>>(csvText, { header: true, skipEmptyLines: true, transformHeader: normalizeHeader });
+
 /**
- * Shared contact upsert with workspace-level de-duplication: a contact is resolved by
- * linkedin_url first, then by email — so the same person (or the same email address) is
- * never imported twice into a workspace. An existing match is updated in place (missing
- * fields filled), otherwise a new contact is created.
+ * Shared contact upsert with workspace-level de-duplication: a contact is resolved by its
+ * LinkedIn profile (URLs compared in canonical form, so "linkedin.com/in/Jane/" and
+ * "https://www.linkedin.com/in/jane" are one person), then by email (case-insensitive) — so
+ * the same person is never imported twice into a workspace. An existing match is updated in
+ * place (missing fields filled), otherwise a new contact is created.
  */
 function targetUpserter(db: DB, workspaceId: string) {
-  const findByLinkedin = db.prepare("SELECT id FROM targets WHERE workspace_id = ? AND linkedin_url = ?");
-  const findByEmail = db.prepare("SELECT id FROM targets WHERE workspace_id = ? AND email = ? LIMIT 1");
+  const byUrl = new Map<string, string>();
+  const byEmail = new Map<string, string>();
+  for (const t of db.prepare("SELECT id, linkedin_url, email FROM targets WHERE workspace_id = ? AND (linkedin_url IS NOT NULL OR email IS NOT NULL) ORDER BY created_at").all(workspaceId) as Array<{ id: string; linkedin_url: string | null; email: string | null }>) {
+    const u = canonicalProfileUrl(t.linkedin_url);
+    if (u && !byUrl.has(u)) byUrl.set(u, t.id);
+    if (t.email && !byEmail.has(t.email.toLowerCase())) byEmail.set(t.email.toLowerCase(), t.id);
+  }
   const insertFull = db.prepare(`
-    INSERT INTO targets (id, workspace_id, linkedin_url, email, sales_nav_url, full_name, ${EDITABLE_FIELDS.join(", ")})
-    VALUES (?, ?, ?, ?, ?, ?, ${EDITABLE_FIELDS.map(() => "?").join(", ")})
+    INSERT INTO targets (id, workspace_id, linkedin_url, email, sales_nav_url, full_name, ${IMPORT_FIELDS.join(", ")})
+    VALUES (?, ?, ?, ?, ?, ?, ${IMPORT_FIELDS.map(() => "?").join(", ")})
   `);
+  // The stored LinkedIn URL is kept when present: rewriting it could collide with the unique index.
   const updateFull = db.prepare(`
     UPDATE targets SET
-      linkedin_url = COALESCE(?, linkedin_url),
+      linkedin_url = COALESCE(linkedin_url, ?),
       email = COALESCE(?, email),
       sales_nav_url = COALESCE(?, sales_nav_url),
       full_name = COALESCE(?, full_name),
-      ${EDITABLE_FIELDS.map((c) => `${c} = COALESCE(?, ${c})`).join(",\n      ")}
+      ${IMPORT_FIELDS.map((c) => `${c} = COALESCE(?, ${c})`).join(",\n      ")}
     WHERE id = ?
   `);
   const linkToList = db.prepare("INSERT OR IGNORE INTO list_targets (list_id, target_id) VALUES (?, ?)");
 
   function resolveTarget(row: ParsedRow): { targetId: string; isNew: boolean } {
-    const fieldValues = EDITABLE_FIELDS.map((f) => row.fields[f]);
-    let existing = row.linkedin_url
-      ? (findByLinkedin.get(workspaceId, row.linkedin_url) as { id: string } | undefined)
-      : undefined;
-    if (!existing && row.email) existing = findByEmail.get(workspaceId, row.email) as { id: string } | undefined;
-
+    const fieldValues = IMPORT_FIELDS.map((f) => row.fields[f]);
+    const existing = (row.linkedin_url && byUrl.get(row.linkedin_url)) || (row.email && byEmail.get(row.email)) || null;
     if (existing) {
-      updateFull.run(row.linkedin_url, row.email, row.sales_nav_url, row.full_name, ...fieldValues, existing.id);
-      return { targetId: existing.id, isNew: false };
+      updateFull.run(row.linkedin_url, row.email, row.sales_nav_url, row.full_name, ...fieldValues, existing);
+      if (row.linkedin_url && !byUrl.has(row.linkedin_url)) byUrl.set(row.linkedin_url, existing);
+      if (row.email && !byEmail.has(row.email)) byEmail.set(row.email, existing);
+      return { targetId: existing, isNew: false };
     }
     const targetId = randomUUID();
     insertFull.run(targetId, workspaceId, row.linkedin_url, row.email, row.sales_nav_url, row.full_name, ...fieldValues);
+    if (row.linkedin_url) byUrl.set(row.linkedin_url, targetId);
+    if (row.email) byEmail.set(row.email, targetId);
     return { targetId, isNew: true };
   }
 
   return { resolveTarget, linkToList };
 }
 
-export function importCsv(db: DB, listId: string, workspaceId: string, csvText: string): CsvImportResult {
-  const parsed = Papa.parse<Record<string, string>>(csvText, {
-    header: true,
-    skipEmptyLines: true,
-    transformHeader: (h) => h.trim().toLowerCase().replace(/\s+/g, "_"),
-  });
+/**
+ * Validate one CSV row into a ParsedRow, or return the reason it is skipped.
+ * `requireName`: the agent import needs a first and last name on every contact.
+ */
+function parseRow(lookup: (field: StandardField) => string | null, rowNum: number, requireName: boolean): ParsedRow | string {
+  const fields = Object.fromEntries(IMPORT_FIELDS.map((f) => [f, lookup(f)])) as Record<ImportField, string | null>;
+  if (requireName && (!fields.first_name || !fields.last_name)) return `Row ${rowNum}: missing first or last name`;
+  const full_name = [fields.first_name, fields.last_name].filter(Boolean).join(" ") || null;
 
+  const rawUrl = lookup("linkedin_url");
+  const linkedin_url = rawUrl ? canonicalProfileUrl(rawUrl) : null;
+  if (rawUrl && !linkedin_url) return `Row ${rowNum}: "${rawUrl}" is not a valid linkedin.com/in/ URL`;
+
+  const rawEmail = lookup("email");
+  let email: string | null = null;
+  if (rawEmail) {
+    if (!EMAIL_RE.test(rawEmail)) return `Row ${rowNum}: "${rawEmail}" is not a valid email`;
+    email = rawEmail.toLowerCase();
+  }
+  if (!linkedin_url && !email) return `Row ${rowNum}: needs at least a linkedin_url or an email`;
+  return { linkedin_url, sales_nav_url: lookup("sales_nav_url"), email, full_name, fields };
+}
+
+export function importCsv(db: DB, listId: string, workspaceId: string, csvText: string): CsvImportResult {
+  const parsed = parseCsv(csvText);
   const errors: string[] = [];
-  let imported = 0;
-  let updated = 0;
-  let skipped = 0;
+  let imported = 0, updated = 0, skipped = 0, duplicates = 0;
 
   const rows: ParsedRow[] = [];
   parsed.data.forEach((raw, idx) => {
-    const rowNum = idx + 2; // header is row 1
-    const fields = Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, get(raw, f)])) as Record<EditableField, string | null>;
-    const full_name = [fields.first_name, fields.last_name].filter(Boolean).join(" ") || null;
-
-    const rawUrl = get(raw, "linkedin_url");
-    const linkedin_url = rawUrl ? normalizeLinkedinUrl(rawUrl) : null;
-    if (rawUrl && !linkedin_url) { errors.push(`Row ${rowNum}: "${rawUrl}" is not a valid linkedin.com/in/ URL`); return; }
-
-    const sales_nav_url = get(raw, "sales_nav_url");
-
-    const rawEmail = get(raw, "email");
-    let email: string | null = null;
-    if (rawEmail) {
-      if (!EMAIL_RE.test(rawEmail)) { errors.push(`Row ${rowNum}: "${rawEmail}" is not a valid email`); return; }
-      email = rawEmail.toLowerCase();
-    }
-
-    if (!linkedin_url && !email) {
-      errors.push(`Row ${rowNum}: needs at least a linkedin_url or an email`);
-      return;
-    }
-
-    rows.push({ linkedin_url, sales_nav_url, email, full_name, fields });
+    const row = parseRow((f) => get(raw, f), idx + 2, false); // header is row 1
+    if (typeof row === "string") errors.push(row); else rows.push(row);
   });
 
   const { resolveTarget, linkToList } = targetUpserter(db, workspaceId);
-
   db.transaction(() => {
     for (const row of rows) {
       const { targetId, isNew } = resolveTarget(row);
+      if (!isNew) duplicates++;
       const linkResult = linkToList.run(listId, targetId);
       if (linkResult.changes > 0) {
         if (isNew) imported++; else updated++;
@@ -185,7 +215,7 @@ export function importCsv(db: DB, listId: string, workspaceId: string, csvText: 
     }
   })();
 
-  return { imported, updated, skipped, errors };
+  return { imported, updated, skipped, errors, duplicates };
 }
 
 function parseBoolCell(raw: string): boolean {
@@ -201,13 +231,10 @@ export function importCsvWithMapping(
   listId: string,
   workspaceId: string,
   csvText: string,
-  mapping: ColumnMapping[]
+  mapping: ColumnMapping[],
+  opts: { requireName?: boolean } = {}
 ): CsvImportWithMappingResult {
-  const parsed = Papa.parse<Record<string, string>>(csvText, {
-    header: true,
-    skipEmptyLines: true,
-    transformHeader: (h) => h.trim().toLowerCase().replace(/\s+/g, "_"),
-  });
+  const parsed = parseCsv(csvText);
 
   // Reverse the mapping into fast lookups.
   const standardCol: Partial<Record<StandardField, string>> = {};
@@ -224,15 +251,8 @@ export function importCsvWithMapping(
     }
   }
 
-  const getStd = (raw: Record<string, string>, field: StandardField): string | null => {
-    const col = standardCol[field];
-    return col ? get(raw, col) : null;
-  };
-
   const errors: string[] = [];
-  let imported = 0;
-  let updated = 0;
-  let skipped = 0;
+  let imported = 0, updated = 0, skipped = 0, duplicates = 0;
 
   interface MappedRow extends ParsedRow {
     custom: Record<string, string | null>;
@@ -240,32 +260,11 @@ export function importCsvWithMapping(
 
   const rows: MappedRow[] = [];
   parsed.data.forEach((raw, idx) => {
-    const rowNum = idx + 2; // header is row 1
-    const fields = Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, getStd(raw, f)])) as Record<EditableField, string | null>;
-    const full_name = [fields.first_name, fields.last_name].filter(Boolean).join(" ") || null;
-
-    const rawUrl = getStd(raw, "linkedin_url");
-    const linkedin_url = rawUrl ? normalizeLinkedinUrl(rawUrl) : null;
-    if (rawUrl && !linkedin_url) { errors.push(`Row ${rowNum}: "${rawUrl}" is not a valid linkedin.com/in/ URL`); return; }
-
-    const sales_nav_url = getStd(raw, "sales_nav_url");
-
-    const rawEmail = getStd(raw, "email");
-    let email: string | null = null;
-    if (rawEmail) {
-      if (!EMAIL_RE.test(rawEmail)) { errors.push(`Row ${rowNum}: "${rawEmail}" is not a valid email`); return; }
-      email = rawEmail.toLowerCase();
-    }
-
-    if (!linkedin_url && !email) {
-      errors.push(`Row ${rowNum}: needs at least a linkedin_url or an email`);
-      return;
-    }
-
+    const row = parseRow((f) => (standardCol[f] ? get(raw, standardCol[f]!) : null), idx + 2, !!opts.requireName);
+    if (typeof row === "string") { errors.push(row); return; }
     const custom: Record<string, string | null> = {};
     for (const c of customCols) custom[c.key] = get(raw, c.column);
-
-    rows.push({ linkedin_url, sales_nav_url, email, full_name, fields, custom });
+    rows.push({ ...row, custom });
   });
 
   const { resolveTarget, linkToList } = targetUpserter(db, workspaceId);
@@ -300,6 +299,7 @@ export function importCsvWithMapping(
 
     for (const row of rows) {
       const { targetId, isNew } = resolveTarget(row);
+      if (!isNew) duplicates++;
 
       // Write custom personalization values for this contact.
       for (const r of resolved) {
@@ -329,5 +329,5 @@ export function importCsvWithMapping(
     }
   })();
 
-  return { imported, updated, skipped, errors, customFieldsCreated };
+  return { imported, updated, skipped, errors, duplicates, customFieldsCreated };
 }
