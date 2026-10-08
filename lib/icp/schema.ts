@@ -17,6 +17,9 @@ export const competitorSchema = z.object({
   website: z.string().trim().max(300).nullable().optional().transform((v) => v || null),
 });
 
+export const MATCH_MODES = ["high_precision", "broader", "skip"] as const;
+export type MatchMode = (typeof MATCH_MODES)[number];
+
 export const icpSchema = z.object({
   company_name: str(160).default(""),
   company_industry: str(120).default(""),
@@ -34,6 +37,14 @@ export const icpSchema = z.object({
   keywords: list(30, 80),
   exclusions: list(30, 120),
   sales_nav_keywords: str(500).default(""),
+  /** Drop agencies, consultants, freelancers and B2B service companies before scoring. */
+  exclude_service_providers: z.boolean().default(false),
+  /** Ask the scorer to also drop people at competitors the user has not listed. */
+  ai_competitor_filtering: z.boolean().default(false),
+  /** How strictly leads must match: high_precision (default), broader, or skip scoring entirely. */
+  match_mode: z.enum(MATCH_MODES).default("high_precision"),
+  /** A lead must mention at least one of these (headline, title, about or company) to qualify. */
+  mandatory_keywords: list(30, 80),
 });
 
 export type Icp = z.infer<typeof icpSchema>;

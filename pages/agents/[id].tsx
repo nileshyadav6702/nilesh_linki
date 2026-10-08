@@ -12,12 +12,13 @@ import {
 import AgentOverview, { ActivityList, type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
 import AgentSettings, { type AgentForm } from "@/components/agents/AgentSettings";
 import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSources";
-import IcpEditor, { EMPTY_ICP } from "@/components/agents/IcpEditor";
+import { EMPTY_ICP } from "@/components/agents/IcpEditor";
+import TargetingDrawer from "@/components/agents/targeting/TargetingDrawer";
 import AgentCampaign from "@/components/agents/AgentCampaign";
 import LeadsTable from "@/components/agents/LeadsTable";
 import type { Step } from "@/components/agents/SequenceEditor";
 import {
-  Avatar, Callout, Card, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, RunSwitch, secondaryBtn, SectionHeading, Segmented, senderLine, TabBar, timeUntil, type Tone,
+  Avatar, Callout, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, RunSwitch, secondaryBtn, SectionHeading, Segmented, senderLine, TabBar, timeUntil, type Tone,
 } from "@/components/agents/ui";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 import type { Icp } from "@/lib/icp/schema";
@@ -66,25 +67,28 @@ export default function AgentDetail() {
   const router = useRouter();
   const id = String(router.query.id ?? "");
   const [d, setD] = useState<Detail | null>(null);
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Overview");
+  const [tab, setTab] = useState<(typeof TABS)[number]>(() => {
+    const t = typeof router.query.tab === "string" ? router.query.tab : "";
+    return (TABS as readonly string[]).includes(t) ? t as (typeof TABS)[number] : "Overview";
+  });
   const [icp, setIcp] = useState<Icp>(EMPTY_ICP);
-  const [icpKey, setIcpKey] = useState(0);
+  const [icpWebsite, setIcpWebsite] = useState<string | null>(null);
   const [editingIcp, setEditingIcp] = useState(false);
   const [activityFilter, setActivityFilter] = useState<"all" | "discovery" | "campaign" | "setup">("all");
   const [busy, setBusy] = useState(false);
 
-  const fetchDetail = useCallback(async (): Promise<{ data: Detail; icp: Icp | null } | null> => {
+  const fetchDetail = useCallback(async (): Promise<{ data: Detail; icp: Icp | null; website: string | null } | null> => {
     if (!id) return null;
     const r = await fetch(`/api/agents/${id}`);
     if (!r.ok) { toast.error("Agent not found"); router.push("/agents"); return null; }
     const data = await r.json() as Detail;
     const icpRes = await fetch(`/api/icp${data.agent.icp_id ? `?id=${data.agent.icp_id}` : ""}`).then((x) => x.json()).catch(() => null);
-    return { data, icp: icpRes?.icp?.data ?? null };
+    return { data, icp: icpRes?.icp?.data ?? null, website: icpRes?.icp?.website_url ?? null };
   }, [id, router]);
-  const apply = useCallback((x: { data: Detail; icp: Icp | null } | null) => {
+  const apply = useCallback((x: { data: Detail; icp: Icp | null; website: string | null } | null) => {
     if (!x) return;
     setD(x.data);
-    if (x.icp) { setIcp(x.icp); setIcpKey((k) => k + 1); }
+    if (x.icp) { setIcp(x.icp); setIcpWebsite(x.website); }
   }, []);
   const load = useCallback(() => fetchDetail().then(apply), [fetchDetail, apply]);
   useEffect(() => {
@@ -92,16 +96,20 @@ export default function AgentDetail() {
     fetchDetail().then((x) => { if (alive) apply(x); });
     return () => { alive = false; };
   }, [fetchDetail, apply]);
-  useEffect(() => {
-    const requested = typeof router.query.tab === "string" ? router.query.tab : "";
-    if ((TABS as readonly string[]).includes(requested)) setTab(requested as (typeof TABS)[number]);
-  }, [router.query.tab]);
+  // Follow ?tab= when it changes (adjusting state during render, per React docs, not in an effect).
+  const requestedTab = typeof router.query.tab === "string" ? router.query.tab : "";
+  const [prevRequestedTab, setPrevRequestedTab] = useState(requestedTab);
+  if (requestedTab !== prevRequestedTab) {
+    setPrevRequestedTab(requestedTab);
+    if ((TABS as readonly string[]).includes(requestedTab)) setTab(requestedTab as (typeof TABS)[number]);
+  }
 
-  async function patch(body: Record<string, unknown>, ok: string) {
+  async function patch(body: Record<string, unknown>, ok: string): Promise<boolean> {
     const r = await fetch(`/api/agents/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    if (!r.ok) return toast.error((await r.json()).error ?? "Update failed");
+    if (!r.ok) { toast.error((await r.json()).error ?? "Update failed"); return false; }
     toast.success(ok);
     load();
+    return true;
   }
 
   async function runNow() {
@@ -115,11 +123,12 @@ export default function AgentDetail() {
     load();
   }
 
-  async function saveIcp() {
-    const r = await fetch("/api/icp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: icp }) });
+  /** Saves the edited targeting as a new ICP version and points the agent at it. */
+  async function saveIcp(next: Icp): Promise<boolean> {
+    const r = await fetch("/api/icp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: next, website_url: icpWebsite ?? undefined }) });
     const row = await r.json();
-    if (!r.ok) return toast.error(row.error ?? "Could not save ICP");
-    await patch({ icp_id: row.id }, `ICP v${row.version} saved — new leads are scored against it`);
+    if (!r.ok) { toast.error(row.error ?? "Could not save ICP"); return false; }
+    return patch({ icp_id: row.id }, `ICP v${row.version} saved — new leads are scored against it`);
   }
 
   async function remove() {
@@ -206,15 +215,7 @@ export default function AgentDetail() {
         {tab === "Leads" && <LeadsTable agentId={a.id} showAgent={false} openLeadId={typeof router.query.lead === "string" ? router.query.lead : undefined} />}
         {tab === "Sources" && (
           <div className="space-y-4">
-            {editingIcp && (
-              <Card className="space-y-4">
-                <IcpEditor key={icpKey} value={icp} onChange={setIcp} />
-                <div className="flex gap-2">
-                  <button className={primaryBtn} onClick={async () => { await saveIcp(); setEditingIcp(false); }}>Save targeting</button>
-                  <button className={secondaryBtn} onClick={() => setEditingIcp(false)}>Cancel</button>
-                </div>
-              </Card>
-            )}
+            {editingIcp && <TargetingDrawer icp={icp} websiteUrl={icpWebsite} onClose={() => setEditingIcp(false)} onSave={saveIcp} />}
             <AgentSources key={d.sources.map((s) => `${s.id}:${s.enabled}`).join()} agentId={a.id} icp={icp} rows={d.sources} hasLinkedIn={!!a.linkedin_account_id} onChanged={load} onEditTargeting={() => setEditingIcp(true)} />
           </div>
         )}

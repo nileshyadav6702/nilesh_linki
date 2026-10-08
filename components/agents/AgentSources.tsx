@@ -7,6 +7,7 @@ import {
 import SourcePicker, { countSignals, type SourceDraft } from "@/components/agents/SourcePicker";
 import { Avatar, ghostBtn, IconTile, nextRunLabel, Panel, Pill, primaryBtn, secondaryBtn, SectionHeading, SIGNAL_LABEL, timeAgo, Toggle, type Tone } from "@/components/agents/ui";
 import type { Icp } from "@/lib/icp/schema";
+import { roleTitles, sizeLabel } from "@/lib/icp/targeting";
 
 export interface AgentSourceRow { id: string; source_type: string; config_json: string; enabled: number; last_run_at: string | null; next_run_at: string | null; last_error: string | null; leads: number }
 
@@ -62,7 +63,8 @@ export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChange
   const [draft, setDraft] = useState<SourceDraft[]>(() => rows.map((s) => ({ source_type: s.source_type, enabled: !!s.enabled, config: JSON.parse(s.config_json || "{}") })));
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const chips = [...icp.personas.flatMap((p) => p.titles), ...icp.industries, ...icp.company_sizes, ...icp.geographies];
+  const chips = [...new Set([...roleTitles(icp), ...icp.industries, ...icp.company_types, ...icp.company_sizes.map(sizeLabel), ...icp.geographies])];
+  const modeNote = icp.match_mode === "skip" ? "ICP filtering skipped" : icp.match_mode === "broader" ? "Broader matching" : null;
   const active = rows.filter((r) => r.enabled).length;
 
   async function toggle(s: AgentSourceRow) {
@@ -99,6 +101,7 @@ export default function AgentSources({ agentId, icp, rows, hasLinkedIn, onChange
           {chips.slice(0, 6).map((c) => <Pill key={c} className="!px-3 !py-1 !text-[13px]">{c}</Pill>)}
           {chips.length > 6 && <Pill tone="coral" className="!px-3 !py-1 !text-[13px]">+{chips.length - 6}</Pill>}
           {!chips.length && <span className="text-sm text-base-content/45">No targeting yet.</span>}
+          {modeNote && <Pill tone="amber" className="!px-3 !py-1 !text-[13px]">{modeNote}</Pill>}
           {onEditTargeting && <button type="button" className={`${ghostBtn} ml-auto !h-9 !text-sm !text-base-content`} onClick={onEditTargeting}><RiPencilLine size={15} /> Edit targeting</button>}
         </Panel>
       </section>

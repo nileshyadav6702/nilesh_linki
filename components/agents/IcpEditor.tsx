@@ -6,6 +6,7 @@ export const EMPTY_ICP: Icp = {
   company_name: "", company_industry: "", offer: "", value_props: [], social_proof: [], language: "English",
   pain_points: [], industries: [], company_sizes: [], company_types: [], geographies: [],
   personas: [], competitors: [], keywords: [], exclusions: [], sales_nav_keywords: "",
+  exclude_service_providers: false, ai_competitor_filtering: false, match_mode: "high_precision", mandatory_keywords: [],
 };
 
 function ListInput({ label, hint, value, onChange, rows = 2 }: { label: string; hint?: string; value: string[]; onChange: (v: string[]) => void; rows?: number }) {
