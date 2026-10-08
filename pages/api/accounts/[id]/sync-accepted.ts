@@ -4,6 +4,7 @@ import { getSessionPage, saveSessionState } from "@/lib/linkedin/session";
 import { scrapePendingInvitationVanityNames } from "@/lib/linkedin/pending-invitations";
 import { emitDomainEvent } from "@/lib/platform/events";
 import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+import { AccountBusyError, withAccountSession } from "@/lib/linkedin/account-session";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).end();
@@ -20,11 +21,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!account) return res.status(404).json({ error: "Account not found" });
   if (!account.is_authenticated) return res.status(400).json({ error: "Account not authenticated" });
 
-  let page;
   try {
-    page = await getSessionPage(accountId);
-    const stillPending = await scrapePendingInvitationVanityNames(page);
-    await saveSessionState(accountId);
+    // Held like a runner unit (in this process and across the web/worker split).
+    const stillPending = await withAccountSession(accountId, async () => {
+      const page = await getSessionPage(accountId);
+      try {
+        const pending = await scrapePendingInvitationVanityNames(page);
+        await saveSessionState(accountId);
+        return pending;
+      } finally {
+        await page.close().catch(() => {});
+      }
+    });
 
     // Find all targets that we sent a request to but haven't marked as connected
     const waiting = db.prepare(`
@@ -70,9 +78,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
 
   } catch (err) {
+    if (err instanceof AccountBusyError) return res.status(409).json({ error: err.message });
     console.error("[sync-accepted]", err);
     return res.status(500).json({ error: err instanceof Error ? err.message : "Sync failed" });
-  } finally {
-    await page?.close().catch(() => {});
   }
 }

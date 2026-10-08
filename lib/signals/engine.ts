@@ -144,13 +144,15 @@ export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLi
   }
 }
 
-export function dueSources(kind: "linkedin" | "http", limit = 20): AgentSource[] {
+/** Due sources of one kind. `accountId` narrows to agents reading through that LinkedIn account. */
+export function dueSources(kind: "linkedin" | "http", limit = 20, accountId?: string): AgentSource[] {
   const types = (Object.keys(SOURCE_TYPES) as SourceType[]).filter((t) => SOURCE_TYPES[t].needsLinkedIn === (kind === "linkedin"));
   const placeholders = types.map(() => "?").join(",");
+  const byAccount = accountId !== undefined ? "AND a.linkedin_account_id = ?" : "";
   return getDb().prepare(`SELECT s.* FROM agent_sources s JOIN agents a ON a.id = s.agent_id
-    WHERE s.enabled = 1 AND a.status = 'active' AND s.source_type IN (${placeholders})
+    WHERE s.enabled = 1 AND a.status = 'active' AND s.source_type IN (${placeholders}) ${byAccount}
       AND (s.next_run_at IS NULL OR s.next_run_at <= datetime('now'))
-    ORDER BY s.next_run_at LIMIT ?`).all(...types, limit) as AgentSource[];
+    ORDER BY s.next_run_at LIMIT ?`).all(...types, ...(accountId !== undefined ? [accountId] : []), limit) as AgentSource[];
 }
 
 /** Non-LinkedIn sources (job boards, news). Safe to run on their own loop. */

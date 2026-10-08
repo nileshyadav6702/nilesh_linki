@@ -1,33 +1,58 @@
+# Two services from ONE image, sharing the ./data volume (the SQLite file):
+#   linki         the web app, API and MCP server (LINKI_ROLE=web). Starts no background loop.
+#   linki-worker  every background loop: LinkedIn account workers + Chromium, email campaigns,
+#                 inbox sync, email jobs, warmup, verification, webhooks, AI agents, imports and
+#                 the daily retention job (LINKI_ROLE=worker). No HTTP.
+# Restarting or redeploying the web service never interrupts a send, and Chromium's memory
+# lives in the worker container.
+#
+# Single-service mode (the original setup): delete the linki-worker service below and set
+# LINKI_ROLE=all on linki (or remove the variable; "all" is the default). Never run a worker
+# next to a web service that has LINKI_ROLE=all — both would run the loops (leases keep that
+# safe, but it doubles Chromium memory). See DEPLOYMENT.md.
+
+x-linki-common: &linki-common
+  # image: moaljumaa/linki:latest
+  # To build from source instead: comment out image above and uncomment below
+  build: .
+  image: linki:local
+  volumes:
+    # Persist SQLite database outside the container (shared by both services)
+    - ./data:/data
+  env_file:
+    - .env.local
+  restart: unless-stopped
+  # Cap container log growth so a chatty run cannot fill the VPS disk.
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
 services:
   linki:
-    # image: moaljumaa/linki:latest
-    # To build from source instead: comment out image above and uncomment below
-    build: .
+    <<: *linki-common
     ports:
       - "127.0.0.1:${PORT:-3456}:3000"
-    volumes:
-      # Persist SQLite database outside the container
-      - ./data:/data
-    env_file:
-      - .env.local
     environment:
       # Runtime — always set by compose, do not put in .env.local
       - NODE_ENV=production
       - LINKI_DB_PATH=/data/linki.db
+      - LINKI_ROLE=web
 
       # --- copy the block below into .env.local and fill in values ---
       #
-      # Public URL of the app (used by NextAuth for redirects)
+      # Public URL of the app (used by NextAuth for redirects, and by the worker
+      # for tracking / unsubscribe links)
       # NEXTAUTH_URL=
       #
-      # Random secret for NextAuth session signing
+      # Random secret for NextAuth session signing (the worker derives the
+      # secret-encryption key from it: both services must see the same value)
       # Generate with: openssl rand -base64 32
       # NEXTAUTH_SECRET=
       #
       # Set to "false" to show the browser during automation (debug only)
       # HEADLESS=true
-
-    restart: unless-stopped
 
     # Liveness probe. Uses node's built-in fetch (node is always present in this
     # image) so no extra package is needed. Hits the unauthenticated /api/health
@@ -44,14 +69,38 @@ services:
       retries: 3
       start_period: 40s
 
-    # Cap container log growth so a chatty run cannot fill the VPS disk.
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "5"
+    # NOTE: memory/CPU limits are intentionally NOT set here. See DEPLOYMENT.md.
 
-    # NOTE: memory/CPU limits are intentionally NOT set here. This single
-    # container also runs Chromium; a too-tight mem_limit would OOM-kill the
-    # browser mid-session and force a LinkedIn re-authentication. See DEPLOYMENT.md
-    # for recommended limits and the headroom rationale to apply deliberately.
+  linki-worker:
+    <<: *linki-common
+    # node directly (not npm) so SIGTERM reaches the worker's graceful-shutdown handler.
+    command: ["node", "--enable-source-maps", ".worker-dist/worker.js"]
+    # tini as PID 1: reaps Chromium's child processes and forwards signals.
+    init: true
+    environment:
+      - NODE_ENV=production
+      - LINKI_DB_PATH=/data/linki.db
+      - LINKI_ROLE=worker
+      - LINKI_WORKER_HEARTBEAT_FILE=/tmp/linki-worker.heartbeat
+      # Seconds of the stop_grace_period the worker spends letting in-flight steps finish
+      # before it saves sessions, closes Chromium and releases its leases.
+      - LINKI_WORKER_GRACE_MS=60000
+    # Must exceed LINKI_WORKER_GRACE_MS plus the session save / browser close (~10-20s),
+    # otherwise Docker SIGKILLs the worker mid-shutdown.
+    stop_grace_period: 90s
+    # Liveness: the worker touches its heartbeat file every 15s while its event loop is
+    # responsive. Stale for 2 minutes (or missing) = unhealthy.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "const f='/tmp/linki-worker.heartbeat';try{process.exit(Date.now()-require('fs').statSync(f).mtimeMs<120000?0:1)}catch{process.exit(1)}"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    # NOTE: memory/CPU limits are intentionally NOT set here. This container runs
+    # Chromium; a too-tight mem_limit would OOM-kill the browser mid-session and force
+    # a LinkedIn re-authentication. See DEPLOYMENT.md for sizing.

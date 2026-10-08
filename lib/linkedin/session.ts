@@ -16,6 +16,13 @@ const contexts: Map<string, BrowserContext> = new Map();
 const contextCreations: Map<string, Promise<BrowserContext>> = new Map();
 // Last time each account's context was handed out — drives closeIdleSessions().
 const lastUsedAt: Map<string, number> = new Map();
+// The stored session (accounts.cookies_json, as stored) each open context was created from or
+// last saved as. The web and worker processes share the DB but not their contexts: when the
+// stored value no longer matches, another process (a login, a cookie paste, a disconnect, the
+// other process's save) has replaced the session since, so this context is stale. It must not
+// be saved over the newer one (saveSessionState is compare-and-swap on this value) and is
+// dropped before its next use (dropStaleSession).
+const loadedState: Map<string, string | null> = new Map();
 
 const HEADLESS = process.env.HEADLESS !== "false";
 const CHROMIUM_PATH = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
@@ -94,6 +101,7 @@ async function createContext(accountId: string): Promise<BrowserContext> {
     | undefined;
 
   if (!account) throw new Error(`Account ${accountId} not found`);
+  const loadedFrom = account.cookies_json ?? null;
 
   const b = await getBrowser();
 
@@ -109,9 +117,12 @@ async function createContext(accountId: string): Promise<BrowserContext> {
   const ctx = await b.newContext(contextOptions(storageState));
 
   // Auto-evict from map when context closes for any reason (crash, session expiry, etc.)
-  ctx.on("close", () => { if (contexts.get(accountId) === ctx) contexts.delete(accountId); });
+  ctx.on("close", () => {
+    if (contexts.get(accountId) === ctx) { contexts.delete(accountId); loadedState.delete(accountId); }
+  });
 
   contexts.set(accountId, ctx);
+  loadedState.set(accountId, loadedFrom);
   return ctx;
 }
 
@@ -141,15 +152,30 @@ export async function getSessionPage(accountId: string): Promise<Page> {
   }
 }
 
-export async function saveSessionState(accountId: string): Promise<void> {
+/**
+ * Persist the context's session. Compare-and-swap: only while the stored session is still the
+ * one this context was created from (or last saved), so a context made stale by another
+ * process's login / cookie paste / disconnect never overwrites the newer session. Returns
+ * whether it saved.
+ */
+export async function saveSessionState(accountId: string): Promise<boolean> {
   const ctx = contexts.get(accountId);
-  if (!ctx) return;
+  if (!ctx) return false;
   const db = getDb();
   const state = await ctx.storageState();
-  db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1 WHERE id = ?").run(
-    encryptSecret(JSON.stringify(state)),
-    accountId
-  );
+  const encrypted = encryptSecret(JSON.stringify(state));
+  const expected = loadedState.get(accountId) ?? null;
+  const changed = db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1 WHERE id = ? AND cookies_json IS ?").run(
+    encrypted,
+    accountId,
+    expected
+  ).changes;
+  if (!changed) {
+    console.warn(`[session] account ${accountId}: the stored session changed since this context opened — not saving over it`);
+    return false;
+  }
+  if (contexts.get(accountId) === ctx) loadedState.set(accountId, encrypted);
+  return true;
 }
 
 export async function closeSession(accountId: string): Promise<void> {
@@ -158,7 +184,54 @@ export async function closeSession(accountId: string): Promise<void> {
     await ctx.close();
     contexts.delete(accountId);
   }
+  loadedState.delete(accountId);
   lastUsedAt.delete(accountId);
+}
+
+/**
+ * Drop this process's context for the account when the stored session was replaced since it
+ * opened (by the other process, or a direct DB write), so the next use loads the stored one.
+ * Synchronous: the context leaves the map at once and is closed in the background. Call only
+ * while holding the account (nothing else here is using the context then). Returns true when
+ * it dropped a stale context.
+ */
+export function dropStaleSession(accountId: string): boolean {
+  const ctx = contexts.get(accountId);
+  if (!ctx || contextCreations.has(accountId)) return false;
+  const row = getDb().prepare("SELECT cookies_json FROM accounts WHERE id = ?").get(accountId) as { cookies_json: string | null } | undefined;
+  if (row && (row.cookies_json ?? null) === (loadedState.get(accountId) ?? null)) return false;
+  console.log(`[session] account ${accountId}: stored session changed in another process — reopening the browser context`);
+  contexts.delete(accountId);
+  loadedState.delete(accountId);
+  lastUsedAt.delete(accountId);
+  void ctx.close().catch(() => { /* already gone */ });
+  return true;
+}
+
+/**
+ * Save (if the account is still authenticated) and close this process's context for the
+ * account. The web process calls this before letting go of an account in the split
+ * deployment, so it never keeps a live context the worker could race with.
+ */
+export async function parkSession(accountId: string): Promise<void> {
+  if (!contexts.has(accountId)) { loadedState.delete(accountId); return; }
+  try {
+    const authed = getDb().prepare("SELECT is_authenticated FROM accounts WHERE id = ?").get(accountId) as { is_authenticated: number } | undefined;
+    if (authed?.is_authenticated) await saveSessionState(accountId);
+  } catch (err) {
+    console.warn(`[session] could not save state for account ${accountId}:`, err instanceof Error ? err.message : err);
+  }
+  try { await closeSession(accountId); } catch { contexts.delete(accountId); loadedState.delete(accountId); }
+}
+
+/** Graceful shutdown: save and close every open context, then close the browser. */
+export async function shutdownSessions(): Promise<string[]> {
+  const ids = Array.from(contexts.keys());
+  for (const accountId of ids) await parkSession(accountId);
+  const b = browser;
+  browser = null;
+  if (b) { try { await b.close(); } catch { /* already gone */ } }
+  return ids;
 }
 
 /** Accounts with an open browser context (for memory accounting and tests). */
@@ -172,20 +245,32 @@ export function openSessionAccountIds(): string[] {
  * idle account must not keep one open forever. `busy` accounts are never touched: their
  * worker (or a step it abandoned on a timeout) may still be driving the context.
  */
-export async function closeIdleSessions(idleMs: number, busy: ReadonlySet<string> = new Set()): Promise<string[]> {
+export async function closeIdleSessions(
+  idleMs: number,
+  busy: ReadonlySet<string> = new Set(),
+  claim?: (accountId: string) => (() => void) | null,
+): Promise<string[]> {
   const closed: string[] = [];
   const now = Date.now();
   for (const accountId of Array.from(contexts.keys())) {
     if (busy.has(accountId) || contextCreations.has(accountId)) continue;
     if (now - (lastUsedAt.get(accountId) ?? 0) < idleMs) continue;
+    // Hold the account while saving, so this never writes the session while another process
+    // (the web server in the split deployment) is driving it. Busy: try again next pass.
+    const release = claim ? claim(accountId) : () => {};
+    if (!release) continue;
     try {
-      const authed = getDb().prepare("SELECT is_authenticated FROM accounts WHERE id = ?").get(accountId) as { is_authenticated: number } | undefined;
-      // Never re-flag a logged-out account as authenticated by saving its dead session.
-      if (authed?.is_authenticated) await saveSessionState(accountId);
-    } catch (err) {
-      console.warn(`[session] could not save state for idle account ${accountId}:`, err instanceof Error ? err.message : err);
+      try {
+        const authed = getDb().prepare("SELECT is_authenticated FROM accounts WHERE id = ?").get(accountId) as { is_authenticated: number } | undefined;
+        // Never re-flag a logged-out account as authenticated by saving its dead session.
+        if (authed?.is_authenticated) await saveSessionState(accountId);
+      } catch (err) {
+        console.warn(`[session] could not save state for idle account ${accountId}:`, err instanceof Error ? err.message : err);
+      }
+      try { await closeSession(accountId); closed.push(accountId); } catch { contexts.delete(accountId); loadedState.delete(accountId); }
+    } finally {
+      release();
     }
-    try { await closeSession(accountId); closed.push(accountId); } catch { contexts.delete(accountId); }
   }
   return closed;
 }

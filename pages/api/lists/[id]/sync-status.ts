@@ -31,10 +31,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const { getSessionContext } = await import("@/lib/linkedin/session");
   const { scrapeNavigatorList } = await import("@/lib/linkedin/scraper");
+  const { AccountBusyError, withAccountSession } = await import("@/lib/linkedin/account-session");
 
   try {
-    const ctx = await getSessionContext(account_id);
-    const { profiles } = await scrapeNavigatorList(ctx, list.sales_nav_url, { maxPages: 300 });
+    // Held like a runner unit (in this process and across the web/worker split).
+    const salesNavUrl = list.sales_nav_url;
+    const { profiles } = await withAccountSession(account_id, async () =>
+      scrapeNavigatorList(await getSessionContext(account_id), salesNavUrl, { maxPages: 300 }));
 
     const updateDegree = db.prepare("UPDATE targets SET degree = ? WHERE linkedin_url = ? AND workspace_id = ?");
     const markConnected = db.prepare(
@@ -59,6 +62,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.json({ updated, total: profiles.length });
   } catch (err: unknown) {
+    if (err instanceof AccountBusyError) return res.status(409).json({ error: err.message });
     const message = err instanceof Error ? err.message : String(err);
     return res.status(500).json({ error: message });
   }

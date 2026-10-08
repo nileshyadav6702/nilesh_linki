@@ -31,6 +31,12 @@ export function getDb(): Database.Database {
   return db;
 }
 
+/** Close the connection (graceful worker shutdown). A later getDb() reopens it. */
+export function closeDb(): void {
+  if (!db) return;
+  try { db.close(); } finally { db = undefined as unknown as Database.Database; }
+}
+
 function runParallelTracksMigration(db: Database.Database) {
   // This backfill reads the legacy run_profiles.state column. If that column no longer
   // exists, dropDeprecatedRunProfileColumns has already run (a prior startup) and this

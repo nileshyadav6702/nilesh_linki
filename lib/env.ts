@@ -4,6 +4,18 @@
 // input for lib/crypto.ts, so a missing value silently breaks session decryption).
 //
 // This module contains no LinkedIn/browser logic and never imports the runner.
+//
+// Per role (LINKI_ROLE, lib/runtime/role.ts) the required set is the SAME for "all", "web" and
+// "worker":
+//   - NEXTAUTH_SECRET: the web signs sessions with it; the worker derives the key that decrypts
+//     LinkedIn cookies, mailbox passwords and API keys from it. Both must have the same value.
+//   - NEXTAUTH_URL: the web's canonical origin (OAuth/MCP audience, redirects); the worker builds
+//     every outgoing link from it (open/click tracking, one-click unsubscribe, webhook payload
+//     URLs), so a worker without it would send emails with broken links.
+// In the split deployment (web / worker) LINKI_DB_PATH should be set explicitly and point both
+// processes at the same file; a missing value only warns (both default to ./linki.db).
+
+import { LINKI_ROLES, parseRole } from "@/lib/runtime/role";
 
 type EnvIssue = { name: string; reason: string };
 
@@ -23,6 +35,16 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): EnvIssue[] {
   const warnings: EnvIssue[] = [];
 
   const isBlank = (v: string | undefined) => !v || v.trim() === "";
+
+  const role = parseRole(env.LINKI_ROLE);
+  if (role === null) {
+    missing.push({ name: "LINKI_ROLE", reason: `must be one of ${LINKI_ROLES.join(", ")} (got "${env.LINKI_ROLE}").` });
+  } else if (role !== "all" && isBlank(env.LINKI_DB_PATH)) {
+    warnings.push({
+      name: "LINKI_DB_PATH",
+      reason: `not set with LINKI_ROLE=${role} - the web and worker processes must open the same SQLite file; set it explicitly in both.`,
+    });
+  }
 
   // Required in production. NEXTAUTH_SECRET signs sessions AND derives the
   // encryption key for stored email passwords, LinkedIn cookies, API keys, and

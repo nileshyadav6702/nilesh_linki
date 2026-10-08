@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { startHeadlessLogin, submitLoginChallenge, awaitLoginApproval } from "@/lib/linkedin/session";
 import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+import { AccountBusyError, withAccountSession } from "@/lib/linkedin/account-session";
 
 /**
  * Server-side headless LinkedIn login.
@@ -11,6 +12,10 @@ import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
  *
  * The session is born under the same pinned Chromium fingerprint the runner uses
  * and captures all cookies (incl. httpOnly li_ep_auth_context).
+ *
+ * Each step holds the account (in this process and across the web/worker split) while it
+ * talks to LinkedIn, and answers 409 while a runner unit is using the account. Between steps
+ * (while LinkedIn waits for a code or an app approval) the account is not held.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).end();
@@ -30,11 +35,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (step === "verify") {
       const { code } = req.body as { code?: string };
       if (!code?.trim()) return res.status(400).json({ error: "code is required" });
-      return res.json(await submitLoginChallenge(id, code.trim()));
+      return res.json(await withAccountSession(id, () => submitLoginChallenge(id, code.trim())));
     }
 
     if (step === "await") {
-      return res.json(await awaitLoginApproval(id));
+      return res.json(await withAccountSession(id, () => awaitLoginApproval(id)));
     }
 
     const { email, password } = req.body as { email?: string; password?: string };
@@ -42,8 +47,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!loginEmail || !password) {
       return res.status(400).json({ error: "email and password are required" });
     }
-    return res.json(await startHeadlessLogin(id, loginEmail, password));
+    return res.json(await withAccountSession(id, () => startHeadlessLogin(id, loginEmail, password)));
   } catch (e) {
+    if (e instanceof AccountBusyError) return res.status(409).json({ error: e.message });
     return res.status(500).json({ error: (e as Error).message });
   }
 }

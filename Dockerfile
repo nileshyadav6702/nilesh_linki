@@ -68,6 +68,7 @@ COPY . .
 ARG APP_VERSION=dev
 ENV APP_VERSION=$APP_VERSION
 
+# Builds the Next.js app AND bundles the background worker into .worker-dist/worker.js.
 RUN npm run build
 
 # Data directory — mount a volume here to persist the SQLite DB
@@ -78,4 +79,7 @@ USER node
 
 EXPOSE 3000
 
+# Web app by default. The same image runs the background worker with
+#   node --enable-source-maps .worker-dist/worker.js   (LINKI_ROLE=worker)
+# — see docker-compose.yml (service linki-worker) and DEPLOYMENT.md.
 CMD ["npm", "start"]

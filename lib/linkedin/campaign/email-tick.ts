@@ -3,6 +3,7 @@ import { WORKER_ID } from "@/lib/email/infrastructure";
 import { claimTrack, releaseTrack } from "@/lib/linkedin/actions";
 import { guard } from "@/lib/watchdog";
 import { EMAIL_TICK_SOFT_BUDGET_MS, EXECUTE_STEP_TIMEOUT_MS } from "./constants";
+import { isStopping } from "@/lib/runtime/lifecycle";
 import { effectiveEmailLimit, rescheduleToTomorrow } from "./schedule";
 import { log, trFail } from "./track-state";
 import {
@@ -104,6 +105,11 @@ export async function emailCampaignTick(db: ReturnType<typeof getDb>): Promise<v
   for (const tr of toExecute) {
     if (Date.now() > deadline) {
       console.log(`[runner] Email tick soft budget reached — ${executed}/${toExecute.length} steps done, remainder stays due`);
+      break;
+    }
+    // Graceful shutdown: the step in flight finished; start no new one.
+    if (isStopping()) {
+      console.log(`[runner] Email tick stopping for shutdown — ${executed}/${toExecute.length} steps done, remainder stays due`);
       break;
     }
     const runStatus = db.prepare("SELECT status FROM runs WHERE id = ?").get(tr.run_id) as { status: string } | undefined;

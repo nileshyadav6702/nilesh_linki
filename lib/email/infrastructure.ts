@@ -9,6 +9,7 @@ import { emitDomainEvent } from "@/lib/platform/events";
 import { buildEmailContent, type EmailDeliveryMode } from "@/lib/email/content";
 import { classifyTrackingHit, type BotVerdict } from "@/lib/email/bot-detection";
 import { assertMailboxCapacity } from "@/lib/email/daily-cap";
+import { isStopping } from "@/lib/runtime/lifecycle";
 
 export const WORKER_ID=`${hostname()}:${process.pid}:${randomUUID().slice(0,8)}`;
 
@@ -83,7 +84,7 @@ export async function dispatchEmailJob(jobId:string,owner=WORKER_ID){
 // Campaign jobs are never dispatched from here: their retries belong to the campaign step,
 // which re-sends only inside the mailbox's working hours, daily cap and pacing, counts the
 // send and advances the track. Sending them here put mail out off-schedule and uncounted.
-export async function processEmailJobs(limit=20){recoverStaleEmailJobs();const rows=getDb().prepare("SELECT id FROM email_jobs WHERE status='pending' AND source<>'campaign' AND available_at<=datetime('now') ORDER BY created_at LIMIT ?").all(limit) as Array<{id:string}>;let processed=0;for(const row of rows){try{await dispatchEmailJob(row.id);}catch{}processed++;}return processed;}
+export async function processEmailJobs(limit=20){recoverStaleEmailJobs();const rows=getDb().prepare("SELECT id FROM email_jobs WHERE status='pending' AND source<>'campaign' AND available_at<=datetime('now') ORDER BY created_at LIMIT ?").all(limit) as Array<{id:string}>;let processed=0;for(const row of rows){if(isStopping())break;try{await dispatchEmailJob(row.id);}catch{}processed++;}return processed;}
 export function recoverStaleEmailJobs(){const db=getDb();db.prepare("UPDATE email_jobs SET status='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=datetime('now') WHERE status='leased' AND lease_expires_at<datetime('now')").run();db.prepare("UPDATE email_jobs SET status='uncertain',last_error=COALESCE(last_error,'Worker stopped during provider handoff; manual reconciliation required'),lease_owner=NULL,lease_expires_at=NULL,updated_at=datetime('now') WHERE status='sending' AND lease_expires_at<datetime('now')").run();}
 
 export function acquireWorkerLease(name:string,owner=WORKER_ID,ttlSeconds=45){return acquireLease(name,owner,ttlSeconds)!==null;}
@@ -124,6 +125,20 @@ export function renewLease(lease:LeaseHandle,ttlSeconds=45):boolean{
 export function holdsLease(lease:LeaseHandle):boolean{
   const row=getDb().prepare("SELECT owner_id,expires_at,token FROM worker_leases WHERE name=?").get(lease.name) as {owner_id:string;expires_at:string;token:number}|undefined;
   return!!row&&row.owner_id===lease.owner&&row.token===lease.token&&Date.parse(row.expires_at)>Date.now();
+}
+
+/** Give a lease up now (only if this handle still owns it), so another process need not wait out the TTL. */
+export function releaseLease(lease:LeaseHandle):boolean{
+  return getDb().prepare("DELETE FROM worker_leases WHERE name=? AND owner_id=? AND token=?").run(lease.name,lease.owner,lease.token).changes>0;
+}
+
+/**
+ * Release every lease held by `owner` or by a sub-owner of it ("<owner>:<suffix>", e.g. the
+ * per-account LinkedIn leases). Used by a graceful shutdown so a replacement process can take
+ * over immediately. Returns how many were released.
+ */
+export function releaseLeasesOwnedBy(owner=WORKER_ID):number{
+  return getDb().prepare("DELETE FROM worker_leases WHERE owner_id=? OR substr(owner_id,1,?)=?").run(owner,owner.length+1,`${owner}:`).changes;
 }
 
 /**

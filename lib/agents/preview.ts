@@ -85,19 +85,16 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
         : `LinkedIn is limiting this account, so finding people is paused until ${new Date(paused.until).toUTCString()}. Preview the leads again after that.`);
     } else {
       // Loaded lazily: the browser stack is only needed when LinkedIn sources run.
-      const { claimAccount } = await import("@/lib/linkedin/campaign/account-workers");
-      // Never drive the session alongside the runner (outreach, imports, discovery): parallel
-      // traffic on one account is what gets it rate-limited. Claimed before any await below.
-      const release = claimAccount(agent.linkedin_account_id!);
-      if (!release) {
+      const { AccountBusyError, withAccountSession } = await import("@/lib/linkedin/account-session");
+      // Never drive the session alongside the runner (outreach, imports, discovery) — in this
+      // process or in the worker process: parallel traffic on one account is what gets it
+      // rate-limited. In the split deployment the web context is closed before release.
+      try {
+        filtered += await withAccountSession(agent.linkedin_account_id!, () => previewLinkedInSources(agent, linkedinSources, result, have, deadline));
+      } catch (err) {
+        if (!(err instanceof AccountBusyError)) throw err;
         result.linkedin = "busy";
         result.errors.push("This LinkedIn account is busy with other work right now. Preview the leads again in a few minutes.");
-      } else {
-        try {
-          filtered += await previewLinkedInSources(agent, linkedinSources, result, have, deadline);
-        } finally {
-          release();
-        }
       }
     }
   }

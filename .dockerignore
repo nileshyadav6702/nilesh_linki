@@ -1,5 +1,6 @@
 node_modules
 .next
+.worker-dist
 .git
 *.db
 *.db-shm
@@ -11,6 +12,7 @@ data/
 scripts/*
 !scripts/mirror-ee.js
 !scripts/strip-mirrored-pages.js
+!scripts/build-worker.mjs
 mcp/
 playwright-browsers/
 .env*

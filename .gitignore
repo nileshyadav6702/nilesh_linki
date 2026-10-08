@@ -18,6 +18,9 @@
 /.next/
 /out/
 
+# bundled background worker (npm run build:worker)
+/.worker-dist/
+
 # production
 /build
 

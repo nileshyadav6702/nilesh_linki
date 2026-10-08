@@ -32,9 +32,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Tear the live Playwright context down first. markNeedsReauth already clears
   // is_authenticated and calls closeSession; we additionally drop cookies_json so no session
   // material is retained for an account the user has explicitly signed out.
+  // Both columns in ONE write: a context still open in the worker process could otherwise save
+  // its session between the two and re-flag the account as authenticated. With cookies_json
+  // changed, that context's compare-and-swap save fails and it is dropped before its next use.
+  db.prepare("UPDATE accounts SET cookies_json = NULL, is_authenticated = 0 WHERE id = ? AND workspace_id = ?").run(id, ctx.workspaceId);
   const { markNeedsReauth } = await import("@/lib/linkedin/session");
   await markNeedsReauth(id);
-  db.prepare("UPDATE accounts SET cookies_json = NULL WHERE id = ? AND workspace_id = ?").run(id, ctx.workspaceId);
 
   recordAudit(ctx, "account.disconnected", "account", id);
   return res.json({ ok: true, name: account.name });

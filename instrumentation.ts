@@ -6,6 +6,16 @@ export async function register() {
     const { validateEnv } = await import("@/lib/env");
     validateEnv();
 
+    // LINKI_ROLE: "all" (default) runs the background loops inside this Next.js process, as
+    // before. "web" serves HTTP only: the loops run in the separate worker process
+    // (`npm run worker`, LINKI_ROLE=worker). See DEPLOYMENT.md.
+    const { linkiRole } = await import("@/lib/runtime/role");
+    const role = linkiRole();
+    if (role !== "all") {
+      console.log(`[instrumentation] LINKI_ROLE=${role}: background loops are not started in the web process`);
+      return;
+    }
+
     try {
       const { ensureGlobalRunnerStarted } = await import("@/lib/linkedin/runner");
       ensureGlobalRunnerStarted();

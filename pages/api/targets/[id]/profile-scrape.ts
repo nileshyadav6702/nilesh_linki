@@ -4,6 +4,7 @@ import { getSessionContext } from "@/lib/linkedin/session";
 import { scrapeProfile } from "@/lib/linkedin/profile-scrape";
 import { resolveLinkedInAccount } from "@/lib/linkedin/resolve-account";
 import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+import { AccountBusyError, withAccountSession } from "@/lib/linkedin/account-session";
 
 // POST /api/targets/[id]/profile-scrape
 // Live-scrapes a lead's LinkedIn profile (Sales Nav career + recent posts) and
@@ -29,8 +30,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!account) return res.status(400).json({ error: "No authenticated LinkedIn account could be resolved." });
 
   try {
-    const ctx = await getSessionContext(account.id);
-    const profile = await scrapeProfile(ctx, target);
+    // Held like a runner unit (in this process and across the web/worker split).
+    const profile = await withAccountSession(account.id, async () => scrapeProfile(await getSessionContext(account.id), target));
 
     // Persist what we scraped so it isn't thrown away: posts + the career fields
     // we already have columns for (headline/summary/positions). Cheap and lets the
@@ -55,6 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.json({ contact_id: id, account_id: account.id, profile });
   } catch (err) {
+    if (err instanceof AccountBusyError) return res.status(409).json({ error: err.message });
     const message = err instanceof Error ? err.message : String(err);
     // A dead session surfaces as "No data intercepted" / re-auth — flag it so the runner stops.
     if (/re-authentication|No data intercepted|login|checkpoint/i.test(message)) {

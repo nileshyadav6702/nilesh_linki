@@ -1,6 +1,6 @@
 # Linki Operations Runbook
 
-Practical procedures for running Linki on the single 8 GB VPS. All commands assume the deploy directory `/opt/linki` and the compose service name `linki`.
+Practical procedures for running Linki on the single 8 GB VPS. All commands assume the deploy directory `/opt/linki` and the compose services `linki` (web app, API, MCP; `LINKI_ROLE=web`) and `linki-worker` (every background loop, LinkedIn automation and Chromium, email sending; `LINKI_ROLE=worker`). In the single-process mode (no `linki-worker` service, `LINKI_ROLE=all`) read `linki-worker` as `linki` below.
 
 Quick health commands used throughout:
 ```bash
@@ -8,6 +8,8 @@ docker compose ps
 docker inspect --format '{{.State.Health.Status}}' $(docker compose ps -q linki)
 curl -fsS "http://127.0.0.1:${PORT:-3456}/api/health?ready=1"
 docker compose logs --tail=200 linki
+docker compose logs --tail=200 linki-worker
+docker inspect --format '{{.State.Health.Status}}' $(docker compose ps -q linki-worker)
 docker stats --no-stream
 df -h / ; free -h ; du -sh /opt/linki/data
 ```
@@ -21,15 +23,29 @@ Symptom: container exited or restarting; `/api/health` unreachable.
 
 ## Worker crash
 
-Note: workers run inside the same process as the app; there is no separate worker container. A "worker crash" is an app crash. Follow the application-crash steps. On restart, leased jobs recover automatically:
-- Expired-lease jobs return to `pending`.
+Background work runs in the `linki-worker` container (split mode). The web app keeps serving while it is down; campaigns, inbox sync and email sending simply wait.
+1. `docker compose ps` and `docker compose logs --tail=200 linki-worker` for the exit reason (`[worker] failed to start: ...` is an environment or migration problem; fix it like an application crash).
+2. `docker compose up -d linki-worker` (restart policy `unless-stopped` also restarts it). Its healthcheck turns unhealthy when the heartbeat file is older than 2 minutes, i.e. the event loop is blocked.
+3. On restart, leased work recovers automatically:
+- Expired-lease jobs return to `pending`; loop leases and per-account LinkedIn leases (`linkedin-account:<id>`) of a killed worker expire within 60 s. A graceful stop releases them at once.
 - Jobs caught mid-provider-handoff become `uncertain` (see stuck jobs below).
+
+### Restarting or redeploying the worker without downtime
+
+- `docker compose restart linki-worker` (or `docker compose up -d --no-deps linki-worker` for a new image) never takes the web app down. The worker logs `SIGTERM received — stopping new work`, finishes in-flight steps for up to `LINKI_WORKER_GRACE_MS` (60 s), saves and closes the LinkedIn browser contexts, releases its leases and logs `stopped cleanly in ...`. `stop_grace_period: 90s` covers that.
+- If the log says the grace period ended with work in flight, an interrupted LinkedIn action is recovered as `uncertain` and an email mid-handoff as `uncertain` (never re-sent blindly): check them as in "Stuck jobs".
+- `docker compose restart linki` (web) never interrupts a send. A user-triggered LinkedIn request in flight (wizard preview, manual sync, login step) is cut off; its account lease expires within 60 s.
+- Run exactly one worker per database.
+
+### "This LinkedIn account is busy" (HTTP 409) in the web app
+
+Web routes that drive a LinkedIn session (wizard preview, li-stats, sync-accepted, list sync-status, profile-scrape, login steps) wait for no one: if the worker is working that account they answer 409. Retry after the worker's unit for the account ends (normally a few minutes). To see who holds an account: `sqlite3 /opt/linki/data/linki.db "SELECT owner_id, expires_at, heartbeat_at FROM worker_leases WHERE name='linkedin-account:<account_id>';"`. A row whose `expires_at` is in the past is free.
 
 ## Chromium crash
 
 Symptom: LinkedIn actions failing; logs show Playwright/Chromium errors; possible orphaned processes.
 1. Check memory first: `docker stats --no-stream`. A Chromium crash is often an OOM symptom.
-2. `docker compose restart linki`. The session layer reaps dead browsers and relaunches on next tick.
+2. `docker compose restart linki-worker` (Chromium runs in the worker; the web app stays up). The session layer reaps dead browsers and relaunches on next tick.
 3. Do not change Chromium flags, the pinned version, or the fingerprint. If Chromium repeatedly SIGTRAPs, verify the image is the pinned build and has not been rebuilt against a newer Chromium.
 4. If a LinkedIn session was invalidated, see "Expired LinkedIn session".
 
@@ -37,9 +53,9 @@ Symptom: LinkedIn actions failing; logs show Playwright/Chromium errors; possibl
 
 Symptom: OOM kill in `dmesg` or the container restarting under load; Chromium dying.
 1. `free -h` and `docker stats` to confirm.
-2. Restart to clear: `docker compose restart linki`.
-3. If recurring, ensure no `mem_limit` is set too tightly (see DEPLOYMENT.md). Chromium plus the app can transiently need 2 to 2.5 GB, plus roughly 150 to 300 MB for each LinkedIn account context open at once.
-4. Lower `LINKEDIN_ACCOUNT_CONCURRENCY` (default 4; `1` restores one account at a time) in `.env` and restart. Fewer accounts are then worked in parallel; no LinkedIn limit changes.
+2. Check which container: `docker stats --no-stream`. Chromium and the account contexts live in `linki-worker`; the web container should stay around 0.5 to 1 GB (a little more during a wizard preview or manual LinkedIn sync). Restart the one affected: `docker compose restart linki-worker` (or `linki`).
+3. If recurring, ensure no `mem_limit` is set too tightly (see DEPLOYMENT.md). The worker (Node plus Chromium) can transiently need 2 to 2.5 GB, plus roughly 150 to 300 MB for each LinkedIn account context open at once.
+4. Lower `LINKEDIN_ACCOUNT_CONCURRENCY` (default 4; `1` restores one account at a time) in `.env.local` and restart the worker. Fewer accounts are then worked in parallel; no LinkedIn limit changes.
 5. As an emergency backstop only, enable host swap. This is not a fix; reduce concurrent load and keep at least ~1 GB free.
 
 ## Full disk
@@ -94,8 +110,8 @@ If it went out, set `status='sent'`. If it did not, send it by hand (the track h
 
 ### LinkedIn account workers and bulk enrichment
 
-- Each 30 s LinkedIn pass works up to `LINKEDIN_ACCOUNT_CONCURRENCY` accounts in parallel (default 4). Within one account the order is fixed and sequential: due campaign steps (8 to 20 s apart), one import pass, a few needs-data profile reads, one bulk-enrichment slice. Signal discovery and CRM connector sync run after all account workers finish.
-- If a phase hits its watchdog, the account is skipped by later passes ("still has work in flight from an earlier pass") until the abandoned browser work really ends. If it repeats for one account, check that account's session (see "Expired LinkedIn session") and Chromium health. Signal discovery is deferred while any account is in this state.
+- Each 30 s LinkedIn pass works up to `LINKEDIN_ACCOUNT_CONCURRENCY` accounts in parallel (default 4). Within one account the order is fixed and sequential: due campaign steps (8 to 20 s apart), one import pass, a few needs-data profile reads, one bulk-enrichment slice, then AI-agent signal discovery for the agents that use that account (4-minute budget, 8-minute watchdog, paused 24 h for that account on a LinkedIn 429/999). CRM connector sync runs after all account workers finish.
+- If a phase hits its watchdog, the account is skipped by later passes ("still has work in flight from an earlier pass") until the abandoned browser work really ends. If it repeats for one account, check that account's session (see "Expired LinkedIn session") and Chromium health. Only that account's signal discovery waits; other accounts' discovery is unaffected.
 - "Enrich list" requests are queued, not run immediately: `app_settings` keys `bulk_enrich:<account_id>:<list_id>`. The account worker reads up to 10 profiles per pass, charged to the account's daily `profile_view` budget, and removes the key when every unenriched profile has been read once. A budget stop or a LinkedIn pause keeps the list queued until it can continue. To cancel a queued list: `sqlite3 /opt/linki/data/linki.db "DELETE FROM app_settings WHERE key LIKE 'bulk_enrich:%:<list_id>';"`
 
 ## Repeated failed jobs
@@ -168,7 +184,8 @@ With no heavy observability stack, poll these on a small interval from the host 
 - `df -h /` and `du -sh /opt/linki/data` (disk and DB growth).
 - `email_jobs` counts by status (rising `failed`/`uncertain` means a provider or reconciliation problem).
 - `linkedin_actions` rows in `uncertain` (each needs a human check, see Stuck jobs).
-- `worker_leases`: `heartbeat_at` advances about every 15s while a loop works; `token` increases when a lease changes hands between processes.
+- `worker_leases`: `heartbeat_at` advances about every 15s while a loop works; `token` increases when a lease changes hands between processes. `owner_id` starts with the holder's `hostname:pid`, so you can tell the worker's leases from the web's; `linkedin-account:<id>` rows exist only while that account is being driven.
+- `docker compose logs linki-worker` for `[runner]`/`[worker]` lines (all background activity now logs there, not in `linki`).
 - Tracks with `run_profile_tracks.error_message LIKE 'AI writing blocked%'`: AI steps are held and retried every 6h until the OpenRouter key, model, credit or spend cap is fixed, instead of being skipped.
 - Accounts flagged as needing re-auth (LinkedIn checkpoints).
 - Backup job success.

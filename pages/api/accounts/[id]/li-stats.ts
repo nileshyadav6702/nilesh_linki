@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { getSessionPage, saveSessionState } from "@/lib/linkedin/session";
 import { scrapeLinkedInStats } from "@/lib/linkedin/li-stats";
 import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+import { AccountBusyError, withAccountSession } from "@/lib/linkedin/account-session";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") return res.status(405).end();
@@ -18,11 +19,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!account) return res.status(404).json({ error: "Account not found" });
   if (!account.is_authenticated) return res.status(400).json({ error: "Account not authenticated" });
 
-  let page;
   try {
-    page = await getSessionPage(accountId);
-    const stats = await scrapeLinkedInStats(page);
-    await saveSessionState(accountId);
+    // Held like a runner unit (in this process and across the web/worker split).
+    const stats = await withAccountSession(accountId, async () => {
+      const page = await getSessionPage(accountId);
+      try {
+        const s = await scrapeLinkedInStats(page);
+        await saveSessionState(accountId);
+        return s;
+      } finally {
+        await page.close().catch(() => {});
+      }
+    });
     db.prepare(`
       UPDATE accounts SET
         li_connections = ?, li_pending = ?, li_profile_views = ?,
@@ -31,9 +39,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     `).run(stats.connections, stats.pending, stats.profile_views, accountId);
     return res.json(stats);
   } catch (err) {
+    if (err instanceof AccountBusyError) return res.status(409).json({ error: err.message });
     console.error("[li-stats]", err);
     return res.status(500).json({ error: err instanceof Error ? err.message : "Scrape failed" });
-  } finally {
-    await page?.close().catch(() => {});
   }
 }

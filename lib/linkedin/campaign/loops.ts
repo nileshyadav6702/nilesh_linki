@@ -10,19 +10,28 @@ import { processWarmupCycle } from "@/lib/platform/deliverability";
 import { processWarmupEngagement } from "@/lib/email/warmup-engagement";
 import { syncDueConnections } from "@/lib/platform/connectors";
 import {
-  CONNECTION_SYNC_TIMEOUT_MS, CONTEXT_IDLE_CLOSE_MS, DISCOVERY_BUDGET_MS, DISCOVERY_TIMEOUT_MS, INBOX_SYNC_TIMEOUT_MS, POLL_INTERVAL_MS,
+  CONNECTION_SYNC_TIMEOUT_MS, CONTEXT_IDLE_CLOSE_MS, INBOX_SYNC_TIMEOUT_MS, POLL_INTERVAL_MS,
 } from "./constants";
-import { sleep } from "./track-state";
 import { emailCampaignTick } from "./email-tick";
-import { accountConcurrency, busyAccountIds, runAccountWorkers } from "./account-workers";
+import { accountConcurrency, busyAccountIds, claimAccount, runAccountWorkers } from "./account-workers";
+import { linkiRole, runsBackgroundLoops } from "@/lib/runtime/role";
+import { isStopping, stoppableSleep, trackLoop } from "@/lib/runtime/lifecycle";
 
 // ─── global loop ─────────────────────────────────────────────────────────────
 
 const g = global as typeof global & { __linkiGlobalRunnerStarted?: boolean };
 
+/**
+ * Start every background loop in this process, once. A no-op in the web process of the split
+ * deployment (LINKI_ROLE=web): the worker process runs the loops there, and API routes that
+ * call this after starting a run (runs/[id]/start, signal rules) only need the DB change they
+ * already made — the worker picks the run up on its next pass.
+ */
 export function ensureGlobalRunnerStarted(): void {
+  if (!runsBackgroundLoops()) return;
   if (g.__linkiGlobalRunnerStarted) return;
   g.__linkiGlobalRunnerStarted = true;
+  console.log(`[runner] starting background loops (LINKI_ROLE=${linkiRole()})`);
   const db = getDb();
 
   // Boot recovery: whatever a previous process left mid-flight is either resumed or parked
@@ -33,7 +42,7 @@ export function ensureGlobalRunnerStarted(): void {
   // Accounts run in parallel (LINKEDIN_ACCOUNT_CONCURRENCY), each strictly sequential on its
   // own session, so no session is ever driven from two places at once. Pacing, daily limits
   // and active hours are per account and unchanged.
-  linkedinLoop().catch(err => console.error("[runner] LinkedIn loop crashed:", err));
+  trackLoop(linkedinLoop().catch(err => console.error("[runner] LinkedIn loop crashed:", err)));
 
   // Email campaign steps used to run inside the LinkedIn tick, so a logged-out or busy
   // browser stopped the mailbox too. This loop claims email tracks on its own.
@@ -83,12 +92,13 @@ export function recoverAtBoot(db: ReturnType<typeof getDb>): void {
   if (imports || actions) console.warn(`[runner] Boot recovery: ${imports} stale import(s) requeued, ${actions} LinkedIn action(s) marked uncertain`);
 }
 
-/** Run `step` forever on its own leased loop. Each background process gets one of these,
- *  so one process stalling only stalls itself — never its siblings. */
+/** Run `step` on its own leased loop until a stop is requested (lib/runtime/lifecycle.ts).
+ *  Each background process gets one of these, so one process stalling only stalls itself —
+ *  never its siblings. A stop lets the pass in flight finish and starts no new one. */
 export function startLoop(name: string, leaseName: string, step: () => Promise<void>): void {
-  void (async () => {
+  trackLoop((async () => {
     console.log(`[runner] ${name} loop started`);
-    while (true) {
+    while (!isStopping()) {
       try {
         // The lease is renewed for as long as step() runs, so a pass longer than the lease
         // TTL is not mistaken for a dead worker by another process.
@@ -96,9 +106,10 @@ export function startLoop(name: string, leaseName: string, step: () => Promise<v
       } catch (err) {
         console.error(`[runner] ${name} error:`, err instanceof Error ? err.message : err);
       }
-      await sleep(POLL_INTERVAL_MS);
+      await stoppableSleep(POLL_INTERVAL_MS);
     }
-  })().catch(err => console.error(`[runner] ${name} loop crashed:`, err));
+    console.log(`[runner] ${name} loop stopped`);
+  })().catch(err => console.error(`[runner] ${name} loop crashed:`, err)));
 }
 
 /** Poll every IMAP-configured account that is due, for replies and bounces. Runs on its own
@@ -126,23 +137,26 @@ export async function linkedinLoop(): Promise<void> {
   console.log(`[runner] LinkedIn loop started (up to ${accountConcurrency()} account(s) in parallel)`);
   const db = getDb();
 
-  while (true) {
+  while (!isStopping()) {
     try {
       // The lease is renewed every 15s while this pass runs (a pass lasts minutes, the lease
       // TTL is 45s) and every phase re-checks it, so a process that lost the lease stops
       // driving the sessions instead of sharing them with the new holder.
-      await withLease("linkedin-runner", (lease) => linkedinPass(db, lease));
+      // A stop request (graceful shutdown) reads as a lost lease: no new account unit, step,
+      // import page or profile read starts, and the ones in flight finish.
+      await withLease("linkedin-runner", (lease) => linkedinPass(db, { ...lease, isHeld: () => !isStopping() && lease.isHeld() }));
     } catch (err) {
       console.error("[runner] LinkedIn loop pass failed:", err instanceof Error ? err.message : err);
     }
-    await sleep(POLL_INTERVAL_MS);
+    await stoppableSleep(POLL_INTERVAL_MS);
   }
+  console.log("[runner] LinkedIn loop stopped");
 }
 
 /**
  * One pass of the LinkedIn loop. Account workers first (account-workers.ts): each account's
- * outreach, imports, needs-data reads and bulk-enrich slice, in sequence per account and up to
- * LINKEDIN_ACCOUNT_CONCURRENCY accounts at once. Every phase is under its own watchdog, and a
+ * outreach, imports, needs-data reads, bulk-enrich slice and AI-agent signal discovery, in
+ * sequence per account and up to LINKEDIN_ACCOUNT_CONCURRENCY accounts at once. Every phase is under its own watchdog, and a
  * timed-out phase keeps its account busy until it really ends.
  */
 export async function linkedinPass(db: ReturnType<typeof getDb>, lease: ActiveLease): Promise<void> {
@@ -150,23 +164,13 @@ export async function linkedinPass(db: ReturnType<typeof getDb>, lease: ActiveLe
   // CRM connector sync (HubSpot/Salesforce): HTTP only, after the account workers as before.
   if (!lease.isHeld()) return;
   await guard("Connection sync", CONNECTION_SYNC_TIMEOUT_MS, () => syncDueConnections());
-  // AI-agent signal discovery reads LinkedIn through the accounts' sessions and walks every
-  // account itself, so it runs only when no account worker (or abandoned phase) is still on a
-  // session — sequential with outreach, under its own time budget and request quotas.
-  if (!lease.isHeld()) return;
-  const busy = busyAccountIds();
-  if (busy.size > 0) {
-    console.warn(`[runner] Signal discovery deferred — ${busy.size} account(s) still have work in flight`);
-  } else {
-    await guard("Signal discovery", DISCOVERY_TIMEOUT_MS, async () => {
-      const { runLinkedInDiscovery } = await import("@/lib/signals/linkedin-discovery");
-      await runLinkedInDiscovery(DISCOVERY_BUDGET_MS);
-    });
-  }
+  // LinkedIn signal discovery is the last phase of each account's own worker unit, so it is
+  // never deferred by another account's in-flight work.
+  //
   // Bound memory: close the contexts of accounts that have not used the browser for a while.
   try {
     const { closeIdleSessions } = await import("@/lib/linkedin/session");
-    const closed = await closeIdleSessions(CONTEXT_IDLE_CLOSE_MS, busyAccountIds());
+    const closed = await closeIdleSessions(CONTEXT_IDLE_CLOSE_MS, busyAccountIds(), claimAccount);
     if (closed.length > 0) console.log(`[runner] Closed ${closed.length} idle LinkedIn browser context(s)`);
   } catch (err) {
     console.warn("[runner] idle context cleanup failed:", err instanceof Error ? err.message : err);
