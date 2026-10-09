@@ -23,7 +23,8 @@ async function post(agentId: string, body: Record<string, unknown>): Promise<{ o
   return { ok: r.ok, data };
 }
 
-const Intro = ({ children }: { children: ReactNode }) => <p className="mx-auto max-w-[620px] text-center text-[16px] text-base-content/55">{children}</p>;
+// A div, not a <p>: the design system's unlayered p { margin: 0 } would cancel mx-auto.
+const Intro = ({ children }: { children: ReactNode }) => <div className="mx-auto max-w-[620px] text-center text-[16px] text-base-content/55">{children}</div>;
 const Submit = ({ busy, disabled, children }: { busy: boolean; disabled: boolean; children: ReactNode }) => (
   <div className="flex justify-end pt-2"><button type="submit" className={primaryBtn} disabled={disabled || busy}>{busy ? <><RiLoader4Line size={16} className="animate-spin" /> Working…</> : children}</button></div>
 );

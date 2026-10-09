@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { createPortal } from "react-dom";
 import { RiArrowDownSLine, RiCheckLine, RiCloseLine, RiSearchLine } from "react-icons/ri";
 import { useDismiss } from "@/components/agents/leads/Listbox";
 
@@ -38,14 +39,17 @@ export function useDialog(panel: RefObject<HTMLDivElement | null>, requestClose:
   return { shown, onKeyDown };
 }
 
-/** Centered modal (CSV / LinkedIn import) stacked above the drawer. */
+/**
+ * Centered modal (CSV / LinkedIn import) stacked above the drawer. Rendered into <body> so it
+ * never inherits its opener's styles (centered text, animated transforms) or clipping.
+ */
 export function Modal({ title, subtitle, onClose, children, footer, labelId, wide = true }: {
   title: string; subtitle: string; onClose: () => void; children: ReactNode; footer?: ReactNode; labelId: string; wide?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const { shown, onKeyDown } = useDialog(panel, onClose);
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6">
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 text-left sm:p-6">
       <button type="button" tabIndex={-1} aria-label="Close" onClick={onClose}
         className={`absolute inset-0 bg-[#141413]/40 transition-opacity duration-200 motion-reduce:transition-none ${shown ? "opacity-100" : "opacity-0"}`} />
       <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={labelId} tabIndex={-1} onKeyDown={onKeyDown}
@@ -62,7 +66,8 @@ export function Modal({ title, subtitle, onClose, children, footer, labelId, wid
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
         {footer && <footer className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] px-6 py-4">{footer}</footer>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -162,7 +167,7 @@ export function SearchSelect({ value, options, onChange, placeholder, label, sea
   return (
     <div ref={wrap} className="relative" onKeyDown={onKey}>
       <button ref={button} type="button" aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current?.label ?? placeholder}`} onClick={() => setOpen(!open)}
-        className={`flex h-11 w-full items-center gap-2.5 rounded-[8px] border bg-base-100 px-3 text-left text-[15px] outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${invalid ? "border-error/60" : open ? "border-[var(--border-focus)]" : "border-[var(--border-subtle)] hover:bg-base-200/50"}`}>
+        className={`flex h-11 w-full items-center gap-2.5 rounded-[8px] border bg-base-100 px-3 text-left text-[15px] outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${invalid ? "border-error/60" : open ? "border-[var(--border-focus)]" : "border-[var(--border-strong)] hover:bg-base-200/50"}`}>
         {current?.lead}
         <span className={`min-w-0 flex-1 truncate ${current ? "text-base-content" : "italic text-base-content/45"}`}>{current?.label ?? placeholder}</span>
         {current?.pill}

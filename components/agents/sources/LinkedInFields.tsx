@@ -9,7 +9,7 @@ import type { ListRow } from "@/components/agents/sources/SavedListPanel";
 
 export interface AccountRow { id: string; name: string; email: string | null; is_authenticated: number }
 
-export const textCls = "h-12 w-full rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-4 text-[15px] text-base-content outline-none transition placeholder:text-base-content/40 focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]";
+export const textCls = "h-12 w-full rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-4 text-[15px] text-base-content outline-none transition placeholder:text-base-content/40 focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]";
 
 export function FormField({ label, required, hint, error, children }: { label: string; required?: boolean; hint?: ReactNode; error?: string | null; children: ReactNode }) {
   return (
