@@ -48,7 +48,9 @@ export function leadFromRow(o: Obj): LeadCandidate | null {
   if (!name || !url) return null;
   return {
     name, firstName: str(o.firstname), lastName: str(o.lastname), headline: str(o.headline), profileUrl: url,
-    title: str(o.currentJobTitle) ?? str(o.title), company: str(o.currentCompanyName) ?? (company ? str(company.name) : null), location: str(o.location),
+    title: str(o.lastJobTitle) ?? str(o.currentJobTitle) ?? str(o.title),
+    company: str(o.lastCompanyName) ?? str(o.currentCompanyName) ?? (company ? str(company.name) : null),
+    location: str(o.address) ?? str(o.location),
   };
 }
 

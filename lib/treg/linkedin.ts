@@ -30,12 +30,23 @@ export function entityUrl(e: EntityRef): string {
   return e.kind === "company" ? `https://www.linkedin.com/company/${e.universalName}/` : `https://www.linkedin.com/in/${e.publicId}/`;
 }
 
+/** The activity URN of a vendor post row: an explicit URN, "activity-<id>" in its URL, or a long numeric id. */
+function activityUrnOf(o: Obj): string | null {
+  const json = JSON.stringify(o);
+  const urn = json.match(/urn:li:activity:\d+/)?.[0] ?? json.match(/urn:li:(?:ugcPost|share):\d+/)?.[0];
+  if (urn) return urn;
+  const fromUrl = (pick(o, ["url", "post_url", "postUrl", "share_url", "shareUrl", "link"]) ?? "").match(/activity[-:](\d{15,})/)?.[1];
+  if (fromUrl) return `urn:li:activity:${fromUrl}`;
+  const id = typeof o.id === "number" ? String(o.id) : str(o.id);
+  return id && /^\d{15,}$/.test(id) ? `urn:li:activity:${id}` : null;
+}
+
 /** First array (depth-first) whose items look like posts. */
 function postRows(data: unknown, depth = 0): Obj[] {
   if (depth > 5) return [];
   if (Array.isArray(data)) {
     const objs = data.filter(isObj);
-    if (objs.length && objs.some((o) => /urn:li:(activity|ugcPost|share):\d+/.test(JSON.stringify(o)))) return objs;
+    if (objs.length && objs.some((o) => activityUrnOf(o))) return objs;
     for (const v of data) { const r = postRows(v, depth + 1); if (r.length) return r; }
     return [];
   }
@@ -56,7 +67,7 @@ function textOfPost(o: Obj): string {
 }
 
 function dateOfPost(o: Obj, urn: string): string | null {
-  for (const k of ["posted_at", "postedAt", "postedDate", "published_at", "publishedAt", "created_at", "createdAt", "date", "time", "timestamp"]) {
+  for (const k of ["posted_at", "postedAt", "postedDate", "published_at", "publishedAt", "created_at", "createdAt", "createdUtc", "date", "time", "timestamp"]) {
     const v = o[k];
     const d = typeof v === "number" ? new Date(v > 1e12 ? v : v * 1000) : typeof v === "string" ? new Date(v) : isObj(v) && typeof v.timestamp === "number" ? new Date(v.timestamp) : null;
     if (d && !Number.isNaN(d.getTime())) return d.toISOString();
@@ -65,8 +76,7 @@ function dateOfPost(o: Obj, urn: string): string | null {
 }
 
 export function toPostRef(o: Obj): PostRef | null {
-  const json = JSON.stringify(o);
-  const urn = json.match(/urn:li:activity:\d+/)?.[0] ?? json.match(/urn:li:(?:ugcPost|share):\d+/)?.[0];
+  const urn = activityUrnOf(o);
   if (!urn) return null;
   const url = pick(o, ["url", "post_url", "postUrl", "share_url", "shareUrl", "link"]) ?? `https://www.linkedin.com/feed/update/${urn}/`;
   return { activityUrn: urn, text: textOfPost(o), postedAt: dateOfPost(o, urn), url };
@@ -116,8 +126,9 @@ export async function tregPostEngagers(workspaceId: string, post: PostRef, opts:
       memberUrn: pick(a, ["id", "urn"]), imageUrl: pick(a, ["profilePictureUrl", "picture"]), kind: "comment", reactionType: null, commentText: str(item.text) });
   }
   // A person who both reacted and commented counts once, as the comment (stronger intent).
+  // Company pages react too: they aren't people to contact.
   const byKey = new Map<string, Engager>();
-  for (const e of out) {
+  for (const e of out.filter((x) => !x.profileUrl || /linkedin\.com\/in\//.test(x.profileUrl))) {
     const key = e.profileUrl ?? e.memberUrn ?? e.name;
     const prev = byKey.get(key);
     if (!prev || (prev.kind === "reaction" && e.kind === "comment")) byKey.set(key, e);
@@ -140,12 +151,12 @@ export function currentPosition(raw: unknown): TregProfile["current"] {
         if (!isObj(it)) continue;
         const company = pick(it, ["company", "companyName", "company_name", "organization", "subtitle"]) ?? (isObj(it.company) ? pick(it.company as Obj, ["name"]) : null);
         const title = pick(it, ["title", "position", "role", "jobTitle"]);
-        if (!company || !title) continue;
+        if (!company) continue;
         const end = it.end ?? it.endDate ?? it.end_date ?? it.ends_at ?? it.endsAt;
-        const isCurrent = it.is_current === true || it.isCurrent === true || it.current === true || end == null || (typeof end === "string" && /present|current/i.test(end));
+        const isCurrent = it.is_current === true || it.isCurrent === true || it.current === true || end == null || end === "" || (typeof end === "string" && /present|current/i.test(end));
         if (isCurrent) {
           const s = it.start ?? it.startDate ?? it.start_date ?? it.starts_at;
-          const started = typeof s === "string" ? s : isObj(s) && s.year ? `${s.year}-${String(s.month ?? 1).padStart(2, "0")}-01` : null;
+          const started = typeof s === "string" ? s || null :isObj(s) && s.year ? `${s.year}-${String(s.month ?? 1).padStart(2, "0")}-01` : null;
           found = { company: company.split(" · ")[0], title, started };
           return;
         }
