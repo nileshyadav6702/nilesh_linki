@@ -58,19 +58,26 @@ export function DateRangeCalendar({ value, onChange, allowFuture = false, title 
   const today = startOfDay(new Date());
   const [draft, setDraft] = useState<DateRange | undefined>(value ? { from: fromDay(value.from), to: fromDay(value.to) } : undefined);
   const [month, setMonth] = useState(startOfMonth(fromDay(value?.to) ?? today));
+  const [hover, setHover] = useState<Date | null>(null);
+  // Between the two clicks: the start is marked at once and the range previews up to the hovered day.
+  const picking = !!draft?.from && !draft.to;
+  const order = (a: Date, b: Date) => (isAfter(a, b) ? { from: b, to: a } : { from: a, to: b });
+  const shown = picking ? order(draft!.from!, hover ?? draft!.from!) : draft;
   return (
     <div className={className}>
-      {title && <div className="mb-3 text-[14px] text-base-content/65">{title}</div>}
+      {title && <div className="mb-3 text-[14px] text-base-content/65">{picking ? "Now pick an end date" : title}</div>}
       <Header month={month} setMonth={setMonth} max={allowFuture ? undefined : today} />
       <DayPicker mode="range" weekStartsOn={1} month={month} onMonthChange={setMonth} hideNavigation
-        selected={draft} disabled={allowFuture ? undefined : { after: today }} classNames={RANGE_CLASSES}
+        selected={shown} disabled={allowFuture ? undefined : { after: today }} classNames={RANGE_CLASSES}
+        modifiers={{ preview: picking && hover && hover.getTime() !== draft!.from!.getTime() ? hover : false }} modifiersClassNames={{ preview: "[&>button]:!bg-primary/60" }}
+        onDayMouseEnter={(d, m) => { if (!m.disabled) setHover(d); }} onDayMouseLeave={() => setHover(null)}
         formatters={{ formatWeekdayName: (d) => format(d, "EEEEE") }}
         onSelect={(_r, picked) => {
           // First click picks the start, second the end (either order); a third starts over.
-          if (!draft?.from || draft.to) { setDraft({ from: picked, to: undefined }); return; }
-          const [a, b] = isAfter(draft.from, picked) ? [picked, draft.from] : [draft.from, picked];
-          setDraft({ from: a, to: b });
-          onChange({ from: toDay(a), to: toDay(b) });
+          if (!picking) { setDraft({ from: picked, to: undefined }); setHover(null); return; }
+          const r = order(draft!.from!, picked);
+          setDraft(r);
+          onChange({ from: toDay(r.from), to: toDay(r.to) });
         }} />
     </div>
   );
