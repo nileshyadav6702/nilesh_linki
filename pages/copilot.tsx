@@ -91,7 +91,7 @@ export default function Copilot() {
       <Head><title>Copilot — Linki</title></Head>
       <div className="-mt-2 mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
-          <div className="flex items-center gap-3"><RiBrainLine size={22} className="text-primary" /><h1 className="text-[24px] font-medium text-base-content">Copilot</h1></div>
+          <div className="flex items-center gap-3"><RiBrainLine size={22} className="text-primary" /><div role="heading" aria-level={1} className="text-[24px] font-medium text-base-content">Copilot</div></div>
           <p className="mt-1 pl-1 text-[16px] text-base-content/65">Review and act on AI-recommended leads</p>
         </div>
         <div className="w-full sm:w-[330px]">
@@ -104,10 +104,10 @@ export default function Copilot() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 lg:h-[calc(100vh-190px)] lg:min-h-[560px] lg:flex-row">
+      <div className="flex flex-col gap-6 lg:-mb-10 lg:h-[calc(100vh-150px)] lg:min-h-[560px] lg:flex-row">
         <section className="flex min-h-[420px] flex-col overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-base-100 lg:w-[460px] lg:shrink-0">
           <div className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-5 py-4">
-            <h2 className="text-[20px] font-medium text-base-content [font-family:var(--font-sans)]">{mode === "autopilot" ? "Scheduled actions" : "Today's priority"}</h2>
+            <div role="heading" aria-level={2} className="text-[20px] font-medium text-base-content">{mode === "autopilot" ? "Scheduled actions" : "Today's priority"}</div>
             <div role="tablist" aria-label="Agent mode" className="flex rounded-full bg-base-200 p-1">
               {(["autopilot", "copilot"] as const).map((m) => (
                 <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)}

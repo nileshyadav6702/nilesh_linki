@@ -29,15 +29,15 @@ function Line({ icon, title, text }: { icon: ReactNode; title?: string; text: st
 /** The blurred placeholder shown until the message is revealed (or written). */
 function Hidden({ kind, busy, onView }: { kind: "message" | "email"; busy: boolean; onView: () => void }) {
   return (
-    <div className="relative overflow-hidden rounded-[12px] border border-[#e9c9ef] bg-gradient-to-br from-[#f7e8f7] to-[#f1e4f4]">
-      <div className="pointer-events-none select-none space-y-2 px-6 py-5 blur-[5px]" aria-hidden="true">
+    // The content sets the height; the blurred "text" sits behind it, so the button is never clipped.
+    <div className={`relative overflow-hidden rounded-[12px] border border-[#e9c9ef] bg-gradient-to-br from-[#f7e8f7] to-[#f1e4f4] ${kind === "email" ? "min-h-[260px]" : ""}`}>
+      <div className="pointer-events-none absolute inset-0 select-none space-y-2 px-6 py-5 blur-[5px]" aria-hidden="true">
         <div className="h-3 w-40 rounded bg-base-content/15" />
         {kind === "email" && <div className="flex gap-3 pt-2">{[1, 2, 3, 4].map((i) => <div key={i} className="h-4 w-10 rounded bg-base-content/15" />)}</div>}
         <div className="h-3 w-3/4 rounded bg-base-content/10" />
         <div className="h-3 w-2/3 rounded bg-base-content/10" />
-        {kind === "email" && <div className="h-24" />}
       </div>
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
+      <div className={`relative flex flex-col items-center justify-center gap-2 px-4 py-6 text-center ${kind === "email" ? "min-h-[260px]" : ""}`}>
         <div className="flex items-center gap-2 text-[19px] font-medium text-[#a020c4]"><RiSparkling2Line size={20} /> AI contextual {kind} <RiSparkling2Line size={20} /></div>
         <div className="text-[15px] text-[#a020c4]/90">The {kind} is personalized based on your business and the lead&apos;s details</div>
         <button type="button" onClick={onView} disabled={busy}
