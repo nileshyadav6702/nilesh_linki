@@ -150,7 +150,7 @@ export default function WorkflowsPage({ initialWorkflows }: { initialWorkflows: 
   return (
     <>
     <Head>
-      <title>Campaigns — Linki</title>
+      <title>Campaigns — Kairo</title>
       <meta name="description" content="Manage your LinkedIn outreach campaigns and sequences." />
       <meta name="robots" content="noindex, nofollow" />
     </Head>

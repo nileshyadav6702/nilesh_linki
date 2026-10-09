@@ -159,7 +159,7 @@ export default function AdminPage({ viewer }: { viewer: string }) {
 
   return (
     <>
-      <Head><title>Platform admin · Linki</title></Head>
+      <Head><title>Platform admin · Kairo</title></Head>
       <div className="space-y-10">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>

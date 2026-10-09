@@ -72,13 +72,13 @@ export default function LoginPage() {
   return (
     <>
     <Head>
-      <title>{mode === "signin" ? "Welcome back" : "Create your workspace"} — Linki</title>
+      <title>{mode === "signin" ? "Welcome back" : "Create your workspace"} — Kairo</title>
       <meta name="robots" content="noindex, nofollow" />
     </Head>
     <div className="grid min-h-screen bg-base-100 lg:grid-cols-[minmax(0,1.08fr)_minmax(440px,.92fr)]">
       <section className="hidden border-r border-[var(--border-subtle)] bg-base-100 lg:flex lg:flex-col lg:justify-between lg:p-10 xl:p-14">
         <div className="flex items-center gap-3">
-          <Image src="/linki-wordmark.svg" alt="Linki" width={110} height={32} priority />
+          <span className="flex items-center gap-2.5"><Image src="/logo_kairo.svg" alt="" width={32} height={32} priority /><span className="text-[24px] font-semibold tracking-tight">Kairo</span></span>
           <span className="rounded-[5px] border border-primary/20 bg-primary/[0.07] px-2 py-1 font-mono text-[10px] font-medium text-primary">Open source</span>
         </div>
 
@@ -102,14 +102,14 @@ export default function LoginPage() {
 
         <div className="flex items-center justify-between text-[11px] text-base-content/45">
           <span>Built for teams who value control.</span>
-          <span className="font-mono">Linki</span>
+          <span className="font-mono">Kairo</span>
         </div>
       </section>
 
       <section className="flex min-h-screen items-center justify-center px-5 py-10 sm:px-10">
         <div className="w-full max-w-[410px] rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-6 sm:p-8">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <Image src="/linki-wordmark.svg" alt="Linki" width={104} height={30} priority />
+            <span className="flex items-center gap-2.5"><Image src="/logo_kairo.svg" alt="" width={30} height={30} priority /><span className="text-[22px] font-semibold tracking-tight">Kairo</span></span>
           </div>
 
           <div className="mb-8">
@@ -117,7 +117,7 @@ export default function LoginPage() {
               {mode === "signin" ? "Welcome back" : "Start building pipeline"}
             </p>
             <h2 className="text-[28px] font-semibold tracking-[-.01em] text-base-content">
-              {mode === "signin" ? "Sign in to your workspace" : "Create your Linki account"}
+              {mode === "signin" ? "Sign in to your workspace" : "Create your Kairo account"}
             </h2>
             <p className="mt-2 text-sm text-base-content/60">
               {mode === "signin" ? "Continue where your team left off." : "Self-hosted outreach, owned by you."}

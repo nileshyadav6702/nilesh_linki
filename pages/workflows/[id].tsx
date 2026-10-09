@@ -3375,7 +3375,7 @@ export default function WorkflowDetailPage({
   return (
     <>
     <Head>
-      <title>{workflowName} — Campaigns — Linki</title>
+      <title>{workflowName} — Campaigns — Kairo</title>
       <meta name="robots" content="noindex, nofollow" />
     </Head>
     <div>

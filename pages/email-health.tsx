@@ -118,7 +118,7 @@ export default function EmailHealth() {
 
   return (
     <>
-      <Head><title>Email Health — Linki</title></Head>
+      <Head><title>Email Health — Kairo</title></Head>
       <div className="space-y-6">
 
         {/* Page header */}

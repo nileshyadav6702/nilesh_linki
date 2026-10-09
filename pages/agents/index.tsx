@@ -44,7 +44,7 @@ export default function AgentsPage() {
 
   return (
     <>
-      <Head><title>Outreach Agents — Linki</title></Head>
+      <Head><title>Outreach Agents — Kairo</title></Head>
       <div className="space-y-7">
         <div className="flex flex-col justify-between gap-4 border-b border-[var(--border-subtle)] pb-5 sm:flex-row sm:items-start">
           <div className="min-w-0">

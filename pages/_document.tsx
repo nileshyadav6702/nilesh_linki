@@ -4,7 +4,7 @@ export default function Document() {
   return (
     <Html lang="en" data-theme="linki">
       <Head>
-        <link rel="icon" type="image/svg+xml" href="/logo_linki.svg" />
+        <link rel="icon" type="image/svg+xml" href="/logo_kairo.svg" />
         <link rel="alternate icon" type="image/x-icon" href="/logo_linki.ico" />
         <link rel="apple-touch-icon" href="/logo_linki.png" />
       </Head>

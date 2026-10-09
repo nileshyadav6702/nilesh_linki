@@ -109,7 +109,7 @@ export default function CompaniesPage({ initialCompanies }: { initialCompanies: 
   return (
     <>
       <Head>
-        <title>Companies — Linki</title>
+        <title>Companies — Kairo</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
       <div className="space-y-6">

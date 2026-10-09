@@ -27,8 +27,8 @@ export function OnboardShell({ phase, stepLabel, ai, children, footer }: {
     <div className="min-h-screen bg-base-100 bg-[radial-gradient(ellipse_at_top,rgba(204,120,92,0.18),transparent_58%)] px-4 py-8">
       <div className="mx-auto flex w-full max-w-[860px] flex-col items-center">
         <Link href="/agents" className="flex items-center gap-2.5">
-          <Image src="/logo_linki.svg" alt="" width={28} height={28} />
-          <span className="font-display text-[28px] leading-none">Linki</span>
+          <Image src="/logo_kairo.svg" alt="" width={30} height={30} />
+          <span className="text-[28px] font-semibold leading-none tracking-tight">Kairo</span>
         </Link>
         <PhaseDots phase={phase} />
         <section className="mt-6 w-full rounded-[16px] border border-[var(--border-subtle)] bg-base-300 px-5 py-5 sm:px-8 sm:py-6">

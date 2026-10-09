@@ -31,11 +31,11 @@ export default function InvitationPage() {
     const login=await signIn("credentials",{email:invite.email,password,redirect:false});if(!login?.ok){setError("Account created, but sign-in failed.");setBusy(false);return;}await update({workspaceId:invite.workspace_id});await router.replace("/platform");
   }
   const callback=`/invite/${encodeURIComponent(token)}`;
-  return <><Head><title>Workspace invitation — Linki</title><meta name="robots" content="noindex,nofollow"/></Head>
+  return <><Head><title>Workspace invitation — Kairo</title><meta name="robots" content="noindex,nofollow"/></Head>
     <main className="flex min-h-screen items-center justify-center bg-base-200 px-5 py-10 sm:px-8">
       <div className="w-full max-w-[420px]">
         <div className="mb-8 flex justify-center">
-          <Image src="/linki-wordmark.svg" alt="Linki" width={104} height={30} priority />
+          <span className="flex items-center gap-2.5"><Image src="/logo_kairo.svg" alt="" width={30} height={30} priority /><span className="text-[22px] font-semibold tracking-tight">Kairo</span></span>
         </div>
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-base-100 p-6 shadow-[var(--shadow-raised)] sm:p-8">
           <div className="mb-6">

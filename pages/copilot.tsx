@@ -88,7 +88,7 @@ export default function Copilot() {
 
   return (
     <>
-      <Head><title>Copilot — Linki</title></Head>
+      <Head><title>Copilot — Kairo</title></Head>
       <div className="-mt-2 mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
         <div>
           <div className="flex items-center gap-3"><RiBrainLine size={22} className="text-primary" /><div role="heading" aria-level={1} className="text-[24px] font-medium text-base-content">Copilot</div></div>

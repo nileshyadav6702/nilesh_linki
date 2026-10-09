@@ -76,7 +76,7 @@ export default function BrandSystemPage() {
   return (
     <>
       <Head>
-        <title>Design system — Linki</title>
+        <title>Design system — Kairo</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
 

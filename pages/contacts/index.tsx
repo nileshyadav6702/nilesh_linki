@@ -9,7 +9,7 @@ export const getServerSideProps = requireSignedIn;
 export default function Contacts() {
   return (
     <>
-      <Head><title>Contacts — Linki</title></Head>
+      <Head><title>Contacts — Kairo</title></Head>
       <ContactsHeader tab="contacts" />
       <ContactsWorkspace />
     </>

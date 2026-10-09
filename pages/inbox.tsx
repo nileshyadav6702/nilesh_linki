@@ -89,7 +89,7 @@ export default function Inbox() {
 
   return (
     <>
-      <Head><title>Inbox — Linki</title></Head>
+      <Head><title>Inbox — Kairo</title></Head>
       <div className="-mt-2 mb-5 border-b border-[var(--border-subtle)] pb-4">
         <div className="flex items-center gap-3"><RiInbox2Line size={22} className="text-primary" /><div role="heading" aria-level={1} className="text-[24px] font-medium">Inbox</div></div>
         <p className="mt-1 pl-1 text-[16px] text-base-content/65">One unified inbox for all your LinkedIn and email conversations</p>

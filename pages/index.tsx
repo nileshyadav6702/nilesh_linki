@@ -530,7 +530,7 @@ export default function Dashboard() {
   return (
     <>
     <Head>
-      <title>Dashboard — Linki</title>
+      <title>Dashboard — Kairo</title>
       <meta name="robots" content="noindex, nofollow" />
     </Head>
 

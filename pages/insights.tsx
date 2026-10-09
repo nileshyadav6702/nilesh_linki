@@ -97,7 +97,7 @@ export default function Insights() {
 
   return (
     <>
-      <Head><title>Insights — Linki</title></Head>
+      <Head><title>Insights — Kairo</title></Head>
       <div className="sticky top-16 z-30 -mx-4 -mt-6 mb-6 border-b border-[var(--border-subtle)] bg-base-100 px-4 pb-4 pt-5 md:top-0 md:-mx-10 md:-mt-9 md:px-10 md:pt-7">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
           <div>

@@ -2,298 +2,297 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/router";
 import { signOut, useSession } from "next-auth/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
-  RiArrowUpCircleLine,
-  RiCompassLine,
-  RiContactsLine,
-  RiInboxLine,
-  RiLogoutBoxLine,
-  RiPlayCircleLine,
-  RiQuestionLine,
-  RiSettings4Line,
-  RiAccountCircleLine,
-  RiPlugLine,
-  RiArrowDownSLine,
-  RiMenuLine,
-  RiCloseLine,
-  RiShieldUserLine,
-  RiRobot2Line,
-  RiBrainLine,
-  RiDashboard3Line,
-} from "react-icons/ri";
-import { LuChartBarDecreasing } from "react-icons/lu";
+  LuBrain, LuChartLine, LuChevronDown, LuChevronLeft, LuChevronRight, LuCircleArrowUp, LuCircleHelp, LuCirclePlay, LuCircleUser, LuCompass,
+  LuGauge, LuLogOut, LuMail, LuMenu, LuPlug, LuSettings, LuShieldCheck, LuUsers, LuWorkflow, LuX,
+} from "react-icons/lu";
+import { useDismiss } from "@/components/agents/leads/Listbox";
+import Notifications from "@/components/layout/Notifications";
+import { SIDEBAR_WIDTH, setSidebarCollapsed, useSidebarCollapsed } from "@/components/layout/useSidebar";
+import { BRAND } from "@/lib/brand";
 import { pathToTourPage, replayPageTour } from "@/lib/tour";
 
 const LEARNING_PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLBf6xNJOmsIQ";
 
-const dailyNav = [
-  { href: "/dashboard", label: "Dashboard", icon: RiDashboard3Line, tour: "nav-dashboard" },
-  { href: "/copilot", label: "Copilot", icon: RiBrainLine, tour: "nav-copilot" },
-  { href: "/agents", label: "Agents", icon: RiRobot2Line, tour: "nav-agents" },
+type Icon = ComponentType<{ size?: number; className?: string; strokeWidth?: number }>;
+interface NavItem { href: string; label: string; icon: Icon; tour: string }
+
+const NAV: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", icon: LuGauge, tour: "nav-dashboard" },
+  { href: "/copilot", label: "Copilot", icon: LuBrain, tour: "nav-copilot" },
+  { href: "/agents", label: "Agents", icon: LuWorkflow, tour: "nav-agents" },
   // Contacts covers both "All contacts" and "Lists" (tabs on the page).
-  { href: "/contacts", label: "Contacts", icon: RiContactsLine, tour: "nav-contacts" },
-  { href: "/inbox", label: "Inbox", icon: RiInboxLine, tour: "nav-inbox" },
-  { href: "/insights", label: "Insights", icon: LuChartBarDecreasing, tour: "nav-insights" },
+  { href: "/contacts", label: "Contacts", icon: LuUsers, tour: "nav-contacts" },
+  { href: "/inbox", label: "Inbox", icon: LuMail, tour: "nav-inbox" },
+  { href: "/insights", label: "Insights", icon: LuChartLine, tour: "nav-insights" },
 ];
-
-// Only rendered for instance administrators (SUPERADMIN_EMAILS). The flag is a UI
-// affordance only - /admin and /api/admin/* re-check the allowlist server-side.
-const adminNav = [
-  { href: "/admin", label: "Platform admin", icon: RiShieldUserLine, tour: "nav-admin" },
-];
-
-// Agents and Inbox sit on the phone bar. Records and workspace tools live in More.
-const mobilePrimary = [dailyNav[0], dailyNav[1], dailyNav[2]];
-
-export const SIDEBAR_WIDTH_EXPANDED = 264;
-export const SIDEBAR_WIDTH_COLLAPSED = 264;
-
-type NavItem = (typeof dailyNav)[number] | (typeof adminNav)[number];
-
-/** Settings sub-pages in the sidebar group. */
-const settingsNav = [
-  { href: "/settings", label: "Account settings", icon: RiAccountCircleLine, tab: null },
-  { href: "/settings?tab=integrations", label: "Integrations", icon: RiPlugLine, tab: "integrations" },
+// Only rendered for instance administrators (SUPERADMIN_EMAILS); /admin re-checks server-side.
+const ADMIN: NavItem = { href: "/admin", label: "Platform admin", icon: LuShieldCheck, tour: "nav-admin" };
+const SETTINGS = [
+  { href: "/settings", label: "Account settings", icon: LuCircleUser, tab: null },
+  { href: "/settings?tab=integrations", label: "Integrations", icon: LuPlug, tab: "integrations" },
 ] as const;
+const MOBILE_PRIMARY = NAV.slice(0, 3);
+
+const EASE = [0.22, 1, 0.36, 1] as const;
 
 function initials(value?: string | null) {
-  if (!value) return "LK";
-  return value.split(/\s|@/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("");
+  if (!value) return "K";
+  return value.split(/\s|@/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("");
 }
 
-export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boolean) => void }) {
+/** Label that fades / slides with the sidebar (hidden while collapsed). */
+function Label({ show, children, className = "" }: { show: boolean; children: ReactNode; className?: string }) {
+  return (
+    <AnimatePresence initial={false}>
+      {show && (
+        <motion.span initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={{ duration: 0.16 }}
+          className={`min-w-0 truncate whitespace-nowrap ${className}`}>
+          {children}
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/** Tooltip to the right of an icon, only while collapsed. */
+function Tip({ show, text }: { show: boolean; text: string }) {
+  if (!show) return null;
+  return (
+    <span role="tooltip" className="pointer-events-none invisible absolute left-full top-1/2 z-[60] ml-3 -translate-y-1/2 -translate-x-1 whitespace-nowrap rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-1.5 text-[14px] font-medium text-base-content opacity-0 shadow-[var(--shadow-overlay)] transition-all duration-150 group-hover:visible group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100">
+      {text}
+    </span>
+  );
+}
+
+export default function Sidebar() {
   const router = useRouter();
   const { data: session } = useSession();
+  const reduce = useReducedMotion();
+  const collapsed = useSidebarCollapsed();
+  const open = !collapsed;
+  const width = open ? SIDEBAR_WIDTH.open : SIDEBAR_WIDTH.closed;
   const isSuperadmin = Boolean(session?.user?.isSuperadmin);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  const [currentVersion, setCurrentVersion] = useState<string | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [hasCrm, setHasCrm] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const onSettings = ["/settings", "/accounts"].some((p) => router.pathname.startsWith(p));
   const [settingsOpen, setSettingsOpen] = useState(onSettings);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [update, setUpdate] = useState<{ current: string | null; latest: string | null; available: boolean }>({ current: null, latest: null, available: false });
   const helpRef = useRef<HTMLDivElement>(null);
+  const accountRef = useRef<HTMLDivElement>(null);
+  useDismiss(helpOpen, [helpRef], () => setHelpOpen(false));
+  useDismiss(accountOpen, [accountRef], () => setAccountOpen(false));
   const tourPage = pathToTourPage(router.pathname);
 
-  useEffect(() => { onCollapse?.(false); }, [onCollapse]);
-  // Close the mobile menu whenever navigation happens.
-  useEffect(() => { setMenuOpen(false); }, [router.pathname]);
-
   useEffect(() => {
-    if (!helpOpen) return;
-    function onClick(event: MouseEvent) {
-      if (helpRef.current && !helpRef.current.contains(event.target as Node)) setHelpOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [helpOpen]);
-
-  useEffect(() => {
-    fetch("/api/premium-status").then((response) => response.ok ? response.json() : null)
-      .then((data) => { if (data) setHasCrm(Boolean(data.capabilities?.crm)); }).catch(() => {});
-    fetch("/api/system/update").then((response) => response.json()).then((data) => {
-      setCurrentVersion(data.current ?? null);
-      setUpdateAvailable(Boolean(data.updateAvailable));
-      setLatestVersion(data.latest ?? null);
-    }).catch(() => {});
+    fetch("/api/system/update").then((r) => r.json()).then((d) => setUpdate({ current: d.current ?? null, latest: d.latest ?? null, available: Boolean(d.updateAvailable) })).catch(() => {});
   }, []);
+  // Close the phone menu whenever navigation happens.
+  useEffect(() => {
+    const close = () => setMenuOpen(false);
+    router.events.on("routeChangeStart", close);
+    return () => router.events.off("routeChangeStart", close);
+  }, [router.events]);
 
-  function isActive(href: string) {
-    if (href === "/") return router.pathname === "/";
-    if (href === "/settings") return ["/settings", "/accounts"].some((path) => router.pathname.startsWith(path));
-    if (href === "/contacts") return ["/contacts", "/lists"].some((path) => router.pathname.startsWith(path));
-    return router.pathname.startsWith(href);
-  }
+  const isActive = (href: string) => (href === "/contacts" ? ["/contacts", "/lists"].some((p) => router.pathname.startsWith(p)) : router.pathname.startsWith(href));
+  const tab = typeof router.query.tab === "string" ? router.query.tab : null;
+  const name = session?.user?.name ?? session?.user?.email?.split("@")[0] ?? "You";
+  const email = session?.user?.email ?? "";
+  const row = (active: boolean) => `group relative flex h-11 items-center rounded-[10px] text-[15px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${open ? "gap-3.5 px-3" : "justify-center"} ${active ? "bg-primary/[0.12] text-base-content" : "text-base-content/65 hover:bg-base-content/[0.05] hover:text-base-content"}`;
 
-  /** Settings: expands to Account settings and Integrations (tabs of /settings). */
-  function SettingsGroup({ mobile = false }: { mobile?: boolean }) {
-    const tab = typeof router.query.tab === "string" ? router.query.tab : null;
-    const row = mobile ? "h-11 text-[15px]" : "h-10 text-[14px]";
-    return (
-      <div>
-        <button type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((v) => !v)} data-tour="nav-settings"
-          className={`group flex w-full items-center gap-3 rounded-[8px] px-3 font-medium transition-colors ${row} ${onSettings ? "bg-base-300 text-base-content" : "text-base-content/65 hover:bg-base-300 hover:text-base-content"}`}>
-          <RiSettings4Line size={18} className={onSettings ? "text-base-content" : "text-base-content/45 group-hover:text-base-content/75"} />
-          <span className="flex-1 text-left">Settings</span>
-          <RiArrowDownSLine size={18} className={`text-base-content/55 transition-transform duration-200 ${settingsOpen ? "rotate-180" : ""}`} />
-        </button>
-        <div className={`grid transition-[grid-template-rows] duration-200 ${settingsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
-          <div className="overflow-hidden">
-            <div className="ml-[21px] mt-1 space-y-1 border-l border-[var(--border-subtle)] pl-3">
-              {settingsNav.map((s) => {
-                const active = router.pathname === "/settings" && (s.tab ? tab === s.tab : tab !== "integrations");
-                return (
-                  <Link key={s.href} href={s.href} onClick={() => setMenuOpen(false)} tabIndex={settingsOpen ? undefined : -1} aria-current={active ? "page" : undefined}
-                    className={`group flex items-center gap-3 rounded-[8px] px-3 font-medium transition-colors ${row} ${active ? "text-base-content" : "text-base-content/65 hover:bg-base-300 hover:text-base-content"}`}>
-                    <s.icon size={18} className={active ? "text-base-content" : "text-base-content/45 group-hover:text-base-content/75"} />{s.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function NavLink({ item }: { item: NavItem }) {
+  const navLink = (item: NavItem) => {
     const active = isActive(item.href);
-    if ("premium" in item && item.premium && !hasCrm) return null;
     return (
-      <Link
-        href={item.href}
-        data-tour={item.tour}
-        aria-current={active ? "page" : undefined}
-        className={`group relative flex h-10 items-center gap-3 rounded-[8px] px-3 text-[14px] transition-colors ${
-          active
-            ? "bg-base-300 font-medium text-base-content"
-            : "font-medium text-base-content/65 hover:bg-base-300 hover:text-base-content"
-        }`}
-      >
-        <item.icon size={18} className={active ? "text-base-content" : "text-base-content/45 group-hover:text-base-content/75"} />
-        <span>{item.label}</span>
+      <Link key={item.href} href={item.href} data-tour={item.tour} aria-current={active ? "page" : undefined} aria-label={open ? undefined : item.label} className={row(active)}>
+        {active && <motion.span layoutId="nav-active" transition={{ duration: reduce ? 0 : 0.28, ease: EASE }} className="absolute -left-3 top-1/2 h-6 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
+        <item.icon size={21} strokeWidth={1.8} className={`shrink-0 transition-colors ${active ? "text-base-content" : "text-base-content/60 group-hover:text-base-content"}`} />
+        <Label show={open}>{item.label}</Label>
+        <Tip show={!open} text={item.label} />
       </Link>
     );
-  }
-
-  const accountName = session?.user?.email ?? "Linki workspace";
+  };
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col border-r border-[var(--border-subtle)] bg-base-100 md:flex">
-        <Link href="/dashboard" className="flex h-16 shrink-0 items-center gap-3 px-5">
-          <Image src="/logo_linki.svg" alt="Linki" width={28} height={28} priority />
-          <span className="font-display text-[22px] text-base-content">Linki</span>
-        </Link>
-
-        <div className="flex-1 overflow-y-auto px-3 py-3">
-          <NavSection label="" items={dailyNav} renderItem={(item) => <NavLink key={item.href} item={item} />} after={<SettingsGroup />} />
-          {isSuperadmin && (
-            <NavSection label="Instance" items={adminNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
+      <motion.aside initial={false} animate={{ width }} transition={{ duration: reduce ? 0 : 0.3, ease: EASE }}
+        className="fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-[var(--border-subtle)] bg-base-100 md:flex">
+        {/* Brand, notifications, collapse */}
+        <div className={`flex shrink-0 items-center pt-5 ${open ? "h-[72px] gap-2 px-5" : "h-[72px] justify-center px-0"}`}>
+          <Link href="/dashboard" aria-label={`${BRAND.name} home`} className="flex min-w-0 flex-1 items-center gap-2.5" style={open ? undefined : { flex: "none" }}>
+            <Image src={BRAND.logo} alt="" width={32} height={32} priority className="shrink-0" />
+            <Label show={open} className="text-[22px] font-semibold tracking-tight text-base-content">{BRAND.name}</Label>
+          </Link>
+          {open && <Notifications sidebarWidth={width} />}
+          {open && (
+            <button type="button" onClick={() => setSidebarCollapsed(true)} aria-label="Collapse sidebar" title="Collapse sidebar"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content"><LuChevronLeft size={20} /></button>
           )}
         </div>
-
-        <div className="shrink-0 p-3">
-          {updateAvailable && (
-            <div className="mb-2 rounded-[10px] border border-warning/25 bg-warning/[0.08] p-3">
-              <div className="flex items-center gap-2 text-[11px] font-semibold text-warning">
-                <RiArrowUpCircleLine size={15} /> Update available
-              </div>
-              <p className="mt-1 text-[10px] text-warning/70">Linki {latestVersion ? `v${latestVersion}` : "has a new release"}</p>
-            </div>
-          )}
-
-          <div className="relative" ref={helpRef}>
-            <button
-              type="button"
-              onClick={() => setHelpOpen((open) => !open)}
-              className="flex h-10 w-full items-center gap-3 rounded-[10px] px-3 text-[14px] font-medium text-base-content/65 transition-colors hover:bg-base-300 hover:text-base-content"
-            >
-              <RiQuestionLine size={18} className="text-base-content/45" /> Help & learning
+        {!open && (
+          <div className="flex flex-col items-center gap-1 pt-3">
+            <button type="button" onClick={() => setSidebarCollapsed(false)} aria-label="Expand sidebar"
+              className="group relative flex h-9 w-9 items-center justify-center rounded-[10px] text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content">
+              <LuChevronRight size={20} /><Tip show text="Expand" />
             </button>
-            {helpOpen && (
-              <div className="absolute bottom-12 left-0 w-full overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1.5 shadow-[var(--shadow-popover)]">
-                {tourPage && (
-                  <button
-                    type="button"
-                    onClick={() => { replayPageTour(tourPage); setHelpOpen(false); }}
-                    className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[13px] text-base-content/70 hover:bg-base-200 hover:text-base-content"
-                  >
-                    <RiCompassLine size={15} /> Replay page tour
-                  </button>
-                )}
-                <a href={LEARNING_PLAYLIST_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-[13px] text-base-content/70 hover:bg-base-200 hover:text-base-content">
-                  <RiPlayCircleLine size={15} /> Learning resources
-                </a>
-              </div>
+            <Notifications sidebarWidth={width} />
+          </div>
+        )}
+
+        <nav aria-label="Primary" className={`flex-1 px-3 pb-3 pt-5 ${open ? "overflow-y-auto" : ""}`}>
+          <div className="space-y-1.5">
+            {NAV.map(navLink)}
+          </div>
+
+          <div className="mt-6">
+            {open ? (
+              <>
+                <button type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((v) => !v)} data-tour="nav-settings" className={`${row(onSettings && !settingsOpen)} w-full`}>
+                  {onSettings && !settingsOpen && <motion.span layoutId="nav-active" className="absolute -left-3 top-1/2 h-6 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
+                  <LuSettings size={21} strokeWidth={1.8} className="shrink-0 text-base-content/60 group-hover:text-base-content" />
+                  <Label show className="flex-1 text-left">Settings</Label>
+                  <LuChevronDown size={19} className={`shrink-0 text-base-content/55 transition-transform duration-200 ${settingsOpen ? "rotate-180" : ""}`} />
+                </button>
+                <AnimatePresence initial={false}>
+                  {settingsOpen && (
+                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduce ? 0 : 0.22, ease: EASE }} className="overflow-hidden">
+                      <div className="ml-[22px] mt-1 space-y-1 border-l border-[var(--border-subtle)] pl-3">
+                        {SETTINGS.map((s) => {
+                          const active = router.pathname === "/settings" && (s.tab ? tab === s.tab : tab !== "integrations");
+                          return (
+                            <Link key={s.href} href={s.href} aria-current={active ? "page" : undefined} className={row(active)}>
+                              {active && <motion.span layoutId="nav-active" transition={{ duration: reduce ? 0 : 0.28, ease: EASE }} className="absolute -left-[13px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-primary" />}
+                              <s.icon size={19} strokeWidth={1.8} className={`shrink-0 ${active ? "text-base-content" : "text-base-content/55 group-hover:text-base-content"}`} />
+                              <span className="truncate whitespace-nowrap">{s.label}</span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            ) : (
+              <Link href="/settings" aria-label="Settings" data-tour="nav-settings" className={row(onSettings)}>
+                {onSettings && <motion.span layoutId="nav-active" className="absolute -left-3 top-1/2 h-6 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
+                <LuSettings size={21} strokeWidth={1.8} className={`shrink-0 ${onSettings ? "text-base-content" : "text-base-content/60 group-hover:text-base-content"}`} />
+                <Tip show text="Settings" />
+              </Link>
             )}
+            {isSuperadmin && <div className="mt-1.5">{navLink(ADMIN)}</div>}
+          </div>
+        </nav>
+
+        <div className="shrink-0 space-y-1.5 border-t border-[var(--border-subtle)] p-3">
+          {update.available && open && (
+            <div className="mb-1 flex items-start gap-2.5 rounded-[10px] border border-warning/25 bg-warning/[0.08] px-3 py-2.5">
+              <LuCircleArrowUp size={17} className="mt-0.5 shrink-0 text-warning" />
+              <div className="min-w-0 text-[12px] leading-snug"><div className="font-semibold text-warning">Update available</div><div className="text-warning/75">{BRAND.name} {update.latest ? `v${update.latest}` : "has a new release"}</div></div>
+            </div>
+          )}
+
+          <div ref={helpRef} className="relative">
+            <button type="button" onClick={() => setHelpOpen((v) => !v)} aria-expanded={helpOpen} aria-label={open ? undefined : "Help & learning"} className={`${row(false)} w-full`}>
+              <LuCircleHelp size={21} strokeWidth={1.8} className="shrink-0 text-base-content/60 group-hover:text-base-content" />
+              <Label show={open}>Help &amp; learning</Label>
+              <Tip show={!open && !helpOpen} text="Help & learning" />
+            </button>
+            <AnimatePresence>
+              {helpOpen && (
+                <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.14 }}
+                  className={`absolute z-[60] w-[240px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1.5 shadow-[var(--shadow-overlay)] ${open ? "bottom-full left-0 mb-2" : "bottom-0 left-full ml-3"}`}>
+                  {tourPage && (
+                    <button type="button" onClick={() => { replayPageTour(tourPage); setHelpOpen(false); }} className="flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-left text-[14px] text-base-content/80 hover:bg-base-200 hover:text-base-content">
+                      <LuCompass size={17} /> Replay page tour
+                    </button>
+                  )}
+                  <a href={LEARNING_PLAYLIST_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-[14px] text-base-content/80 hover:bg-base-200 hover:text-base-content">
+                    <LuCirclePlay size={17} /> Learning resources
+                  </a>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
-          <div className="mt-3 flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-2.5">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-neutral text-[11px] font-semibold text-neutral-content">
-              {initials(accountName)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[12px] font-semibold text-base-content/85">{accountName}</p>
-              <p className="text-[10px] text-base-content/45">{currentVersion ? `v${currentVersion}` : "Self-hosted"}</p>
-            </div>
-            <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} title="Sign out" className="flex h-8 w-8 items-center justify-center rounded-[9px] text-base-content/50 transition-colors hover:bg-error/10 hover:text-error">
-              <RiLogoutBoxLine size={15} />
+          <div ref={accountRef} className="relative">
+            <button type="button" onClick={() => setAccountOpen((v) => !v)} aria-expanded={accountOpen} aria-label={`Account: ${email || name}`}
+              className={`group relative flex w-full items-center rounded-[12px] transition-colors hover:bg-base-200/80 ${open ? "gap-3 p-2" : "justify-center p-1.5"} ${accountOpen ? "bg-base-200/80" : ""}`}>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#f29a6b] to-[#d4553a] text-[14px] font-semibold text-white">{initials(name)}</span>
+              {open && (
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="block truncate text-[14px] font-semibold text-base-content">{name}</span>
+                  <span className="block truncate text-[12px] text-base-content/50">{email || (update.current ? `v${update.current}` : "Self-hosted")}</span>
+                </span>
+              )}
+              <Tip show={!open && !accountOpen} text={email || name} />
             </button>
+            <AnimatePresence>
+              {accountOpen && (
+                <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={{ duration: 0.14 }}
+                  className={`absolute z-[60] w-[240px] rounded-[14px] border border-[var(--border-subtle)] bg-base-100 p-1.5 shadow-[var(--shadow-overlay)] ${open ? "bottom-full left-0 mb-2" : "bottom-0 left-full ml-3"}`}>
+                  <div className="border-b border-[var(--border-subtle)] px-3 pb-2.5 pt-2">
+                    <div className="truncate text-[14px] font-semibold">{name}</div>
+                    <div className="truncate text-[12px] text-base-content/50">{email}{update.current ? ` · v${update.current}` : ""}</div>
+                  </div>
+                  <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="mt-1 flex w-full items-center gap-2.5 rounded-[8px] px-3 py-2.5 text-left text-[15px] text-error hover:bg-error/10">
+                    <LuLogOut size={17} /> Sign out
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
-      </aside>
+      </motion.aside>
 
+      {/* Phone: bottom bar with the first pages, and a full menu. */}
       <nav aria-label="Primary navigation" className="fixed inset-x-3 bottom-3 z-40 flex h-16 items-center justify-around rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-2 shadow-[var(--shadow-popover)] md:hidden">
-        {mobilePrimary.map((item) => {
+        {MOBILE_PRIMARY.map((item) => {
           const active = isActive(item.href);
           return (
-            <Link key={item.href} href={item.href} aria-label={item.label} aria-current={active ? "page" : undefined} className={`flex h-11 w-11 items-center justify-center rounded-[12px] transition-colors ${active ? "bg-base-300 text-base-content" : "text-base-content/55"}`}>
-              <item.icon size={20} />
+            <Link key={item.href} href={item.href} aria-label={item.label} aria-current={active ? "page" : undefined} className={`flex h-11 w-11 items-center justify-center rounded-[12px] transition-colors ${active ? "bg-primary/[0.09] text-base-content" : "text-base-content/55"}`}>
+              <item.icon size={21} strokeWidth={1.8} />
             </Link>
           );
         })}
-        <button type="button" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-[12px] text-base-content/55">
-          <RiMenuLine size={20} />
-        </button>
+        <button type="button" aria-label="More" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)} className="flex h-11 w-11 items-center justify-center rounded-[12px] text-base-content/55"><LuMenu size={21} /></button>
       </nav>
 
-      {/* Full mobile menu — every page (Settings, People, Companies, Tasks, Deliverability…). */}
-      {menuOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
-          <div className="absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col overflow-y-auto rounded-t-[20px] border-t border-[var(--border-subtle)] bg-base-100 px-4 pb-8 pt-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-semibold text-base-content">Menu</span>
-              <button type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-base-content/50 hover:bg-base-200">
-                <RiCloseLine size={18} />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <MobileSection label="" items={dailyNav} render={(item) => <MobileLink key={item.href} item={item} />} />
-              <SettingsGroup mobile />
-              {isSuperadmin && <MobileSection label="Instance" items={adminNav} render={(item) => <MobileLink key={item.href} item={item} />} />}
-              <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-200 p-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-neutral text-[11px] font-semibold text-neutral-content">{initials(accountName)}</div>
-                <p className="min-w-0 flex-1 truncate text-[12px] font-semibold text-base-content/85">{accountName}</p>
-                <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-base-content/60 hover:bg-error/10 hover:text-error">
-                  <RiLogoutBoxLine size={15} /> Sign out
-                </button>
+      <AnimatePresence>
+        {menuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <motion.button type="button" aria-label="Close menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/40" onClick={() => setMenuOpen(false)} />
+            <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} transition={{ duration: 0.28, ease: EASE }}
+              className="absolute inset-x-0 bottom-0 flex max-h-[88vh] flex-col overflow-y-auto rounded-t-[20px] border-t border-[var(--border-subtle)] bg-base-100 px-4 pb-8 pt-3">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="flex items-center gap-2"><Image src={BRAND.logo} alt="" width={24} height={24} /><span className="text-[16px] font-semibold">{BRAND.name}</span></span>
+                <button type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)} className="flex h-9 w-9 items-center justify-center rounded-lg text-base-content/55 hover:bg-base-200"><LuX size={19} /></button>
               </div>
-            </div>
+              <div className="space-y-1">
+                {[...NAV, ...(isSuperadmin ? [ADMIN] : [])].map((item) => {
+                  const active = isActive(item.href);
+                  return (
+                    <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`flex h-12 items-center gap-3.5 rounded-[10px] px-3 text-[16px] font-medium ${active ? "bg-primary/[0.09] text-base-content" : "text-base-content/75 hover:bg-base-200"}`}>
+                      <item.icon size={21} strokeWidth={1.8} className={active ? "text-base-content" : "text-base-content/55"} />{item.label}
+                    </Link>
+                  );
+                })}
+                {SETTINGS.map((s) => (
+                  <Link key={s.href} href={s.href} className="flex h-12 items-center gap-3.5 rounded-[10px] px-3 text-[16px] font-medium text-base-content/75 hover:bg-base-200">
+                    <s.icon size={21} strokeWidth={1.8} className="text-base-content/55" />{s.label}
+                  </Link>
+                ))}
+              </div>
+              <div className="mt-4 flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-200/60 p-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#f29a6b] to-[#d4553a] text-[14px] font-semibold text-white">{initials(name)}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-[14px] font-semibold">{name}</span><span className="block truncate text-[12px] text-base-content/50">{email}</span></span>
+                <button type="button" onClick={() => signOut({ callbackUrl: "/login" })} className="inline-flex items-center gap-1.5 rounded-[8px] px-3 py-2 text-[14px] text-error hover:bg-error/10"><LuLogOut size={16} /> Sign out</button>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </>
-  );
-
-  function MobileLink({ item }: { item: NavItem }) {
-    if ("premium" in item && item.premium && !hasCrm) return null;
-    const active = isActive(item.href);
-    return (
-      <Link href={item.href} onClick={() => setMenuOpen(false)} aria-current={active ? "page" : undefined} className={`flex h-11 items-center gap-3 rounded-[8px] px-3 text-[15px] ${active ? "bg-base-300 font-medium text-base-content" : "font-medium text-base-content/70 hover:bg-base-200"}`}>
-        <item.icon size={19} className={active ? "text-base-content" : "text-base-content/45"} /> <span>{item.label}</span>
-      </Link>
-    );
-  }
-}
-
-function MobileSection({ label, items, render }: { label: string; items: readonly NavItem[]; render: (item: NavItem) => React.ReactNode }) {
-  return (
-    <div>
-      {label ? <h3 className="mb-1 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">{label}</h3> : null}
-      <div className="space-y-1">{items.map(render)}</div>
-    </div>
-  );
-}
-
-function NavSection<T>({ label, items, renderItem, after }: { label: string; items: readonly T[]; renderItem: (item: T) => React.ReactNode; after?: React.ReactNode }) {
-  return (
-    <section className="mb-6">
-      {label ? <h2 className="mb-2 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">{label}</h2> : null}
-      <nav className="space-y-1">{items.map(renderItem)}{after}</nav>
-    </section>
   );
 }

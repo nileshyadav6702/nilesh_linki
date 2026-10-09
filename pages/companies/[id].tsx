@@ -79,7 +79,7 @@ export default function CompanyDetailPage({ company }: { company: Company }) {
   return (
     <>
       <Head>
-        <title>{company.name} — Companies — Linki</title>
+        <title>{company.name} — Companies — Kairo</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
       <div className="max-w-2xl">

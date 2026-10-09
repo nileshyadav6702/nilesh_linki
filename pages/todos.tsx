@@ -55,7 +55,7 @@ export default function TodosPage({ todos: initialTodos }: { todos: TodoWithCont
 
   return (
     <>
-      <Head><title>Todos — Linki</title></Head>
+      <Head><title>Todos — Kairo</title></Head>
       <div className="max-w-3xl space-y-6">
         {/* Page header */}
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">

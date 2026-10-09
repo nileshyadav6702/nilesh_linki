@@ -22,7 +22,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   if (status === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-base-200">
-        <span className="loading loading-spinner loading-sm text-primary" aria-label="Loading Linki" />
+        <span className="loading loading-spinner loading-sm text-primary" aria-label="Loading Kairo" />
       </div>
     );
   }

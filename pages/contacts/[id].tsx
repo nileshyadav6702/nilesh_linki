@@ -902,7 +902,7 @@ export default function ContactDetailPage({
   return (
     <>
       <Head>
-        <title>{target.full_name ?? "Contact"} — Linki</title>
+        <title>{target.full_name ?? "Contact"} — Kairo</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
       {showTodoModal && (

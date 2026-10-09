@@ -288,7 +288,7 @@ export default function NewAgent() {
 
   return (
     <>
-      <Head><title>New agent — Linki</title></Head>
+      <Head><title>New agent — Kairo</title></Head>
       <div className="mb-8 border-b border-[var(--border-subtle)] pb-5">
         <div className="flex items-center gap-3"><RiBroadcastLine size={20} className="text-primary" /><h1 className="text-[22px] font-medium text-base-content">Outreach Agents</h1></div>
         <p className="mt-1 pl-1 text-[15px] text-base-content/65">Manage your automated outreach agents</p>

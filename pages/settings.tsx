@@ -202,7 +202,7 @@ export default function SettingsPage({
   return (
     <>
       <Head>
-        <title>Settings — Linki</title>
+        <title>Settings — Kairo</title>
         <meta name="robots" content="noindex, nofollow" />
       </Head>
 
@@ -1020,7 +1020,7 @@ function EmailTab({ initialAccounts }: { initialAccounts: EmailAccount[] }) {
               </div>
               <div>
                 <h3 className="font-semibold text-base">Connect Gmail with an app password</h3>
-                <p className="text-xs text-base-content/50 mt-1">Linki will verify Gmail sending and inbox access before storing the encrypted credential.</p>
+                <p className="text-xs text-base-content/50 mt-1">Kairo will verify Gmail sending and inbox access before storing the encrypted credential.</p>
               </div>
             </div>
 
@@ -1032,7 +1032,7 @@ function EmailTab({ initialAccounts }: { initialAccounts: EmailAccount[] }) {
                   <a className="text-primary hover:underline" href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">
                     Google App Passwords
                   </a>
-                  {" "}and create one for Linki.
+                  {" "}and create one for Kairo.
                 </li>
                 <li>Paste the 16-character password below. Spaces are accepted.</li>
               </ol>
@@ -1647,7 +1647,7 @@ function AiTab() {
       <div className="bg-base-100 border border-[var(--border-subtle)] rounded-2xl shadow-[var(--shadow-raised)] p-5 flex flex-col gap-4">
         <div>
           <h3 className="text-[15px] font-semibold">Writing style (optional)</h3>
-          <p className="text-[13px] text-base-content/50 mt-1">Guide how AI writes outreach across every campaign. Leave blank to use Linki&apos;s defaults.</p>
+          <p className="text-[13px] text-base-content/50 mt-1">Guide how AI writes outreach across every campaign. Leave blank to use Kairo&apos;s defaults.</p>
         </div>
         <label className="flex flex-col gap-1.5">
           <span className="text-[13px] font-medium text-base-content">System prompt</span>
@@ -1844,7 +1844,7 @@ function McpCard() {
       {expanded && (
         <div className="px-4 pb-4">
           <p className="text-xs text-base-content/50 mb-3 leading-relaxed">
-            Connect Claude Code, Claude.ai, Cursor, or any MCP-compatible AI agent to this Linki instance —
+            Connect Claude Code, Claude.ai, Cursor, or any MCP-compatible AI agent to this Kairo instance —
             it can read contacts, launch campaigns, and review replies on your behalf.
           </p>
 
@@ -1881,7 +1881,7 @@ function McpCard() {
             </div>
             <p>
               Other agents (Cursor, Claude desktop/web, etc.) — add it as an HTTP MCP server / connector
-              using the URL above. You&apos;ll be prompted to sign in to Linki in the browser on first use.
+              using the URL above. You&apos;ll be prompted to sign in to Kairo in the browser on first use.
             </p>
           </div>
         </div>

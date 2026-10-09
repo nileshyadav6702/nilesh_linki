@@ -9,11 +9,11 @@ interface Props { clientName: string; params: Record<string, string>; scopes: st
 
 export default function OAuthAuthorize({ clientName, params, scopes, workspaceName }: Props) {
   return <>
-    <Head><title>Authorize MCP — Linki</title><meta name="robots" content="noindex,nofollow" /></Head>
+    <Head><title>Authorize MCP — Kairo</title><meta name="robots" content="noindex,nofollow" /></Head>
     <main className="flex min-h-screen items-center justify-center bg-base-200 px-5 py-10 sm:px-8">
       <div className="w-full max-w-[420px]">
         <div className="mb-8 flex justify-center">
-          <Image src="/linki-wordmark.svg" alt="Linki" width={104} height={30} priority />
+          <span className="flex items-center gap-2.5"><Image src="/logo_kairo.svg" alt="" width={30} height={30} priority /><span className="text-[22px] font-semibold tracking-tight">Kairo</span></span>
         </div>
         <div className="rounded-2xl border border-[var(--border-subtle)] bg-base-100 p-6 shadow-[var(--shadow-raised)] sm:p-8">
           <div className="mb-6">
@@ -62,5 +62,5 @@ export const getServerSideProps: GetServerSideProps<Props> = async (ctx) => {
     scope: scopes.join(" "), resource,
   };
   if (typeof q.state === "string") params.state = q.state;
-  return { props: { clientName: client.client_name || "MCP client", params, scopes: scopes.length ? scopes : [...MCP_SCOPES], workspaceName: session.user?.workspaceName ?? "your Linki workspace" } };
+  return { props: { clientName: client.client_name || "MCP client", params, scopes: scopes.length ? scopes : [...MCP_SCOPES], workspaceName: session.user?.workspaceName ?? "your Kairo workspace" } };
 };

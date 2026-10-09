@@ -106,7 +106,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <Head><title>Dashboard — Linki</title></Head>
+      <Head><title>Dashboard — Kairo</title></Head>
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div className="insights-rise flex items-center gap-3 pt-2">
           <div role="heading" aria-level={1} className="text-[36px] font-semibold tracking-tight text-base-content">Welcome{name ? ` ${name}` : ""}</div>

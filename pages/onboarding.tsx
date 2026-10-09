@@ -289,7 +289,7 @@ export default function Onboarding() {
 
   return (
     <>
-      <Head><title>Start your first agent — Linki</title></Head>
+      <Head><title>Start your first agent — Kairo</title></Head>
       <OnboardShell phase={phase} stepLabel={stepLabel} ai={ai} footer={showFooter ? (
         <StepFooter
           onBack={back}

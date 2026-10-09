@@ -70,7 +70,7 @@ export default function PlatformPage() {
   ], [data.signals, inbox, pipeline]);
 
   return <>
-    <Head><title>Platform — Linki</title></Head>
+    <Head><title>Platform — Kairo</title></Head>
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>

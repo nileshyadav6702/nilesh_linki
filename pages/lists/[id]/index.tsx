@@ -151,7 +151,7 @@ export default function ListDetail() {
 
   return (
     <>
-      <Head><title>{list?.name ?? "List"} — Linki</title></Head>
+      <Head><title>{list?.name ?? "List"} — Kairo</title></Head>
       <div className="-mt-2 mb-5 flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border-subtle)] pb-4">
         <div className="min-w-0">
           <Link href="/lists" className="mb-1 inline-flex items-center gap-1 text-[14px] text-base-content/55 hover:text-base-content"><RiArrowLeftSLine size={16} /> Lists</Link>

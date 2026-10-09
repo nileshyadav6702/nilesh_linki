@@ -134,7 +134,7 @@ export default function AgentDetail() {
 
   return (
     <>
-      <Head><title>{a.name} — Agents — Linki</title></Head>
+      <Head><title>{a.name} — Agents — Kairo</title></Head>
       <div className="space-y-6">
         <AgentHeader
           name={a.name} status={a.status} outreachOn={sending} senders={d.senders} busy={busy}
