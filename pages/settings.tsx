@@ -10,19 +10,20 @@ import {
   RiAddLine, RiDeleteBinLine, RiEditLine, RiMailLine,
   RiShieldCheckLine, RiShieldKeyholeLine, RiSmartphoneLine, RiDownloadLine, RiCheckLine, RiCloseLine,
   RiLockPasswordLine, RiPlugLine,
-  RiLinkedinBoxLine, RiMessage2Line, RiSettings3Line, RiFileCopyLine,
+  RiLinkedinBoxLine, RiMessage2Line, RiSettings3Line, RiFileCopyLine, RiBuilding2Line,
   RiLockLine, RiLockUnlockLine, RiFlashlightLine, RiArrowDownSLine, RiCompassLine,
   RiRobot2Line, RiPauseLine, RiPlayLine,
 } from "react-icons/ri";
 import { ModelPicker, type OrModel } from "@/components/ui/ModelPicker";
 import DateField from "@/components/ui/DateField";
+import WorkspaceTab from "@/components/settings/WorkspaceTab";
 import { Bar, BarChart, Cell, ResponsiveContainer } from "recharts";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ALL_TOUR_PAGES, TOUR_PAGE_LABELS, replayPageTour, type TourPage } from "@/lib/tour";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "linkedin" | "email" | "templates" | "integrations" | "ai" | "general";
+type Tab = "workspace" | "linkedin" | "email" | "templates" | "integrations" | "ai" | "general";
 
 interface LiAccount {
   id: string; name: string; email: string;
@@ -68,17 +69,18 @@ export const getServerSideProps: GetServerSideProps = async ({ query, req, res }
     .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at FROM email_accounts WHERE workspace_id=? ORDER BY created_at DESC")
     .all(workspaceId);
   const templates = db.prepare("SELECT * FROM templates WHERE workspace_id=? ORDER BY created_at DESC").all(workspaceId);
-  const validTabs: Tab[] = ["linkedin", "email", "templates", "integrations", "ai", "general"];
-  const tab: Tab = validTabs.includes(query.tab as Tab) ? (query.tab as Tab) : "linkedin";
+  const validTabs: Tab[] = ["workspace", "linkedin", "email", "templates", "integrations", "ai", "general"];
+  const tab: Tab = validTabs.includes(query.tab as Tab) ? (query.tab as Tab) : "workspace";
   return { props: { liAccounts, emailAccounts, templates, initialTab: tab } };
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
-  { key: "linkedin", label: "LinkedIn", icon: RiLinkedinBoxLine },
-  { key: "email", label: "Email", icon: RiMailLine },
-  { key: "templates", label: "Templates", icon: RiMessage2Line },
+  { key: "workspace", label: "Workspace", icon: RiBuilding2Line },
+  { key: "linkedin", label: "LinkedIn accounts", icon: RiLinkedinBoxLine },
+  { key: "email", label: "Email accounts", icon: RiMailLine },
+  { key: "templates", label: "AI Outreach Templates", icon: RiMessage2Line },
   { key: "integrations", label: "Integrations", icon: RiPlugLine },
   { key: "ai", label: "AI", icon: RiRobot2Line },
   { key: "general", label: "General", icon: RiSettings3Line },
@@ -206,40 +208,34 @@ export default function SettingsPage({
         <meta name="robots" content="noindex, nofollow" />
       </Head>
 
-      <div className="max-w-3xl">
-        {/* Page header */}
-        <div className="mb-6">
-          <p className="mb-2 text-[13px] font-medium text-base-content/45">Workspace</p>
-          <h1 className="text-[30px] font-semibold leading-[1.1] tracking-[-.03em] text-base-content">Settings</h1>
-          <p className="mt-2 text-[15px] text-base-content/50">Accounts, integrations, and preferences.</p>
+      <div>
+        <div className="-mx-4 -mt-6 border-b border-[var(--border-subtle)] px-4 pt-6 md:-mx-10 md:-mt-9 md:px-10 md:pt-8">
+          <div className="flex items-center gap-3"><RiSettings3Line size={24} className="text-primary" /><div role="heading" aria-level={1} className="text-[24px] font-semibold text-base-content">Account Settings</div></div>
+          <div className="mt-1.5 pl-[36px] text-[16px] text-base-content/65">Manage your company information and workspace settings</div>
+          {/* Tabs */}
+          <div className="mt-6 flex items-center gap-8 overflow-x-auto">
+            {visibleTabs.map(({ key, label }) => (
+              <button key={key} data-tour={`settings-tab-${key}`} onClick={() => switchTab(key)} aria-current={tab === key ? "page" : undefined}
+                className={`relative whitespace-nowrap pb-4 pt-1 transition-colors ${tab === key ? "text-base-content" : "text-base-content/50 hover:text-base-content/80"}`}>
+                <span className="text-[17px]">{label}</span>
+                {tab === key && <span className="absolute inset-x-0 bottom-0 h-[2.5px] rounded-full bg-base-content" />}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div className="mb-6 flex items-center gap-1 overflow-x-auto border-b border-[var(--border-subtle)]">
-          {visibleTabs.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              data-tour={`settings-tab-${key}`}
-              onClick={() => switchTab(key)}
-              className={`relative -mb-px flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                tab === key
-                  ? "border-primary text-base-content"
-                  : "border-transparent text-base-content/40 hover:text-base-content/70"
-              }`}
-            >
-              <Icon size={14} />
-              {label}
-            </button>
-          ))}
-        </div>
-
+        <div className="pt-7">
         {/* Tab content */}
+        {tab === "workspace" && <WorkspaceTab />}
+        <div className="max-w-3xl">
         {tab === "linkedin" && <LinkedInTab initialAccounts={initialLi} />}
         {tab === "email" && <EmailTab initialAccounts={initialEmail} />}
         {tab === "templates" && <TemplatesTab initialTemplates={initialTemplates} />}
         {tab === "integrations" && <IntegrationsTab />}
         {tab === "ai" && <AiTab />}
         {tab === "general" && <GeneralTab hasMcp={hasMcp} />}
+        </div>
+        </div>
       </div>
     </>
   );

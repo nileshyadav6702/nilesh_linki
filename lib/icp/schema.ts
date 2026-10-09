@@ -23,6 +23,9 @@ export type MatchMode = (typeof MATCH_MODES)[number];
 export const icpSchema = z.object({
   company_name: str(160).default(""),
   company_industry: str(120).default(""),
+  /** Your own headcount band (e.g. "11-50"), not the buyers' sizes (company_sizes). */
+  company_size: str(40).default(""),
+  company_linkedin_url: str(300).default(""),
   offer: str(1200).default(""),
   value_props: list(12, 300),
   social_proof: list(12, 400),
