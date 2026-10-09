@@ -28,8 +28,9 @@ export function contactParams(f: ContactFilters, q: string, extra: Record<string
   }).filter(([, v]) => v));
 }
 
-export function useContacts() {
-  const [filters, setFilters] = useState<ContactFilters>(EMPTY_FILTERS);
+/** `base`: filters that are always on (a list page passes its list). */
+export function useContacts(base: Partial<ContactFilters> = {}) {
+  const [filters, setFilters] = useState<ContactFilters>(() => ({ ...EMPTY_FILTERS, ...base }));
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
   const [pageSize, setPageSizeState] = useState(100);
@@ -49,7 +50,8 @@ export function useContacts() {
   useEffect(() => { const t = setTimeout(load, 200); return () => clearTimeout(t); }, [load]);
 
   const patch = useCallback((p: Partial<ContactFilters>) => { setFilters((f) => ({ ...f, ...p })); setPage(0); }, []);
-  const clear = useCallback(() => { setFilters(EMPTY_FILTERS); setPage(0); }, []);
+  const baseKey = JSON.stringify(base);
+  const clear = useCallback(() => { setFilters({ ...EMPTY_FILTERS, ...(JSON.parse(baseKey) as Partial<ContactFilters>) }); setPage(0); }, [baseKey]);
   const search = useCallback((v: string) => { setQ(v); setPage(0); }, []);
   const setPageSize = useCallback((n: number) => { setPageSizeState(n); setPage(0); }, []);
   return { filters, patch, clear, q, search, page, setPage, pageSize, setPageSize, rows, total, signals, error, load };

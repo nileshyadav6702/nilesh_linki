@@ -11,6 +11,7 @@ import type { ContactRow } from "@/components/contacts/useContacts";
 
 const SIZES_KEY = "linki.contacts.columns.v1";
 const CHECK_W = 56;
+const NO_HIDDEN: string[] = [];
 
 function ContactAvatar({ name, src }: { name: string | null; src?: string | null }) {
   const initials = (name ?? "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("") || "?";
@@ -36,20 +37,33 @@ function RowMenu({ row, onRemove, onDelete }: { row: ContactRow; onRemove: () =>
   );
 }
 
-export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpen, onDecide, onRemove, onDelete, onChanged }: {
+export interface ResearchResult { verdict: string; summary: string | null }
+
+const VERDICT: Record<string, { label: string; cls: string }> = {
+  match: { label: "Match", cls: "bg-success/15 text-[#2f7a43]" },
+  no_match: { label: "No match", cls: "bg-error/10 text-error" },
+  unknown: { label: "Unclear", cls: "bg-base-200 text-base-content/60" },
+};
+
+export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpen, onDecide, onRemove, onDelete, onChanged, research, hidden = NO_HIDDEN, sizesKey = SIZES_KEY }: {
   rows: ContactRow[]; selected: Set<string>; toggle: (id: string) => void; toggleAll: (on: boolean) => void;
   onOpen: (id: string) => void; onDecide: (id: string, d: "approve" | "reject") => Promise<void>;
   onRemove: (id: string) => void; onDelete: (id: string) => void; onChanged: () => void;
+  /** List view: per-contact deep research results; adds a "Research result" column. */
+  research?: Record<string, ResearchResult>;
+  /** Column ids to leave out (e.g. "list" inside a list). */
+  hidden?: string[];
+  sizesKey?: string;
 }) {
   const [pinned, setPinned] = useState(true);
   const [scrolled, setScrolled] = useState(false);
   const [sizing, setSizing] = useState<ColumnSizingState>(() => {
     if (typeof window === "undefined") return {};
-    try { return JSON.parse(window.localStorage.getItem(SIZES_KEY) ?? "{}") as ColumnSizingState; } catch { return {}; }
+    try { return JSON.parse(window.localStorage.getItem(sizesKey) ?? "{}") as ColumnSizingState; } catch { return {}; }
   });
-  useEffect(() => { try { window.localStorage.setItem(SIZES_KEY, JSON.stringify(sizing)); } catch { /* storage unavailable */ } }, [sizing]);
+  useEffect(() => { try { window.localStorage.setItem(sizesKey, JSON.stringify(sizing)); } catch { /* storage unavailable */ } }, [sizing, sizesKey]);
 
-  const columns = useMemo<ColumnDef<ContactRow>[]>(() => [
+  const columns = useMemo<ColumnDef<ContactRow>[]>(() => ([
     {
       id: "contact", header: "Contact", size: 380, minSize: 260, maxSize: 640,
       cell: ({ row: { original: r } }) => (
@@ -68,6 +82,15 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
     },
     { id: "signal", header: "Signal", size: 320, minSize: 160, maxSize: 640, cell: ({ row: { original: r } }) => <SignalCell lead={r} /> },
     { id: "score", header: "AI Score", size: 150, minSize: 110, maxSize: 260, cell: ({ row: { original: r } }) => <div className="flex justify-center"><ScoreCell row={r} /></div> },
+    ...(research ? [{
+      id: "research", header: "Research result", size: 220, minSize: 130, maxSize: 480,
+      cell: ({ row: { original: r } }: { row: { original: ContactRow } }) => {
+        const res = research[r.id];
+        if (!res) return <span className="text-[14px] text-base-content/40">Not researched</span>;
+        const v = VERDICT[res.verdict] ?? VERDICT.unknown;
+        return <span className="flex min-w-0 items-center gap-2" title={res.summary ?? undefined}><span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[13px] ${v.cls}`}>{v.label}</span><span className="truncate text-[13px] text-base-content/55">{res.summary}</span></span>;
+      },
+    } as ColumnDef<ContactRow>] : []),
     { id: "email", header: "Email", size: 130, minSize: 100, maxSize: 280, cell: ({ row: { original: r } }) => <div className="flex justify-center"><EmailCell row={r} onFound={onChanged} /></div> },
     { id: "phone", header: "Phone", size: 130, minSize: 100, maxSize: 280, cell: ({ row: { original: r } }) => <div className="flex justify-center"><PhoneCell row={r} /></div> },
     { id: "imported", header: "Import date", size: 150, minSize: 110, maxSize: 260, cell: ({ row: { original: r } }) => <span className="whitespace-nowrap text-[14px] text-base-content/65">{timeAgo(r.created_at)}</span> },
@@ -80,7 +103,7 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
     { id: "agent", header: "Agent", size: 180, minSize: 110, maxSize: 360, cell: ({ row: { original: r } }) => <span className="block truncate text-[14px] text-base-content/70">{r.agent_name ?? "—"}</span> },
     { id: "approval", header: "Approval", size: 230, minSize: 180, maxSize: 360, cell: ({ row: { original: r } }) => <div className="flex justify-center"><ApprovalCell row={r} onDecide={onDecide} /></div> },
     { id: "actions", header: "Actions", size: 100, minSize: 90, maxSize: 140, enableResizing: false, cell: ({ row: { original: r } }) => <div className="flex justify-center"><RowMenu row={r} onRemove={() => onRemove(r.id)} onDelete={() => onDelete(r.id)} /></div> },
-  ], [onOpen, onDecide, onRemove, onDelete, onChanged]);
+  ] as ColumnDef<ContactRow>[]).filter((c) => !hidden.includes(String(c.id))), [onOpen, onDecide, onRemove, onDelete, onChanged, research, hidden]);
 
   // TanStack Table returns fresh functions each render by design; nothing here memoizes them.
   // eslint-disable-next-line react-hooks/incompatible-library

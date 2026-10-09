@@ -6,7 +6,9 @@ import ContactsHeader from "@/components/contacts/ContactsHeader";
 import { getDb } from "@/lib/db";
 import { getServerWorkspace, loginRedirect } from "@/lib/server-workspace";
 import { toast } from "sonner";
-import { RiAddLine, RiDeleteBinLine, RiCloseLine, RiCalendarLine } from "react-icons/ri";
+import Link from "next/link";
+import { RiAddLine, RiDeleteBinLine, RiCloseLine, RiCalendarLine, RiListUnordered, RiUser3Line } from "react-icons/ri";
+import Confirm from "@/components/contacts/Confirm";
 
 interface List {
   id: string;
@@ -20,6 +22,7 @@ interface List {
   active_imports: number;
   pending_verification: number;
   status: "importing" | "verifying" | "ready" | "empty";
+  last_researched_at: string | null;
 }
 
 interface ImportJob {
@@ -53,6 +56,7 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
               ar.status as active_run_status,
               w.name as active_workflow_name,
               (SELECT COUNT(*) FROM list_imports li WHERE li.list_id = l.id AND li.status NOT IN ('completed','failed','cancelled','canceled')) as active_imports,
+          (SELECT MAX(finished_at) FROM list_research lr WHERE lr.list_id = l.id AND lr.status = 'done') as last_researched_at,
               (SELECT COUNT(*) FROM list_targets lt2 JOIN targets t ON t.id = lt2.target_id
                  WHERE lt2.list_id = l.id AND t.email_verify_requested_at IS NOT NULL) as pending_verification
        FROM lists l
@@ -84,6 +88,7 @@ export default function ListsPage({ initialLists }: { initialLists: List[] }) {
   const [showModal, setShowModal] = useState(() => router.query.new === "1");
   const [form, setForm] = useState({ name: "", description: "" });
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState<List | null>(null);
   const [jobs, setJobs] = useState<ImportJob[]>([]);
   const [dailyCap, setDailyCap] = useState(1500);
   const [importedToday, setImportedToday] = useState(0);
@@ -144,7 +149,6 @@ export default function ListsPage({ initialLists }: { initialLists: List[] }) {
   }
 
   async function deleteList(id: string) {
-    if (!confirm("Delete this list and all its leads?")) return;
     await fetch(`/api/lists/${id}`, { method: "DELETE" });
     toast.success("List deleted");
     setLists((prev) => prev.filter((l) => l.id !== id));
@@ -224,105 +228,70 @@ export default function ListsPage({ initialLists }: { initialLists: List[] }) {
       )}
 
       {lists.length === 0 ? (
-        <div className="rounded-2xl border border-[var(--border-subtle)] bg-base-100 text-center py-16 text-base-content/40 text-sm">
-          No lists yet. Create one and import leads from Sales Navigator.
+        <div className="rounded-[16px] border border-[var(--border-subtle)] bg-base-100 py-16 text-center text-[15px] text-base-content/50">
+          No lists yet. Create one and import leads into it.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-raised)]">
-          <table className="table w-full text-sm">
-            <thead>
-              <tr className="border-[var(--border-subtle)] text-base-content/45 text-xs uppercase tracking-wide">
-                <th>Name</th>
-                <th>Leads</th>
-                <th>Campaign</th>
-                <th>Import</th>
-                <th>Created</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lists.map((l) => (
-                <tr
-                  key={l.id}
-                  className="border-[var(--border-subtle)] hover:bg-base-200 cursor-pointer transition-colors"
-                  onClick={() => router.push(`/lists/${l.id}`)}
-                >
-                  <td>
-                    <div className="flex flex-wrap items-center gap-2 min-w-0">
-                      <span className="font-medium text-base-content">{l.name}</span>
-                      {l.status === "ready" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-success/10 text-success">Ready to send</span>
-                      )}
-                      {l.status === "importing" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-warning/10 text-warning">
-                          <span className="loading loading-spinner loading-xs" style={{ width: 9, height: 9 }} /> Importing
-                        </span>
-                      )}
-                      {l.status === "verifying" && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-warning/10 text-warning">
-                          <span className="loading loading-spinner loading-xs" style={{ width: 9, height: 9 }} /> Verifying emails
-                        </span>
-                      )}
-                      {l.status === "empty" && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-base-200 text-base-content/50">Empty</span>
-                      )}
-                    </div>
-                    {l.description && (
-                      <p className="text-base-content/40 text-xs mt-0.5">{l.description}</p>
-                    )}
-                  </td>
-                  <td>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border border-[var(--border-strong)] text-base-content/70 tabular-nums">{l.target_count}</span>
-                  </td>
-                  <td>
-                    {l.active_run_id ? (
-                      <span className="inline-flex items-center gap-1.5 text-xs text-base-content/60">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${l.active_run_status === 'running' ? 'bg-success animate-pulse' : 'bg-warning'}`} />
-                        {l.active_workflow_name ?? 'Active'}
-                      </span>
-                    ) : (
-                      <span className="text-base-content/20 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="min-w-35">
-                    {runningByList[l.id] ? (() => {
-                      const job = runningByList[l.id];
-                      const pct = job.total > 0 ? Math.round((job.count / job.total) * 100) : 0;
-                      const label = job.phase === 'visiting' ? 'Visiting' : job.phase === 'enriching' ? 'Resolving' : 'Scraping';
-                      return (
-                        <div className="flex flex-col gap-1" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1.5">
-                            <span className="loading loading-spinner loading-xs text-primary" style={{ width: 10, height: 10 }} />
-                            <span className="text-xs text-primary font-medium">{label} {pct}%</span>
-                          </div>
-                          <div className="w-full bg-base-200 rounded-full h-1 overflow-hidden">
-                            <div className="bg-primary h-1 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="text-xs text-base-content/40">{job.count} / {job.total}</span>
-                        </div>
-                      );
-                    })() : (
-                      <span className="text-base-content/20 text-xs">—</span>
-                    )}
-                  </td>
-                  <td className="text-base-content/40 text-xs">
-                    {new Date(l.created_at).toLocaleDateString()}
-                  </td>
-                  <td onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-1 justify-end">
-                      <button
-                        className="inline-flex items-center px-2 py-1.5 rounded-[10px] text-xs bg-error/10 text-error border border-error/20 hover:bg-error/20 transition-colors"
-                        onClick={() => deleteList(l.id)}
-                      >
-                        <RiDeleteBinLine size={13} />
-                      </button>
-                    </div>
-                  </td>
+        <div className="overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-base-100">
+          <div className="max-h-[calc(100vh-230px)] overflow-auto">
+            <table className="w-full border-separate border-spacing-0 text-left">
+              <thead className="sticky top-0 z-10">
+                <tr className="text-[14px] font-medium uppercase tracking-[0.04em] text-base-content/70">
+                  {["List name", "Contacts", "Last deep research", "Created", "Actions"].map((h, i) => (
+                    <th key={h} className={`border-b border-[var(--border-subtle)] bg-base-200 py-4 font-medium ${i === 0 ? "pl-7" : "px-4"}`}>{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {lists.map((l) => {
+                  const job = runningByList[l.id];
+                  const pct = job && job.total > 0 ? Math.round((job.count / job.total) * 100) : 0;
+                  return (
+                    <tr key={l.id} className="group cursor-pointer" onClick={() => router.push(`/lists/${l.id}`)}>
+                      <td className="border-b border-[var(--border-subtle)] py-4 pl-7 pr-4 transition-colors group-hover:bg-base-200/60">
+                        <div className="flex min-w-0 items-center gap-4">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary"><RiListUnordered size={20} /></span>
+                          <div className="min-w-0">
+                            <div className="truncate text-[17px] text-base-content">{l.name}</div>
+                            {job ? (
+                              <div className="mt-1 flex items-center gap-2 text-[13px] text-primary"><span className="loading loading-spinner loading-xs" style={{ width: 10, height: 10 }} /> Importing {pct}% · {job.count}/{job.total}</div>
+                            ) : l.status === "verifying" ? (
+                              <div className="mt-1 text-[13px] text-[#b8742a]">Verifying emails…</div>
+                            ) : l.description ? <div className="mt-0.5 truncate text-[13px] text-base-content/45">{l.description}</div> : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="border-b border-[var(--border-subtle)] px-4 py-4 transition-colors group-hover:bg-base-200/60">
+                        <span className="inline-flex items-center gap-2.5 text-[17px] tabular-nums"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#ece9fb] text-[#5b4fd6]"><RiUser3Line size={16} /></span>{l.target_count.toLocaleString()}</span>
+                      </td>
+                      <td className="border-b border-[var(--border-subtle)] px-4 py-4 transition-colors group-hover:bg-base-200/60">
+                        {l.last_researched_at
+                          ? <span className="inline-flex items-center gap-2 text-[16px] text-base-content/80"><span className="h-1.5 w-1.5 rounded-full bg-success" />{new Date(`${l.last_researched_at.replace(" ", "T")}Z`).toLocaleDateString()}</span>
+                          : <span className="inline-flex items-center gap-2 text-[16px] text-base-content/45"><span className="h-1.5 w-1.5 rounded-full bg-base-content/25" />Never researched</span>}
+                      </td>
+                      <td className="border-b border-[var(--border-subtle)] px-4 py-4 transition-colors group-hover:bg-base-200/60">
+                        <span className="inline-flex items-center gap-2.5 text-[16px] text-base-content/80"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-success/15 text-[#2f7a43]"><RiCalendarLine size={16} /></span>{new Date(l.created_at).toLocaleDateString()}</span>
+                      </td>
+                      <td className="border-b border-[var(--border-subtle)] px-4 py-4 transition-colors group-hover:bg-base-200/60" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-3">
+                          <Link href={`/lists/${l.id}`} className="inline-flex h-9 items-center rounded-[8px] bg-primary/10 px-4 text-[15px] text-primary transition-colors hover:bg-primary/20">View</Link>
+                          <button type="button" onClick={() => setDeleting(l)} aria-label={`Delete ${l.name}`} className="flex h-9 w-9 items-center justify-center rounded-[8px] text-base-content/45 transition-colors hover:bg-error/10 hover:text-error"><RiDeleteBinLine size={19} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
+      )}
+
+      {deleting && (
+        <Confirm title="Delete List" action="Delete"
+          text={<>Are you sure you want to delete <b className="font-medium text-base-content">{deleting.name}</b>? <b className="font-medium text-base-content">Its contacts stay in All contacts</b>; only the list (and any campaign runs on it) is removed.</>}
+          onCancel={() => setDeleting(null)}
+          onConfirm={async () => { await deleteList(deleting.id); setDeleting(null); }} />
       )}
 
       {showModal && (

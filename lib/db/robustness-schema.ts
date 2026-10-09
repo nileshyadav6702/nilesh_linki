@@ -7,6 +7,29 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Deep research of a list: one run per request (criteria, progress), one result per contact.
+  `CREATE TABLE IF NOT EXISTS list_research (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    list_id TEXT NOT NULL,
+    criteria_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running','done','failed')),
+    total INTEGER NOT NULL DEFAULT 0,
+    done_count INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    finished_at TEXT
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_list_research_list ON list_research(list_id, started_at)",
+  `CREATE TABLE IF NOT EXISTS target_research (
+    target_id TEXT NOT NULL,
+    list_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    verdict TEXT NOT NULL CHECK(verdict IN ('match','no_match','unknown')),
+    summary TEXT,
+    researched_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (target_id, list_id)
+  )`,
   // One row per LinkedIn outreach action, claimed BEFORE the browser is driven. The unique
   // idempotency key is what stops a timed-out or crashed step from sending twice: a row left
   // in 'sending' is never retried automatically, it becomes 'uncertain' for a human to check.

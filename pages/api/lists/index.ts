@@ -13,6 +13,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       .prepare(
         `SELECT l.*, COUNT(lt.target_id) as target_count,
           (SELECT COUNT(*) FROM list_imports li WHERE li.list_id = l.id AND li.status NOT IN ('completed','failed','cancelled','canceled')) as active_imports,
+          (SELECT MAX(finished_at) FROM list_research lr WHERE lr.list_id = l.id AND lr.status = 'done') as last_researched_at,
           (SELECT COUNT(*) FROM list_targets lt2 JOIN targets t ON t.id = lt2.target_id
              WHERE lt2.list_id = l.id AND t.email_verify_requested_at IS NOT NULL) as pending_verification
          FROM lists l
