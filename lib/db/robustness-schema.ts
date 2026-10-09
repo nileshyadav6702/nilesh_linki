@@ -7,6 +7,22 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Integrations page (lib/integrations): one connection per app; config holds the encrypted keys.
+  `CREATE TABLE IF NOT EXISTS integration_connections (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL,
+    config_enc TEXT NOT NULL, options_json TEXT NOT NULL DEFAULT '{}', status TEXT NOT NULL DEFAULT 'connected',
+    last_error TEXT, last_synced_at TEXT, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY (workspace_id, app)
+  )`,
+  // Outbound sync queue: one row per lead (kind 'contact') or reply (kind 'reply', ref = message id) per app.
+  `CREATE TABLE IF NOT EXISTS integration_syncs (
+    id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL,
+    kind TEXT NOT NULL, target_id TEXT, ref TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0, external_id TEXT, last_error TEXT,
+    next_attempt_at TEXT NOT NULL DEFAULT (datetime('now')), created_at TEXT NOT NULL DEFAULT (datetime('now')), done_at TEXT,
+    UNIQUE(workspace_id, app, kind, ref)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_integration_syncs_due ON integration_syncs(status, next_attempt_at)",
   // Organization blocklist (lib/blocklist): company name shown next to a blocked domain.
   "ALTER TABLE suppressions ADD COLUMN label TEXT",
   // AI Competitor Filtering: one verdict per company, cached; "allowed" is the user's override.

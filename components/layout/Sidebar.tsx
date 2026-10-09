@@ -32,7 +32,7 @@ const NAV: NavItem[] = [
 const ADMIN: NavItem = { href: "/admin", label: "Platform admin", icon: LuShieldCheck, tour: "nav-admin" };
 const SETTINGS = [
   { href: "/settings", label: "Account settings", icon: LuCircleUser, tab: null },
-  { href: "/settings?tab=integrations", label: "Integrations", icon: LuPlug, tab: "integrations" },
+  { href: "/integrations", label: "Integrations", icon: LuPlug, tab: "integrations" },
 ] as const;
 const MOBILE_PRIMARY = NAV.slice(0, 3);
 
@@ -75,7 +75,7 @@ export default function Sidebar() {
   const open = !collapsed;
   const width = open ? SIDEBAR_WIDTH.open : SIDEBAR_WIDTH.closed;
   const isSuperadmin = Boolean(session?.user?.isSuperadmin);
-  const onSettings = ["/settings", "/accounts"].some((p) => router.pathname.startsWith(p));
+  const onSettings = ["/settings", "/accounts", "/integrations"].some((p) => router.pathname.startsWith(p));
   const [settingsOpen, setSettingsOpen] = useState(onSettings);
   const [helpOpen, setHelpOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -98,7 +98,6 @@ export default function Sidebar() {
   }, [router.events]);
 
   const isActive = (href: string) => (href === "/contacts" ? ["/contacts", "/lists"].some((p) => router.pathname.startsWith(p)) : router.pathname.startsWith(href));
-  const tab = typeof router.query.tab === "string" ? router.query.tab : null;
   const name = session?.user?.name ?? session?.user?.email?.split("@")[0] ?? "You";
   const email = session?.user?.email ?? "";
   const row = (active: boolean) => `group relative flex h-[54px] items-center rounded-[12px] text-[17px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${open ? "gap-4 px-4" : "justify-center"} ${active ? "bg-primary/[0.12] text-base-content" : "text-base-content/65 hover:bg-base-content/[0.05] hover:text-base-content"}`;
@@ -160,7 +159,7 @@ export default function Sidebar() {
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduce ? 0 : 0.22, ease: EASE }} className="overflow-hidden">
                       <div className="ml-[27px] mt-1.5 space-y-1.5 border-l border-[var(--border-subtle)] pl-3">
                         {SETTINGS.map((s) => {
-                          const active = router.pathname === "/settings" && (s.tab ? tab === s.tab : tab !== "integrations");
+                          const active = s.tab ? router.pathname === "/integrations" : router.pathname === "/settings";
                           return (
                             <Link key={s.href} href={s.href} aria-current={active ? "page" : undefined} className={row(active)}>
                               {active && <motion.span layoutId="nav-active" transition={{ duration: reduce ? 0 : 0.28, ease: EASE }} className="absolute -left-[13px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-primary" />}

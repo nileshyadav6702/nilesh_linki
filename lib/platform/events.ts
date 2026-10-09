@@ -113,7 +113,7 @@ export function guardedLookup(
  * connection made to the exact address guardedLookup approved, so DNS rebinding between
  * the check and the connect cannot point the request inward.
  */
-function postWebhook(url: URL, headers: Record<string, string>, body: string): Promise<{ status: number; text: string }> {
+export function postWebhook(url: URL, headers: Record<string, string>, body: string): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
     const client = url.protocol === "https:" ? https : http;
     const req = client.request(url, {

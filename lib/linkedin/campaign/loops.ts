@@ -69,6 +69,11 @@ export function ensureGlobalRunnerStarted(): void {
     if (verified > 0) console.log(`[runner] Email verification — processed ${verified}`);
   });
   startLoop("Webhook delivery", "webhook-runner", async () => { await processWebhookDeliveries(); });
+  // Integrations page: push qualified leads and replies to connected CRMs / outreach tools.
+  startLoop("Integrations sync", "integrations-runner", async () => {
+    const { runIntegrationSync } = await import("@/lib/integrations/worker");
+    await runIntegrationSync();
+  });
   // AI agents: non-LinkedIn signal sources (job boards, news), then scoring, enrichment,
   // drafting and auto-approval. HTTP + DB only — never touches the LinkedIn session.
   startLoop("AI agents", "agents-runner", async () => {
