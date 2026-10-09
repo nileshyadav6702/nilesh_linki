@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { z } from "zod";
 import { communityAi, generateCommunityContent } from "@/lib/community-ai";
-import { decryptSecret } from "@/lib/crypto";
 import { getDb } from "@/lib/db";
 import { toPlainText } from "@/lib/email/content";
 import { renderOutreachTemplate, type OutreachTemplateTarget } from "@/lib/outreach/render";
@@ -85,12 +85,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   if (input.ai_enabled) {
     // A step without its own model (e.g. an agent campaign) previews with the workspace default.
-    const model = input.ai_model || (db.prepare("SELECT default_model FROM workspace_ai_config WHERE workspace_id = ?").get(ctx.workspaceId) as { default_model: string | null } | undefined)?.default_model || "";
-    if (!model) return res.status(400).json({ error: "Choose a default AI model in Settings before previewing" });
-    const integration = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?")
-      .get(ctx.workspaceId) as { api_key: string | null } | undefined;
-    const apiKey = decryptSecret(integration?.api_key ?? null);
-    if (!apiKey) return res.status(400).json({ error: "Configure an OpenRouter API key in Settings first" });
+    const model = modelFor(input.step_type === "email" ? "email" : "message");
+    const apiKey = aiApiKey(ctx.workspaceId);
+    if (!apiKey) return res.status(400).json({ error: "AI is not configured on this server: set OPENROUTER_API_KEY in .env" });
     const contactData = communityAi.getContactWithCompany(input.target_id);
     if (!contactData) return res.status(404).json({ error: "Contact data not found" });
 

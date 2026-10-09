@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getDb } from "@/lib/db";
-import { decryptSecret } from "@/lib/crypto";
+import { aiApiKey } from "@/lib/ai/models";
 import { requireWorkspace } from "@/lib/workspace";
 
 interface OpenRouterModel {
@@ -12,9 +11,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method !== "GET") return res.status(405).end();
   const ctx=requireWorkspace(req,res); if(!ctx)return;
 
-  const db = getDb();
-  const row = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?").get(ctx.workspaceId) as { api_key: string | null } | undefined;
-  const apiKey = decryptSecret(row?.api_key ?? null);
+  const apiKey = aiApiKey(ctx.workspaceId);
   if (!apiKey) return res.status(400).json({ error: "OpenRouter API key is not configured", models: [] });
 
   try {

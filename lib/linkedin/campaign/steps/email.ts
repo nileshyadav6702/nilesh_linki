@@ -1,10 +1,10 @@
 import { sendEmailDurably, EmailRetryScheduledError } from "@/lib/email/infrastructure";
+import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { applyUnsubscribeVariable, unsubscribeHeaders, unsubscribeUrl } from "@/lib/email/unsubscribe";
 import { signatureText } from "@/lib/email/signature";
 import { campaignEmailsToday } from "@/lib/linkedin/actions";
 import { peekApprovedDraft, consumeDraft } from "@/lib/linkedin/step-drafts";
 import { premium } from "@/lib/premium";
-import { decryptSecret } from "@/lib/crypto";
 import { addSuppression } from "@/lib/platform/suppression";
 import { verifyEmailAddress, emailStatusFor, suppressionSourceFor, needsPreSendVerification } from "@/lib/email/verify";
 import { renderOutreachTemplate, findUnresolvedTokens } from "@/lib/outreach/render";
@@ -109,9 +109,9 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
       holdForAi(db, runId, tr, target.id, name, "the AI writer is unavailable in this build");
       return;
     }
-    const integration = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?").get(target.workspace_id) as { api_key: string } | undefined;
+    const integration = { api_key: aiApiKey(target.workspace_id) };
     const agentCfgForEmail = premium.ai.getAgentConfig(target.workspace_id);
-    const resolvedEmailModel = step.ai_model || agentCfgForEmail.default_model;
+    const resolvedEmailModel = modelFor("email");
     if (!integration?.api_key || !resolvedEmailModel) {
       holdForAi(db, runId, tr, target.id, name, "the OpenRouter key or model is missing");
       return;
@@ -133,7 +133,7 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
       };
     }
     const result = await premium.ai.writeEmail({
-      apiKey: decryptSecret(integration.api_key)!,
+      apiKey: integration.api_key!,
       model: resolvedEmailModel,
       stepType: "email",
       stepPrompt: step.ai_prompt ?? "",

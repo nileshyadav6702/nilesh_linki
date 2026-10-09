@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
+import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { getDb } from "@/lib/db";
-import { decryptSecret } from "@/lib/crypto";
 import { addSuppression, removeSuppression } from "@/lib/platform/suppression";
 import { emitDomainEvent } from "@/lib/platform/events";
 import { sendEmailDurably } from "@/lib/email/infrastructure";
@@ -129,10 +129,8 @@ async function classifyReply(workspaceId: string, subject: string, body: string)
   const text = `${subject}\n${body}`.trim();
   const deterministic = ruleVerdict(text);
   if (deterministic && deterministic.confidence >= 0.97) return deterministic;
-  const row = getDb().prepare("SELECT api_key FROM integrations WHERE workspace_id = ? AND key = 'openrouter'").get(workspaceId) as { api_key: string } | undefined;
-  const apiKey = decryptSecret(row?.api_key ?? null);
-  const modelRow = getDb().prepare("SELECT default_model FROM workspace_ai_config WHERE workspace_id = ?").get(workspaceId) as { default_model: string | null } | undefined;
-  if (!apiKey || !modelRow?.default_model) return deterministic ?? { kind: "human_review", confidence: 0.4, summary: "No AI classifier configured; manual review required", suggested_action: "review" };
+  const apiKey = aiApiKey(workspaceId);
+  if (!apiKey) return deterministic ?? { kind: "human_review", confidence: 0.4, summary: "No AI classifier configured; manual review required", suggested_action: "review" };
   // Over the daily spend cap: fall back to the rules / human review instead of blocking the reply.
   try {
     assertWithinSpendCap(workspaceId);
@@ -140,7 +138,7 @@ async function classifyReply(workspaceId: string, subject: string, body: string)
     if (err instanceof AiSpendCapError) return deterministic ?? { kind: "human_review", confidence: 0.3, summary: err.message, suggested_action: "review" };
     throw err;
   }
-  const model = modelRow.default_model;
+  const model = modelFor("reply_classify");
   // No response_format: many models (including OpenRouter's free tier) reject strict
   // json_object mode. We instruct JSON-only in the prompt and parse it out defensively.
   // The reply is untrusted prospect text: it goes under "data" as a JSON value, never as instructions.

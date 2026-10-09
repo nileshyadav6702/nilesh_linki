@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getDb } from "@/lib/db";
-import { decryptSecret } from "@/lib/crypto";
+import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { communityAi, generateCommunityContent } from "@/lib/community-ai";
 import { requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
 
@@ -28,10 +27,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   if(!requireWorkspaceEntity(res,ctx,"targets",target_id))return;
 
-  const db = getDb();
-  const row = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?").get(ctx.workspaceId) as { api_key: string | null } | undefined;
-  const apiKey = decryptSecret(row?.api_key ?? null);
-  if (!apiKey) return res.status(400).json({ error: "Configure an OpenRouter API key in Settings first" });
+  const apiKey = aiApiKey(ctx.workspaceId);
+  if (!apiKey) return res.status(400).json({ error: "AI is not configured on this server: set OPENROUTER_API_KEY in .env" });
 
   const contactData = communityAi.getContactWithCompany(target_id);
   if (!contactData) return res.status(404).json({ error: "Contact not found" });
@@ -39,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const result = await generateCommunityContent({
       apiKey,
-      model: ai_model,
+      model: modelFor(step_type === "email" ? "email" : "message"),
       stepType: step_type as "message" | "email" | "sales_inmail",
       stepPrompt: typeof ai_prompt === "string" ? ai_prompt : undefined,
       maxWords: typeof ai_max_words === "number" ? ai_max_words : undefined,

@@ -1,7 +1,7 @@
 import { getSessionPage } from "@/lib/linkedin/session";
+import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { settledPriorAction } from "@/lib/linkedin/actions";
 import { premium } from "@/lib/premium";
-import { decryptSecret } from "@/lib/crypto";
 import { renderOutreachTemplate } from "@/lib/outreach/render";
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
 import { actionInput, holdForAi, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction, stepTemplateBody } from "../step-helpers";
@@ -40,9 +40,9 @@ export async function runInmailStep(ctx: StepContext): Promise<void> {
       holdForAi(db, runId, tr, target.id, name, "the AI writer is unavailable in this build");
       return;
     }
-    const integration = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?").get(target.workspace_id) as { api_key: string } | undefined;
+    const integration = { api_key: aiApiKey(target.workspace_id) };
     const agentCfgForMsg = premium.ai.getAgentConfig(target.workspace_id);
-    const resolvedMsgModel = step.ai_model || agentCfgForMsg.default_model;
+    const resolvedMsgModel = modelFor("inmail");
     if (!integration?.api_key || !resolvedMsgModel) {
       holdForAi(db, runId, tr, target.id, name, "the OpenRouter key or model is missing");
       return;
@@ -60,7 +60,7 @@ export async function runInmailStep(ctx: StepContext): Promise<void> {
       previousMessageContext = { followupNumber: msgPosition - 1, previousMessage: tr.last_linkedin_message };
     }
     const result = await premium.ai.writeSalesInMail({
-      apiKey: decryptSecret(integration.api_key)!,
+      apiKey: integration.api_key!,
       model: resolvedMsgModel,
       stepType: "sales_inmail",
       stepPrompt: step.ai_prompt ?? "",

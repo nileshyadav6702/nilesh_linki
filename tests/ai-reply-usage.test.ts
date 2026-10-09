@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { getDb } from "@/lib/db";
 import { classifyAndDispatch } from "@/lib/community-replies";
 import { aiRetryPolicy } from "@/lib/ai/client";
+import { modelFor } from "@/lib/ai/models";
 
 const WS = "ws-ai-reply-usage";
 
@@ -32,7 +33,7 @@ describe("reply classification usage", () => {
       usage: { prompt_tokens: 120, completion_tokens: 30, cost: 0.0042 },
     }), { status: 200 })));
     await classifyAndDispatch(seedReply("Hmm, maybe."));
-    expect(usage().at(-1)).toMatchObject({ purpose: "reply_classify", model: "test/model", input_tokens: 120, output_tokens: 30, cost_usd: 0.0042, ok: 1 });
+    expect(usage().at(-1)).toMatchObject({ purpose: "reply_classify", model: modelFor("reply_classify"), input_tokens: 120, output_tokens: 30, cost_usd: 0.0042, ok: 1 });
   });
 
   it("records a failed classifier call as not ok", async () => {

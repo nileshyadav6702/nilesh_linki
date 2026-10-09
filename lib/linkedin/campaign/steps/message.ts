@@ -1,9 +1,9 @@
 import { getSessionPage } from "@/lib/linkedin/session";
+import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { sendMessage } from "@/lib/linkedin/message";
 import { settledPriorAction } from "@/lib/linkedin/actions";
 import { peekApprovedDraft, consumeDraft } from "@/lib/linkedin/step-drafts";
 import { premium } from "@/lib/premium";
-import { decryptSecret } from "@/lib/crypto";
 import { emitDomainEvent } from "@/lib/platform/events";
 import { renderOutreachTemplate } from "@/lib/outreach/render";
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
@@ -48,9 +48,9 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
       holdForAi(db, runId, tr, target.id, name, "the AI writer is unavailable in this build");
       return;
     }
-    const integration = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?").get(target.workspace_id) as { api_key: string } | undefined;
+    const integration = { api_key: aiApiKey(target.workspace_id) };
     const agentCfgForMsg = premium.ai.getAgentConfig(target.workspace_id);
-    const resolvedMsgModel = step.ai_model || agentCfgForMsg.default_model;
+    const resolvedMsgModel = modelFor("message");
     if (!integration?.api_key || !resolvedMsgModel) {
       holdForAi(db, runId, tr, target.id, name, "the OpenRouter key or model is missing");
       return;
@@ -68,7 +68,7 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
       previousMessageContext = { followupNumber: msgPosition - 1, previousMessage: tr.last_linkedin_message };
     }
     const result = await premium.ai.writeLinkedInMessage({
-      apiKey: decryptSecret(integration.api_key)!,
+      apiKey: integration.api_key!,
       model: resolvedMsgModel,
       stepType: "message",
       stepPrompt: step.ai_prompt ?? "",

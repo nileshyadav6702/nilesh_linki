@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
+import { aiApiKey, modelFor } from "@/lib/ai/models";
 import type { z } from "zod";
 import { getDb } from "@/lib/db";
-import { decryptSecret } from "@/lib/crypto";
 
 /**
  * Typed LLM boundary for the AI SDR layer. Every call:
@@ -15,7 +15,7 @@ import { decryptSecret } from "@/lib/crypto";
  */
 
 export class AiNotConfiguredError extends Error {
-  constructor(message = "Configure an OpenRouter API key and a default model in Settings first") {
+  constructor(message = "AI is not configured on this server: set OPENROUTER_API_KEY in .env") {
     super(message);
     this.name = "AiNotConfiguredError";
   }
@@ -23,7 +23,7 @@ export class AiNotConfiguredError extends Error {
 
 /** OpenRouter rejected the key (401/403): retrying will not help until Settings change. */
 export class AiConfigError extends AiNotConfiguredError {
-  constructor(message = "OpenRouter rejected the API key. Check it in Settings") {
+  constructor(message = "OpenRouter rejected the API key. Check OPENROUTER_API_KEY in .env") {
     super(message);
     this.name = "AiConfigError";
   }
@@ -54,14 +54,11 @@ export interface AiConfig { apiKey: string; model: string }
 
 export type AiPurpose = "icp_extract" | "fit_score" | "first_touch" | "reply_draft" | "reply_classify" | "sequence_write" | "funding_extract" | "lookalike_query" | "hiring_match";
 
-export function getWorkspaceAi(workspaceId: string, modelOverride?: string | null): AiConfig {
-  const db = getDb();
-  const row = db.prepare("SELECT api_key FROM integrations WHERE key = 'openrouter' AND workspace_id = ?").get(workspaceId) as { api_key: string | null } | undefined;
-  const apiKey = decryptSecret(row?.api_key ?? null);
-  const cfg = db.prepare("SELECT default_model FROM workspace_ai_config WHERE workspace_id = ?").get(workspaceId) as { default_model: string | null } | undefined;
-  const model = modelOverride || cfg?.default_model || null;
-  if (!apiKey || !model) throw new AiNotConfiguredError();
-  return { apiKey, model };
+/** Key from the environment (lib/ai/models.ts); the model is picked for the task, never by the user. */
+export function getWorkspaceAi(workspaceId: string, purpose: string = "fit_score"): AiConfig {
+  const apiKey = aiApiKey(workspaceId);
+  if (!apiKey) throw new AiNotConfiguredError();
+  return { apiKey, model: modelFor(purpose) };
 }
 
 export function isAiConfigured(workspaceId: string): boolean {
@@ -191,7 +188,7 @@ async function callOnce(cfg: AiConfig, req: AiJsonRequest<unknown>, retryNote?: 
 }
 
 export async function aiJson<T>(req: AiJsonRequest<T>): Promise<T> {
-  const cfg = getWorkspaceAi(req.workspaceId, req.model);
+  const cfg = getWorkspaceAi(req.workspaceId, req.purpose);
   assertWithinSpendCap(req.workspaceId);
   let retryNote: string | undefined;
   for (let attempt = 0; attempt < 2; attempt++) {
