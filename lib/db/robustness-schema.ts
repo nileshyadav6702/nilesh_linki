@@ -7,6 +7,12 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Personal account settings (lib/user-profile.ts).
+  "ALTER TABLE users ADD COLUMN first_name TEXT",
+  "ALTER TABLE users ADD COLUMN last_name TEXT",
+  "ALTER TABLE users ADD COLUMN language TEXT",
+  "ALTER TABLE users ADD COLUMN timezone TEXT",
+  "ALTER TABLE users ADD COLUMN daily_digest INTEGER NOT NULL DEFAULT 1",
   // Shareable workspace invite link (lib/workspace-join-links.ts).
   `CREATE TABLE IF NOT EXISTS workspace_join_links (
     id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

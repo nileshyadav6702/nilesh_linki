@@ -78,13 +78,14 @@ export function getLeadDetail(db: Database.Database, workspaceId: string, target
 }
 
 /** Regenerate one step's draft, or refine it with an instruction such as "make it shorter". */
-export async function regenerateDraft(db: Database.Database, workspaceId: string, draftId: string, instruction: string | null): Promise<DraftRow> {
+export async function regenerateDraft(db: Database.Database, workspaceId: string, draftId: string, instruction: string | null, language?: string | null): Promise<DraftRow> {
   const draft = db.prepare("SELECT * FROM approval_queue WHERE id = ? AND workspace_id = ?").get(draftId, workspaceId) as DraftRow & { target_id: string; agent_id: string | null } | undefined;
   if (!draft) throw new Error("Draft not found");
   if (draft.status !== "pending") throw new Error(`Draft already ${draft.status}`);
   const agent = draft.agent_id ? db.prepare("SELECT * FROM agents WHERE id = ?").get(draft.agent_id) as Agent | undefined : undefined;
   if (!agent) throw new Error("This draft has no agent");
-  const icp = (agent.icp_id ? getIcp(agent.icp_id, workspaceId) : getLatestIcp(workspaceId))?.data ?? null;
+  const base = (agent.icp_id ? getIcp(agent.icp_id, workspaceId) : getLatestIcp(workspaceId))?.data ?? null;
+  const icp = base && language ? { ...base, language } : base;
   const steps = sequenceSteps(db, agent.workflow_id);
   const step = steps.find((s) => s.id === draft.step_id)
     ?? { id: draft.step_id ?? "first", track: draft.channel === "email" ? "email" : "linkedin", step_type: draft.channel === "email" ? "email" : "message", order: 1, day: 0, position: draft.position ?? 1, channel: draft.channel as "email" | "linkedin_message", label: "First touch" } as SequenceStep;

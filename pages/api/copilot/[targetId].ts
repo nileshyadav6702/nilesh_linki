@@ -5,6 +5,7 @@ import { getLeadDetail } from "@/lib/agents/copilot";
 import { draftForStep } from "@/lib/agents/copilot-board";
 import { AiNotConfiguredError } from "@/lib/ai/client";
 import { recordAudit, requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
+import { userLanguage } from "@/lib/user-profile";
 
 // GET  /api/copilot/:targetId → the contact with its full sequence and drafts
 // POST /api/copilot/:targetId { decision: 'approve' | 'reject', reason? } → decide every pending step at once
@@ -28,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const stepId = typeof req.body?.step_id === "string" ? req.body.step_id : "";
     if (!stepId) return res.status(400).json({ error: "step_id is required" });
     try {
-      return res.json({ draft: await draftForStep(db, ctx.workspaceId, targetId, stepId) });
+      return res.json({ draft: await draftForStep(db, ctx.workspaceId, targetId, stepId, userLanguage(db, ctx.userId)) });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not write the message";
       return res.status(err instanceof AiNotConfiguredError ? 400 : 502).json({ error: message });

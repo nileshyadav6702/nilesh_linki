@@ -7,6 +7,7 @@ import { isRateLimited, REMOTE_ADDR_HEADER } from "@/lib/rate-limit";
 import { normalizeInvitationEmail } from "@/lib/workspace-invitations";
 import { createWorkspaceForUser, getMembership, getPrimaryMembership } from "@/lib/workspace";
 import { isSuperadminEmail } from "@/lib/superadmin-allowlist";
+import { displayName, getUserProfile } from "@/lib/user-profile";
 
 type UserRow = { id: string; email: string; password_hash: string };
 
@@ -68,6 +69,8 @@ export const authOptions: NextAuthOptions = {
       // forcing a re-login. This flag is for UI affordances only - every admin route
       // re-checks the allowlist server-side and never trusts it.
       token.isSuperadmin = isSuperadminEmail(user?.email ?? token.email);
+      // Name from Settings → Account (refreshed with the token, so edits show up without a re-login).
+      token.name = displayName(getUserProfile(getDb(), userId)) ?? token.name ?? null;
       return token;
     },
     async session({ session, token }) {
@@ -77,7 +80,7 @@ export const authOptions: NextAuthOptions = {
         session.user.workspaceName = token.workspaceName ?? "Workspace";
         session.user.role = token.role ?? "viewer";
       }
-      if (session.user) session.user.isSuperadmin = Boolean(token.isSuperadmin);
+      if (session.user) { session.user.isSuperadmin = Boolean(token.isSuperadmin); session.user.name = token.name ?? null; }
       return session;
     },
   },

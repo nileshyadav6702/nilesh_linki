@@ -10,7 +10,7 @@ import {
   RiAddLine, RiDeleteBinLine, RiEditLine, RiMailLine,
   RiShieldCheckLine, RiShieldKeyholeLine, RiSmartphoneLine, RiDownloadLine, RiCheckLine, RiCloseLine,
   RiLockPasswordLine, RiPlugLine,
-  RiLinkedinBoxLine, RiMessage2Line, RiSettings3Line, RiFileCopyLine, RiBuilding2Line, RiTeamLine,
+  RiLinkedinBoxLine, RiMessage2Line, RiSettings3Line, RiFileCopyLine, RiBuilding2Line, RiTeamLine, RiAccountCircleLine,
   RiLockLine, RiLockUnlockLine, RiFlashlightLine, RiArrowDownSLine, RiCompassLine,
   RiRobot2Line, RiPauseLine, RiPlayLine,
 } from "react-icons/ri";
@@ -18,13 +18,14 @@ import { ModelPicker, type OrModel } from "@/components/ui/ModelPicker";
 import DateField from "@/components/ui/DateField";
 import WorkspaceTab from "@/components/settings/WorkspaceTab";
 import MembersTab from "@/components/settings/MembersTab";
+import AccountTab from "@/components/settings/AccountTab";
 import { Bar, BarChart, Cell, ResponsiveContainer } from "recharts";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ALL_TOUR_PAGES, TOUR_PAGE_LABELS, replayPageTour, type TourPage } from "@/lib/tour";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "workspace" | "members" | "linkedin" | "email" | "templates" | "integrations" | "ai" | "general";
+type Tab = "workspace" | "members" | "account" | "linkedin" | "email" | "templates" | "integrations" | "ai" | "general";
 
 interface LiAccount {
   id: string; name: string; email: string;
@@ -70,7 +71,7 @@ export const getServerSideProps: GetServerSideProps = async ({ query, req, res }
     .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at FROM email_accounts WHERE workspace_id=? ORDER BY created_at DESC")
     .all(workspaceId);
   const templates = db.prepare("SELECT * FROM templates WHERE workspace_id=? ORDER BY created_at DESC").all(workspaceId);
-  const validTabs: Tab[] = ["workspace", "members", "linkedin", "email", "templates", "integrations", "ai", "general"];
+  const validTabs: Tab[] = ["workspace", "members", "account", "linkedin", "email", "templates", "integrations", "ai", "general"];
   const tab: Tab = validTabs.includes(query.tab as Tab) ? (query.tab as Tab) : "workspace";
   return { props: { liAccounts, emailAccounts, templates, initialTab: tab } };
 };
@@ -80,6 +81,7 @@ export const getServerSideProps: GetServerSideProps = async ({ query, req, res }
 const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "workspace", label: "Workspace", icon: RiBuilding2Line },
   { key: "members", label: "Members", icon: RiTeamLine },
+  { key: "account", label: "Account", icon: RiAccountCircleLine },
   { key: "linkedin", label: "LinkedIn accounts", icon: RiLinkedinBoxLine },
   { key: "email", label: "Email accounts", icon: RiMailLine },
   { key: "templates", label: "AI Outreach Templates", icon: RiMessage2Line },
@@ -230,6 +232,7 @@ export default function SettingsPage({
         {/* Tab content */}
         {tab === "workspace" && <WorkspaceTab />}
         {tab === "members" && <MembersTab />}
+        {tab === "account" && <AccountTab />}
         <div>
         {tab === "linkedin" && <LinkedInTab initialAccounts={initialLi} />}
         {tab === "email" && <EmailTab initialAccounts={initialEmail} />}

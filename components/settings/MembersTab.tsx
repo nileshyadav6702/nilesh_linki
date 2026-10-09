@@ -38,6 +38,7 @@ export default function MembersTab() {
   const [busy, setBusy] = useState<string | null>(null);
   const [manualLink, setManualLink] = useState<{ email: string; url: string } | null>(null);
   const [removing, setRemoving] = useState<Member | null>(null);
+  const [cancelling, setCancelling] = useState<Invitation | null>(null);
 
   const load = useCallback(() => fetch("/api/settings/members").then((r) => r.json()).then(setD).catch(() => toast.error("Could not load members")), []);
   useEffect(() => { void load(); }, [load]);
@@ -66,7 +67,8 @@ export default function MembersTab() {
     const r = await fetch(`/api/platform/invitations?id=${encodeURIComponent(inv.id)}`, { method: "DELETE" });
     setBusy(null);
     if (!r.ok) { toast.error("Could not cancel the invitation"); return; }
-    toast.success(`Invitation for ${inv.email} cancelled`);
+    toast.success(`Invitation for ${inv.email} removed`);
+    setCancelling(null);
     await load();
   }
 
@@ -187,7 +189,7 @@ export default function MembersTab() {
               {d.invitations.map((inv) => (
                 <span key={inv.id} title={`Invited as ${inv.role} · expires ${when(inv.expires_at)}`} className="inline-flex h-10 items-center gap-2 rounded-full border border-primary/25 bg-primary/[0.07] pl-4 pr-1.5 text-[15px] text-primary">
                   <LuMail size={16} />{inv.email}<span className="text-primary/60">· {inv.role}</span>
-                  <button type="button" onClick={() => void revoke(inv)} disabled={busy === `revoke:${inv.id}`} aria-label={`Cancel invitation for ${inv.email}`}
+                  <button type="button" onClick={() => setCancelling(inv)} disabled={busy === `revoke:${inv.id}`} aria-label={`Cancel invitation for ${inv.email}`}
                     className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-primary/15">{busy === `revoke:${inv.id}` ? <LuLoaderCircle size={15} className="animate-spin" /> : <LuX size={16} />}</button>
                 </span>
               ))}
@@ -238,6 +240,10 @@ export default function MembersTab() {
         <div className="flex items-center gap-2 text-[14px] text-base-content/50"><LuUsers size={16} />{d.members.length} member{d.members.length === 1 ? "" : "s"}{d.invitations.length ? ` · ${d.invitations.length} pending` : ""}</div>
       </div>
 
+      {cancelling && (
+        <Confirm title="Remove Invitation" action="Remove Invitation" onCancel={() => setCancelling(null)} onConfirm={() => revoke(cancelling)}
+          text={<>Are you sure you want to remove the invitation for <strong>{cancelling.email}</strong>? Their link stops working right away.</>} />
+      )}
       {removing && (
         <Confirm title={`Remove ${nameOf(removing.email)}?`} action="Remove member" onCancel={() => setRemoving(null)} onConfirm={() => remove(removing)}
           text={<>They lose access to <strong>{d.workspace.name}</strong> right away. Their agents, contacts and messages stay in the workspace.</>} />

@@ -113,6 +113,8 @@ export async function runWorker(): Promise<void> {
   startRetentionSchedule();
   const { startInboxSyncSchedule } = await import("@/lib/inbox/sync");
   startInboxSyncSchedule();
+  const { startDailyDigestSchedule } = await import("@/lib/notifications/daily-digest");
+  startDailyDigestSchedule();
 
   let stopping = false;
   const onSignal = (signal: NodeJS.Signals) => {

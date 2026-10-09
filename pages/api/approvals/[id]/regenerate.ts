@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { regenerateDraft } from "@/lib/agents/copilot";
 import { AiNotConfiguredError } from "@/lib/ai/client";
 import { requireWorkspace } from "@/lib/workspace";
+import { userLanguage } from "@/lib/user-profile";
 
 // POST /api/approvals/:id/regenerate { instruction? } → rewrite one step's draft ("Refine with AI")
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -11,7 +12,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!ctx) return;
   const instruction = typeof req.body?.instruction === "string" ? req.body.instruction.slice(0, 500) : null;
   try {
-    return res.json({ draft: await regenerateDraft(getDb(), ctx.workspaceId, String(req.query.id), instruction) });
+    const db = getDb();
+    return res.json({ draft: await regenerateDraft(db, ctx.workspaceId, String(req.query.id), instruction, userLanguage(db, ctx.userId)) });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not rewrite the draft";
     const status = err instanceof AiNotConfiguredError ? 400 : message === "Draft not found" ? 404 : /already/.test(message) ? 409 : 502;

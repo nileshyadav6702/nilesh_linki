@@ -28,6 +28,8 @@ export async function register() {
       startRetentionSchedule();
       const { startInboxSyncSchedule } = await import("@/lib/inbox/sync");
       startInboxSyncSchedule();
+      const { startDailyDigestSchedule } = await import("@/lib/notifications/daily-digest");
+      startDailyDigestSchedule();
     } catch (err) {
       console.error("[instrumentation] Failed to start retention schedule:", err);
     }

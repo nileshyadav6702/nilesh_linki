@@ -105,6 +105,9 @@ function contextData(agent: Agent, icp: Icp | null, lead: LeadContext) {
   };
 }
 
+/** Messages are written in the ICP's language (callers swap in the user's own when they generate). */
+const writeIn = (icp: Icp | null) => `Write every message in ${icp?.language?.trim() || "English"}.`;
+
 const RULES = [
   "Use only facts present in data; never invent numbers, customers, events or relationships. No flattery, hype, emojis or links (except data.booking_url in a closing or meetings-goal message).",
   "Never say you were tracking or monitoring the person. Address them by first name. Plain text.",
@@ -121,6 +124,7 @@ export async function writeSequence(agent: Agent, icp: Icp | null, steps: Sequen
     instructions: [
       "Write the outreach sequence for this lead: one message for each entry in data.steps, in order, as one coherent arc.",
       `Tone: ${TONE[agent.tone] ?? TONE.professional}`,
+      writeIn(icp),
       ...RULES,
     ],
     data: { ...contextData(agent, icp, lead), steps: steps.map((s) => ({ key: s.id, channel: s.channel, send_day: s.day, role: roleOf(s, perTrack(s.track)) })) },
@@ -152,6 +156,7 @@ export async function rewriteStep(agent: Agent, icp: Icp | null, step: SequenceS
         : "Write a fresh alternative to data.current_draft for the same step; same goal, different wording and angle.",
       `This step's role: ${roleOf(step, totalOnTrack)}. Do not repeat the other messages in data.other_steps.`,
       `Tone: ${TONE[agent.tone] ?? TONE.professional}`,
+      writeIn(icp),
       ...RULES,
     ],
     data: { ...contextData(agent, icp, lead), channel: step.channel, current_draft: current, user_instruction: instruction, other_steps: otherSteps },

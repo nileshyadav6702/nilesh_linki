@@ -50,7 +50,7 @@ const DRAFT_COLUMNS = "id, step_id, channel, subject, body, status, auto_approve
  * "View message": the lead's draft for this step, writing it now when the agent hasn't yet.
  * Returns the existing draft untouched when there is one.
  */
-export async function draftForStep(db: Database.Database, workspaceId: string, targetId: string, stepId: string): Promise<DraftRow> {
+export async function draftForStep(db: Database.Database, workspaceId: string, targetId: string, stepId: string, language?: string | null): Promise<DraftRow> {
   const existing = db.prepare(`SELECT ${DRAFT_COLUMNS} FROM approval_queue WHERE target_id = ? AND step_id = ? AND status IN ('pending','approved','consumed') ORDER BY created_at DESC LIMIT 1`)
     .get(targetId, stepId) as DraftRow | undefined;
   if (existing) return existing;
@@ -61,7 +61,9 @@ export async function draftForStep(db: Database.Database, workspaceId: string, t
   if (!step?.channel) throw new Error("This step doesn't send a message");
   const bundle = communityAi.getContactWithCompany(targetId);
   if (!bundle) throw new Error("Contact not found");
-  const icp = (agent.icp_id ? getIcp(agent.icp_id, workspaceId) : getLatestIcp(workspaceId))?.data ?? null;
+  const base = (agent.icp_id ? getIcp(agent.icp_id, workspaceId) : getLatestIcp(workspaceId))?.data ?? null;
+  // The person asking for the message gets it in their own language (Settings → Account).
+  const icp = base && language ? { ...base, language } : base;
   const signals = strongestSignals(db, targetId);
   const written = (await writeSequence(agent, icp, [step], { contact: bundle.contact, company: bundle.company, signals })).get(step.id);
   if (!written) throw new Error("The AI didn't return a message. Try again.");
