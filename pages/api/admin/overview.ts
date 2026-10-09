@@ -232,6 +232,39 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         GROUP BY day ORDER BY day`),
     },
 
+    // Lead data bought through treg.to (lib/treg): spend, hit rate, what it was for, failures.
+    lead_data: {
+      configured: !!process.env.TREG_API_KEY?.trim(),
+      daily_cap_usd: Math.max(0, Number(process.env.TREG_DAILY_CAP_USD ?? 5) || 0),
+      totals: one(`SELECT
+          ROUND(COALESCE(SUM(CASE WHEN created_at >= date('now') THEN cost_micro END), 0) / 1e6, 4) AS today_usd,
+          ROUND(COALESCE(SUM(CASE WHEN created_at >= datetime('now','-7 days') THEN cost_micro END), 0) / 1e6, 4) AS week_usd,
+          ROUND(COALESCE(SUM(CASE WHEN created_at >= datetime('now','-30 days') THEN cost_micro END), 0) / 1e6, 4) AS month_usd,
+          ROUND(COALESCE(SUM(cost_micro), 0) / 1e6, 4) AS all_usd,
+          SUM(CASE WHEN created_at >= date('now') THEN 1 ELSE 0 END) AS calls_today,
+          COUNT(*) AS calls,
+          SUM(CASE WHEN status BETWEEN 200 AND 299 THEN 1 ELSE 0 END) AS ok,
+          SUM(CASE WHEN status = 402 THEN 1 ELSE 0 END) AS out_of_balance
+        FROM treg_calls`),
+      by_purpose: all(`SELECT COALESCE(purpose,'other') AS purpose, COUNT(*) AS calls,
+          SUM(CASE WHEN status BETWEEN 200 AND 299 THEN 1 ELSE 0 END) AS ok,
+          ROUND(COALESCE(SUM(cost_micro), 0) / 1e6, 4) AS cost_usd
+        FROM treg_calls WHERE created_at >= datetime('now','-30 days') GROUP BY purpose ORDER BY cost_usd DESC`),
+      by_endpoint: all(`SELECT endpoint, COALESCE(served_by,'') AS served_by, COUNT(*) AS calls,
+          SUM(CASE WHEN status BETWEEN 200 AND 299 THEN 1 ELSE 0 END) AS ok,
+          ROUND(COALESCE(SUM(cost_micro), 0) / 1e6, 4) AS cost_usd
+        FROM treg_calls WHERE created_at >= datetime('now','-30 days') GROUP BY endpoint, served_by ORDER BY calls DESC LIMIT 20`),
+      last_14d: all(`SELECT date(created_at) AS day, COUNT(*) AS calls, ROUND(COALESCE(SUM(cost_micro), 0) / 1e6, 4) AS cost_usd
+        FROM treg_calls WHERE created_at >= datetime('now','-14 days') GROUP BY day ORDER BY day`),
+      recent_errors: all(`SELECT endpoint, purpose, status, error, created_at FROM treg_calls
+        WHERE error IS NOT NULL ORDER BY created_at DESC LIMIT 15`),
+      // Leads the pipeline found, so spend can be read against results.
+      leads_30d: one(`SELECT COUNT(*) AS found,
+          SUM(CASE WHEN agent_status IN ('qualified','drafted','approved','enrolled') THEN 1 ELSE 0 END) AS qualified,
+          SUM(CASE WHEN enriched_profile_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) AS profiles_filled
+        FROM targets WHERE created_at >= datetime('now','-30 days') AND agent_id IS NOT NULL`),
+    },
+
     // A live "what is happening" feed. Type and timing only, never payload_json.
     recent_events: all(`SELECT type, entity_type, COALESCE(workspace_id,'unattributed') AS workspace_id, occurred_at
       FROM domain_events ORDER BY occurred_at DESC LIMIT 50`),

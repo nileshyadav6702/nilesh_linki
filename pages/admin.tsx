@@ -23,6 +23,7 @@ interface Overview {
   workers: Row;
   eventing: Row;
   governance: Row;
+  lead_data?: Row;
   ai_spend: Row;
   recent_events: Row[];
 }
@@ -167,6 +168,9 @@ export default function AdminPage({ viewer }: { viewer: string }) {
   const gov = (overview?.governance ?? {}) as Row;
   const ai = (overview?.ai_spend ?? {}) as Row;
   const aiTotals = (ai.totals ?? {}) as Row;
+  const ld = (overview?.lead_data ?? {}) as Row;
+  const ldt = (ld.totals ?? {}) as Row;
+  const lds = (ld.leads_30d ?? {}) as Row;
 
   return (
     <>
@@ -288,6 +292,67 @@ export default function AdminPage({ viewer }: { viewer: string }) {
             <Stat label="Input tokens" value={fmt(aiTotals.input_tokens)} />
             <Stat label="Output tokens" value={fmt(aiTotals.output_tokens)} />
           </div>
+        </Section>
+
+        <Section title="Lead data (Treg)" hint={ld.configured ? `Profiles, post engagement, people search and emails bought through treg.to. Daily cap per workspace: $${num(ld.daily_cap_usd)}.` : "TREG_API_KEY is not set: lead discovery reads LinkedIn through each agent's account."}>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat label="Spent today" value={`$${num(ldt.today_usd).toFixed(3)}`} />
+            <Stat label="Last 7 days" value={`$${num(ldt.week_usd).toFixed(3)}`} />
+            <Stat label="Last 30 days" value={`$${num(ldt.month_usd).toFixed(3)}`} />
+            <Stat label="Calls today" value={fmt(ldt.calls_today)} />
+            <Stat label="Success rate" value={num(ldt.calls) ? `${Math.round((num(ldt.ok) / num(ldt.calls)) * 100)}%` : "—"} alert={num(ldt.calls) > 0 && num(ldt.ok) / num(ldt.calls) < 0.8} />
+            <Stat label="Out-of-balance refusals" value={fmt(ldt.out_of_balance)} alert={num(ldt.out_of_balance) > 0} />
+            <Stat label="Leads found (30d)" value={fmt(lds.found)} />
+            <Stat label="Qualified (30d)" value={fmt(lds.qualified)} />
+          </div>
+          <div className="mt-4 grid gap-8 lg:grid-cols-2">
+            <ScrollTable headers={["Used for (30d)", "Calls", "OK", "Cost"]}>
+              {((ld.by_purpose ?? []) as Row[]).map((r, i) => (
+                <tr key={i} className="border-b border-[var(--border-subtle)] last:border-0">
+                  <td className="px-4 py-2.5 text-base-content/75">{text(r.purpose)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">{fmt(r.calls)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">{fmt(r.ok)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">${num(r.cost_usd).toFixed(4)}</td>
+                </tr>
+              ))}
+            </ScrollTable>
+            <ScrollTable headers={["Day", "Calls", "Cost"]}>
+              {((ld.last_14d ?? []) as Row[]).map((r, i) => (
+                <tr key={i} className="border-b border-[var(--border-subtle)] last:border-0">
+                  <td className="px-4 py-2.5 text-base-content/75">{text(r.day)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">{fmt(r.calls)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">${num(r.cost_usd).toFixed(4)}</td>
+                </tr>
+              ))}
+            </ScrollTable>
+          </div>
+          <div className="mt-4">
+            <ScrollTable headers={["Endpoint (30d)", "Served by", "Calls", "OK", "Cost"]}>
+              {((ld.by_endpoint ?? []) as Row[]).map((r, i) => (
+                <tr key={i} className="border-b border-[var(--border-subtle)] last:border-0">
+                  <td className="px-4 py-2.5 font-mono text-[12.5px] text-base-content/75">{text(r.endpoint)}</td>
+                  <td className="px-4 py-2.5 text-base-content/55">{text(r.served_by) || "—"}</td>
+                  <td className="px-4 py-2.5 tabular-nums">{fmt(r.calls)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">{fmt(r.ok)}</td>
+                  <td className="px-4 py-2.5 tabular-nums">${num(r.cost_usd).toFixed(4)}</td>
+                </tr>
+              ))}
+            </ScrollTable>
+          </div>
+          {((ld.recent_errors ?? []) as Row[]).length > 0 && (
+            <div className="mt-4">
+              <ScrollTable headers={["Recent failures", "Status", "Error", "When"]}>
+                {((ld.recent_errors ?? []) as Row[]).map((r, i) => (
+                  <tr key={i} className="border-b border-[var(--border-subtle)] last:border-0">
+                    <td className="px-4 py-2.5 font-mono text-[12.5px] text-base-content/75">{text(r.endpoint)}</td>
+                    <td className="px-4 py-2.5 tabular-nums">{text(r.status) || "—"}</td>
+                    <td className="max-w-[420px] truncate px-4 py-2.5 text-base-content/60" title={text(r.error)}>{text(r.error)}</td>
+                    <td className="px-4 py-2.5 text-base-content/55">{when(r.created_at)}</td>
+                  </tr>
+                ))}
+              </ScrollTable>
+            </div>
+          )}
         </Section>
 
         <Section title="Workspaces" hint="Per-tenant rollup.">
