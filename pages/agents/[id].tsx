@@ -15,6 +15,7 @@ import { EMPTY_ICP } from "@/components/agents/IcpEditor";
 import TargetingDrawer from "@/components/agents/targeting/TargetingDrawer";
 import AgentCampaign from "@/components/agents/AgentCampaign";
 import LeadsTable from "@/components/agents/LeadsTable";
+import { FindingLeadsToast, LeadsFinderTip } from "@/components/agents/LaunchNotice";
 import type { Step } from "@/components/agents/SequenceEditor";
 import {
   Callout, IconTile, nextRunLabel, Panel, primaryBtn, TabBar, timeUntil,
@@ -57,6 +58,9 @@ export default function AgentDetail() {
   const [icpWebsite, setIcpWebsite] = useState<string | null>(null);
   const [editingIcp, setEditingIcp] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Fresh from the new-agent wizard: show the "finding leads" card and the Leads tab tip once.
+  const [launched, setLaunched] = useState(() => router.query.launched === "1");
+  const [tipOpen, setTipOpen] = useState(launched);
 
   const fetchDetail = useCallback(async (): Promise<{ data: Detail; icp: Icp | null; website: string | null } | null> => {
     if (!id) return null;
@@ -150,7 +154,11 @@ export default function AgentDetail() {
           </Panel>
         )}
 
-        <TabBar tabs={TABS} value={tab} onChange={setTab} counts={{ Leads: leadCount }} icons={TAB_ICONS} />
+        <div className="relative">
+          <TabBar tabs={TABS} value={tab} onChange={setTab} counts={{ Leads: leadCount }} icons={TAB_ICONS} />
+          {tipOpen && <LeadsFinderTip onClose={() => setTipOpen(false)} />}
+        </div>
+        {launched && <FindingLeadsToast leadCount={leadCount} onClose={() => { setLaunched(false); void router.replace({ pathname: router.pathname, query: { id } }, undefined, { shallow: true }); }} />}
 
         {tab === "Overview" && (
           <AgentOverview performance={d.performance} series={d.series} activity={d.activity} dueToday={d.due_today} budget={d.linkedin_budget} onReview={() => setTab("Leads")} onActivity={() => setTab("Activity")} />

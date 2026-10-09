@@ -20,7 +20,7 @@ export function SectionCard({ icon, label, count, summary, open, onToggle, child
         </span>
         <RiArrowDownSLine size={18} aria-hidden="true" className={`shrink-0 text-base-content/40 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div id={id} className="border-t border-[var(--border-subtle)] px-5 py-4">{children}</div>}
+      {open && <div id={id} className="wizard-rise border-t border-[var(--border-subtle)] px-5 py-4">{children}</div>}
     </section>
   );
 }
@@ -38,7 +38,7 @@ export function PlainSection({ title, description, open, onToggle, children }: {
         </span>
         <RiArrowDownSLine size={18} aria-hidden="true" className={`shrink-0 text-base-content/40 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div id={id} className="px-5 pb-5">{children}</div>}
+      {open && <div id={id} className="wizard-rise px-5 pb-5">{children}</div>}
     </section>
   );
 }

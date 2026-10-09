@@ -1,21 +1,20 @@
 import type { ReactNode } from "react";
-import { RiCheckLine } from "react-icons/ri";
 
-/** Wizard-only building blocks: the stepper, step headings, option cards and caption labels. */
+/** Wizard-only building blocks: the stepper, step headings, option cards, caption labels and the collapse. */
 
 export function Stepper({ steps, current }: { steps: readonly string[]; current: number }) {
   return (
-    <ol className="flex items-center gap-2 overflow-x-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 px-5 py-4">
+    <ol className="flex w-full items-center gap-2 overflow-x-auto rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-6 py-5 shadow-[0_1px_3px_rgba(20,20,19,0.05)] sm:px-10">
       {steps.map((label, i) => {
         const done = i < current;
         const on = i === current;
         return (
-          <li key={label} className={`flex items-center gap-2 text-sm ${i < steps.length - 1 ? "flex-1" : ""}`}>
-            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums ${on ? "bg-base-content text-base-100" : done ? "bg-primary/10 text-primary" : "bg-base-200 text-base-content/45"}`}>
-              {done ? <RiCheckLine size={14} /> : i + 1}
+          <li key={label} className={`flex items-center gap-2.5 text-[15px] ${i < steps.length - 1 ? "flex-1" : ""}`} aria-current={on ? "step" : undefined}>
+            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums transition-colors duration-300 ${on ? "bg-base-content text-base-100" : done ? "bg-primary/10 text-primary" : "bg-base-200 text-base-content/55"}`}>
+              {i + 1}
             </span>
-            <span className={`whitespace-nowrap ${on ? "font-semibold text-base-content" : done ? "text-primary" : "text-base-content/45"}`}>{label}</span>
-            {i < steps.length - 1 && <span className={`mx-2 hidden h-px min-w-6 flex-1 sm:block ${done ? "bg-primary/50" : "bg-[var(--border-subtle)]"}`} />}
+            <span className={`whitespace-nowrap transition-colors duration-300 ${on ? "font-medium text-base-content" : done ? "text-primary" : "text-base-content/50"}`}>{label}</span>
+            {i < steps.length - 1 && <span className={`mx-3 hidden h-px min-w-6 flex-1 transition-colors duration-500 sm:block ${done ? "bg-primary/60" : "bg-[var(--border-subtle)]"}`} />}
           </li>
         );
       })}
@@ -23,35 +22,42 @@ export function Stepper({ steps, current }: { steps: readonly string[]; current:
   );
 }
 
-/** Big centered serif question + muted subtitle that opens each step. */
+/** Big centered question + muted subtitle that opens each step. */
 export function StepHeading({ title, subtitle, align = "center" }: { title: ReactNode; subtitle?: ReactNode; align?: "center" | "left" }) {
   return (
     <div className={align === "center" ? "text-center" : ""}>
-      <h2 className="font-display text-[30px] leading-[1.15] tracking-[-0.5px] text-base-content">{title}</h2>
-      {subtitle && <p className="mt-2 text-[15px] text-base-content/55">{subtitle}</p>}
+      <h2 className="text-[30px] font-semibold leading-[1.2] tracking-[-0.6px] text-base-content">{title}</h2>
+      {subtitle && <p className={`mt-3 text-[17px] leading-relaxed text-base-content/60 ${align === "center" ? "mx-auto max-w-2xl" : ""}`}>{subtitle}</p>}
     </div>
   );
 }
 
 /** Uppercase caption section label ("CAMPAIGN GOAL"). */
 export function Caps({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`text-[12px] font-semibold uppercase tracking-[1.2px] text-base-content/60 ${className}`}>{children}</div>;
+  return <div className={`text-[15px] font-semibold uppercase tracking-[0.2px] text-base-content ${className}`}>{children}</div>;
 }
 
 export function RecommendedBadge() {
-  return <span className="rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-medium text-primary-content">Recommended</span>;
+  return <span className="rounded-[4px] bg-primary px-2.5 py-0.5 text-[13px] font-medium text-primary-content">Recommended</span>;
+}
+
+export function SoonBadge() {
+  return <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-base-200 px-2 py-0.5 text-[12px] font-medium text-base-content/55">Coming soon</span>;
 }
 
 /** A selectable card: coral hairline + tint when chosen. */
-export function OptionCard({ selected, onClick, icon, title, text, badge, corner, className = "" }: {
-  selected: boolean; onClick: () => void; icon?: ReactNode; title: ReactNode; text?: ReactNode; badge?: ReactNode; corner?: ReactNode; className?: string;
+export function OptionCard({ selected, onClick, icon, title, text, badge, corner, iconBelow, className = "", disabled }: {
+  selected: boolean; onClick: () => void; icon?: ReactNode; title: ReactNode; text?: ReactNode; badge?: ReactNode; corner?: ReactNode;
+  /** Put the icon under the badge row (source cards) instead of in it. */
+  iconBelow?: boolean; className?: string; disabled?: boolean;
 }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={selected}
-      className={`rounded-[12px] border p-4 text-left transition-colors ${selected ? "border-primary/60 bg-primary/5 ring-2 ring-primary/15" : "border-[var(--border-subtle)] bg-base-100 hover:border-[var(--border-strong)]"} ${className}`}>
-      {(icon || badge || corner) && <div className="mb-3 flex items-start justify-between gap-2">{icon ?? <span />}<span className="flex items-center gap-1.5">{corner}{badge}</span></div>}
-      <div className="text-[15px] font-semibold text-base-content">{title}</div>
-      {text && <div className="mt-1 text-[13px] leading-relaxed text-base-content/55">{text}</div>}
+    <button type="button" onClick={onClick} aria-pressed={selected} disabled={disabled}
+      className={`rounded-[12px] border p-5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 ${selected ? "border-primary/70 bg-primary/5 shadow-[0_0_0_4px_rgba(217,119,87,0.12)]" : "border-[var(--border-subtle)] bg-base-100 enabled:hover:-translate-y-0.5 enabled:hover:border-[var(--border-strong)] enabled:hover:shadow-[0_4px_14px_rgba(20,20,19,0.06)]"} ${className}`}>
+      <div className={`mb-4 flex items-start justify-between gap-2 ${iconBelow ? "min-h-[26px]" : ""}`}>{badge ?? (iconBelow ? <span /> : icon)}{corner}</div>
+      {iconBelow && icon && <div className="mb-5">{icon}</div>}
+      <div className="text-[17px] font-medium text-base-content">{title}</div>
+      {text && <div className="mt-2 text-[15px] leading-relaxed text-base-content/60">{text}</div>}
     </button>
   );
 }
@@ -60,16 +66,35 @@ export function OptionCard({ selected, onClick, icon, title, text, badge, corner
 export function RadioCard({ selected, onClick, title, text }: { selected: boolean; onClick: () => void; title: ReactNode; text?: ReactNode }) {
   return (
     <button type="button" role="radio" aria-checked={selected} onClick={onClick}
-      className={`flex w-full items-start gap-3 rounded-[12px] border px-4 py-3.5 text-left transition-colors ${selected ? "border-primary/60 bg-primary/5" : "border-[var(--border-subtle)] bg-base-100 hover:border-[var(--border-strong)]"}`}>
-      <span className={`mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 ${selected ? "border-primary" : "border-base-content/25"}`}>
-        {selected && <span className="h-2 w-2 rounded-full bg-primary" />}
+      className={`flex w-full items-start gap-3.5 rounded-[12px] border px-5 py-5 text-left transition-colors ${selected ? "border-primary/60 bg-primary/5" : "border-[var(--border-subtle)] bg-base-100 hover:border-[var(--border-strong)]"}`}>
+      <span className={`mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-primary/60" : "border-primary/40"}`}>
+        {selected && <span className="h-3 w-3 rounded-full bg-primary" />}
       </span>
-      <span className="min-w-0"><span className="block text-sm font-medium text-base-content">{title}</span>{text && <span className="mt-0.5 block text-xs text-base-content/55">{text}</span>}</span>
+      <span className="min-w-0"><span className="block text-[17px] font-medium text-base-content">{title}</span>{text && <span className="mt-1 block text-sm text-base-content/55">{text}</span>}</span>
     </button>
   );
 }
 
-/** The white content sheet each step sits in. */
+/** The white content sheet each step sits in; re-keyed per step so it rises in. */
 export function StepSheet({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`mx-auto max-w-4xl space-y-6 rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-5 py-8 sm:px-10 sm:py-10 ${className}`}>{children}</div>;
+  return <div className={`wizard-rise w-full min-w-0 space-y-8 rounded-[20px] border border-[var(--border-subtle)] bg-base-100 px-5 py-10 sm:px-16 sm:py-14 ${className}`}>{children}</div>;
+}
+
+/** Bordered sub-section inside a step ("CAMPAIGN GOAL", "MESSAGE TONE"). */
+export function Block({ title, subtitle, children, className = "" }: { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; className?: string }) {
+  return (
+    <section className={`wizard-rise space-y-5 rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-5 py-6 sm:px-7 ${className}`}>
+      {(title || subtitle) && <div>{title && <Caps>{title}</Caps>}{subtitle && <p className="mt-1.5 text-[17px] text-base-content/60">{subtitle}</p>}</div>}
+      {children}
+    </section>
+  );
+}
+
+/** Height-animated reveal: content stays mounted, rows grow from 0fr to 1fr. */
+export function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`} aria-hidden={!open} inert={!open}>
+      <div className={`min-h-0 ${open ? "overflow-visible" : "overflow-hidden"}`}>{children}</div>
+    </div>
+  );
 }

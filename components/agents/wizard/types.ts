@@ -4,7 +4,8 @@ import type { Icp } from "@/lib/icp/schema";
 export type SourceKind = "signals" | "lookalike" | "existing" | "linkedin_import";
 
 export interface OutreachChoice {
-  build: "ai" | "manual";
+  /** null until the user picks how to build the sequence. */
+  build: "ai" | "manual" | null;
   channel: "linkedin" | "multi" | "email";
   goal: "conversations" | "meetings";
   tone: "professional" | "conversational" | "direct";

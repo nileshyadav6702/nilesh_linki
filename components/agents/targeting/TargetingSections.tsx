@@ -23,10 +23,13 @@ const MODES: Array<{ value: MatchMode; title: string; hint: string; badge?: stri
 
 type Key = "roles" | "industries" | "types" | "sizes" | "locations" | "excluded" | "competitors" | "mode" | "advanced";
 
-/** Every collapsible section of the Edit targeting drawer, editing `icp` in place via `onChange`. */
-export default function TargetingSections({ icp, onChange }: { icp: Icp; onChange: (next: Icp) => void }) {
+/**
+ * Every collapsible section of the Edit targeting drawer, editing `icp` in place via `onChange`.
+ * `accordion` keeps at most one section open (the new-agent wizard).
+ */
+export default function TargetingSections({ icp, onChange, accordion = false }: { icp: Icp; onChange: (next: Icp) => void; accordion?: boolean }) {
   const [open, setOpen] = useState<Partial<Record<Key, boolean>>>({});
-  const flip = (k: Key) => setOpen((o) => ({ ...o, [k]: !o[k] }));
+  const flip = (k: Key) => setOpen((o) => (accordion ? { [k]: !o[k] } : { ...o, [k]: !o[k] }));
   const set = <K extends keyof Icp>(key: K, v: Icp[K]) => onChange({ ...icp, [key]: v });
 
   const roles = roleTitles(icp);

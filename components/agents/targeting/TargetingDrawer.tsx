@@ -112,7 +112,7 @@ export default function TargetingDrawer({ icp, websiteUrl, onClose, onSave }: {
             </button>
           </div>
 
-          <fieldset disabled={regenerating} className={regenerating ? "pointer-events-none opacity-60" : ""} aria-busy={regenerating}>
+          <fieldset disabled={regenerating} className={`min-w-0 ${regenerating ? "pointer-events-none opacity-60" : ""}`} aria-busy={regenerating}>
             <TargetingSections icp={draft} onChange={setDraft} />
           </fieldset>
         </div>
