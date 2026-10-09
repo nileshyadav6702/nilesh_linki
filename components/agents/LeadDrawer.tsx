@@ -41,6 +41,14 @@ const EMPTY_EDIT = { name: false, role: false, contact: false };
  */
 export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onOpen }: { targetId: string | null; onClose: () => void; onChanged?: () => void; siblings?: string[]; onOpen?: (id: string) => void }) {
   const { data: session } = useSession();
+  // Closing plays the slide-out first, then tells the parent (which unmounts the panel).
+  const [closing, setClosing] = useState(false);
+  const close = useCallback(() => {
+    if (closing) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) { onClose(); return; }
+    setClosing(true);
+    setTimeout(() => { setClosing(false); onClose(); }, 230);
+  }, [closing, onClose]);
   const [d, setD] = useState<LeadDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [fold, setFold] = useState<Record<Fold, boolean>>({ basic: true, other: false, notes: false, activity: false });
@@ -67,14 +75,14 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
   const nextId = idx >= 0 && idx < siblings!.length - 1 ? siblings![idx + 1] : null;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") close();
       const typing = e.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
       if (!typing && e.key === "ArrowLeft" && prevId) onOpen?.(prevId);
       if (!typing && e.key === "ArrowRight" && nextId) onOpen?.(nextId);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, onOpen, prevId, nextId]);
+  }, [close, onOpen, prevId, nextId]);
 
   async function act(action: string, reason?: string) {
     const r = await fetch(`/api/leads/${targetId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, reason }) });
@@ -151,12 +159,12 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Lead details">
-      <button className="absolute inset-0 bg-[#141413]/30 backdrop-blur-[1px]" onClick={onClose} aria-label="Close" />
-      <aside className="drawer-in relative flex h-full w-full max-w-[680px] flex-col bg-base-100 shadow-[var(--shadow-popover)]">
+      <button className={`absolute inset-0 bg-[#141413]/30 backdrop-blur-[1px] ${closing ? "backdrop-out" : "backdrop-in"}`} onClick={close} aria-label="Close" />
+      <aside className={`${closing ? "drawer-out" : "drawer-in"} relative flex h-full w-full max-w-[680px] flex-col bg-base-100 shadow-[var(--shadow-popover)]`}>
         {!d || !c ? (
           <div className="flex items-center justify-between px-8 py-7">
             <div className="flex items-center gap-4"><span className="h-[72px] w-[72px] animate-pulse rounded-full bg-base-200" /><span className="h-6 w-48 animate-pulse rounded bg-base-200" /></div>
-            <button type="button" onClick={onClose} aria-label="Close" className="text-base-content/50 hover:text-base-content"><RiCloseLine size={26} /></button>
+            <button type="button" onClick={close} aria-label="Close" className="text-base-content/50 hover:text-base-content"><RiCloseLine size={26} /></button>
           </div>
         ) : (
           <>
@@ -213,7 +221,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
               <div className="absolute right-6 top-6 flex items-center gap-1">
                 {siblings && <button type="button" className={navBtn} disabled={!prevId} onClick={() => prevId && onOpen?.(prevId)} aria-label="Previous lead" title="Previous (←)"><RiArrowLeftSLine size={20} /></button>}
                 {siblings && <button type="button" className={navBtn} disabled={!nextId} onClick={() => nextId && onOpen?.(nextId)} aria-label="Next lead" title="Next (→)"><RiArrowRightSLine size={20} /></button>}
-                <button type="button" onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-[8px] text-base-content/55 hover:bg-base-200 hover:text-base-content"><RiCloseLine size={26} /></button>
+                <button type="button" onClick={close} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-[8px] text-base-content/55 hover:bg-base-200 hover:text-base-content"><RiCloseLine size={26} /></button>
               </div>
             </header>
 
