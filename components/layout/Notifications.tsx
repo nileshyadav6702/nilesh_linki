@@ -32,8 +32,8 @@ export default function Notifications({ sidebarWidth }: { sidebarWidth: number }
   return (
     <>
       <button ref={btn} type="button" onClick={toggle} aria-label={n ? `Notifications, ${n} new` : "Notifications"} aria-expanded={open}
-        className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] transition-colors ${open ? "bg-base-200 text-base-content" : "text-base-content/55 hover:bg-base-200 hover:text-base-content"}`}>
-        <LuBell size={19} />
+        className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] transition-colors ${open ? "bg-base-200 text-base-content" : "text-base-content/55 hover:bg-base-200 hover:text-base-content"}`}>
+        <LuBell size={22} />
         {n > 0 && <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-base-100" />}
       </button>
       <AnimatePresence>

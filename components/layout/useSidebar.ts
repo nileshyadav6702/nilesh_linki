@@ -27,4 +27,4 @@ export function useSidebarCollapsed(): boolean {
   return useSyncExternalStore(subscribe, read, () => false);
 }
 
-export const SIDEBAR_WIDTH = { open: 264, closed: 84 } as const;
+export const SIDEBAR_WIDTH = { open: 300, closed: 92 } as const;

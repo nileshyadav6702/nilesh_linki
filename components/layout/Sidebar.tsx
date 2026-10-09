@@ -101,14 +101,14 @@ export default function Sidebar() {
   const tab = typeof router.query.tab === "string" ? router.query.tab : null;
   const name = session?.user?.name ?? session?.user?.email?.split("@")[0] ?? "You";
   const email = session?.user?.email ?? "";
-  const row = (active: boolean) => `group relative flex h-11 items-center rounded-[10px] text-[15px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${open ? "gap-3.5 px-3" : "justify-center"} ${active ? "bg-primary/[0.12] text-base-content" : "text-base-content/65 hover:bg-base-content/[0.05] hover:text-base-content"}`;
+  const row = (active: boolean) => `group relative flex h-[54px] items-center rounded-[12px] text-[17px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${open ? "gap-4 px-4" : "justify-center"} ${active ? "bg-primary/[0.12] text-base-content" : "text-base-content/65 hover:bg-base-content/[0.05] hover:text-base-content"}`;
 
   const navLink = (item: NavItem) => {
     const active = isActive(item.href);
     return (
       <Link key={item.href} href={item.href} data-tour={item.tour} aria-current={active ? "page" : undefined} aria-label={open ? undefined : item.label} className={row(active)}>
-        {active && <motion.span layoutId="nav-active" transition={{ duration: reduce ? 0 : 0.28, ease: EASE }} className="absolute -left-3 top-1/2 h-6 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
-        <item.icon size={21} strokeWidth={1.8} className={`shrink-0 transition-colors ${active ? "text-base-content" : "text-base-content/60 group-hover:text-base-content"}`} />
+        {active && <motion.span layoutId="nav-active" transition={{ duration: reduce ? 0 : 0.28, ease: EASE }} className="absolute -left-4 top-1/2 h-7 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
+        <item.icon size={24} strokeWidth={1.75} className={`shrink-0 transition-colors ${active ? "text-base-content" : "text-base-content/60 group-hover:text-base-content"}`} />
         <Label show={open}>{item.label}</Label>
         <Tip show={!open} text={item.label} />
       </Link>
@@ -120,51 +120,51 @@ export default function Sidebar() {
       <motion.aside initial={false} animate={{ width }} transition={{ duration: reduce ? 0 : 0.3, ease: EASE }}
         className="fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-[var(--border-subtle)] bg-base-100 md:flex">
         {/* Brand, notifications, collapse */}
-        <div className={`flex shrink-0 items-center pt-5 ${open ? "h-[72px] gap-2 px-5" : "h-[72px] justify-center px-0"}`}>
+        <div className={`flex shrink-0 items-center pt-5 ${open ? "h-[84px] gap-2 px-6" : "h-[84px] justify-center px-0"}`}>
           <Link href="/dashboard" aria-label={`${BRAND.name} home`} className="flex min-w-0 flex-1 items-center gap-2.5" style={open ? undefined : { flex: "none" }}>
-            <Image src={BRAND.logo} alt="" width={32} height={32} priority className="shrink-0" />
-            <Label show={open} className="text-[22px] font-semibold tracking-tight text-base-content">{BRAND.name}</Label>
+            <Image src={BRAND.logo} alt="" width={36} height={36} priority className="shrink-0" />
+            <Label show={open} className="text-[27px] font-semibold tracking-tight text-base-content">{BRAND.name}</Label>
           </Link>
           {open && <Notifications sidebarWidth={width} />}
           {open && (
             <button type="button" onClick={() => setSidebarCollapsed(true)} aria-label="Collapse sidebar" title="Collapse sidebar"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content"><LuChevronLeft size={20} /></button>
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content"><LuChevronLeft size={24} /></button>
           )}
         </div>
         {!open && (
           <div className="flex flex-col items-center gap-1 pt-3">
             <button type="button" onClick={() => setSidebarCollapsed(false)} aria-label="Expand sidebar"
-              className="group relative flex h-9 w-9 items-center justify-center rounded-[10px] text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content">
-              <LuChevronRight size={20} /><Tip show text="Expand" />
+              className="group relative flex h-10 w-10 items-center justify-center rounded-[10px] text-base-content/55 transition-colors hover:bg-base-200 hover:text-base-content">
+              <LuChevronRight size={24} /><Tip show text="Expand" />
             </button>
             <Notifications sidebarWidth={width} />
           </div>
         )}
 
-        <nav aria-label="Primary" className={`flex-1 px-3 pb-3 pt-5 ${open ? "overflow-y-auto" : ""}`}>
-          <div className="space-y-1.5">
+        <nav aria-label="Primary" className={`flex-1 px-4 pb-4 pt-6 ${open ? "overflow-y-auto" : ""}`}>
+          <div className="space-y-2">
             {NAV.map(navLink)}
           </div>
 
-          <div className="mt-6">
+          <div className="mt-8">
             {open ? (
               <>
                 <button type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((v) => !v)} data-tour="nav-settings" className={`${row(onSettings && !settingsOpen)} w-full`}>
-                  {onSettings && !settingsOpen && <motion.span layoutId="nav-active" className="absolute -left-3 top-1/2 h-6 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
-                  <LuSettings size={21} strokeWidth={1.8} className="shrink-0 text-base-content/60 group-hover:text-base-content" />
-                  <Label show className="flex-1 text-left">Settings</Label>
+                  {onSettings && !settingsOpen && <motion.span layoutId="nav-active" className="absolute -left-4 top-1/2 h-7 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
+                  <LuSettings size={24} strokeWidth={1.75} className="shrink-0 text-base-content/60 group-hover:text-base-content" />
+                  <Label show className="flex-1 text-left text-[17px] font-medium">Settings</Label>
                   <LuChevronDown size={19} className={`shrink-0 text-base-content/55 transition-transform duration-200 ${settingsOpen ? "rotate-180" : ""}`} />
                 </button>
                 <AnimatePresence initial={false}>
                   {settingsOpen && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduce ? 0 : 0.22, ease: EASE }} className="overflow-hidden">
-                      <div className="ml-[22px] mt-1 space-y-1 border-l border-[var(--border-subtle)] pl-3">
+                      <div className="ml-[27px] mt-1.5 space-y-1.5 border-l border-[var(--border-subtle)] pl-3">
                         {SETTINGS.map((s) => {
                           const active = router.pathname === "/settings" && (s.tab ? tab === s.tab : tab !== "integrations");
                           return (
                             <Link key={s.href} href={s.href} aria-current={active ? "page" : undefined} className={row(active)}>
                               {active && <motion.span layoutId="nav-active" transition={{ duration: reduce ? 0 : 0.28, ease: EASE }} className="absolute -left-[13px] top-1/2 h-6 w-[3px] -translate-y-1/2 rounded-full bg-primary" />}
-                              <s.icon size={19} strokeWidth={1.8} className={`shrink-0 ${active ? "text-base-content" : "text-base-content/55 group-hover:text-base-content"}`} />
+                              <s.icon size={22} strokeWidth={1.75} className={`shrink-0 ${active ? "text-base-content" : "text-base-content/55 group-hover:text-base-content"}`} />
                               <span className="truncate whitespace-nowrap">{s.label}</span>
                             </Link>
                           );
@@ -176,8 +176,8 @@ export default function Sidebar() {
               </>
             ) : (
               <Link href="/settings" aria-label="Settings" data-tour="nav-settings" className={row(onSettings)}>
-                {onSettings && <motion.span layoutId="nav-active" className="absolute -left-3 top-1/2 h-6 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
-                <LuSettings size={21} strokeWidth={1.8} className={`shrink-0 ${onSettings ? "text-base-content" : "text-base-content/60 group-hover:text-base-content"}`} />
+                {onSettings && <motion.span layoutId="nav-active" className="absolute -left-4 top-1/2 h-7 w-[4px] -translate-y-1/2 rounded-r-full bg-primary" />}
+                <LuSettings size={24} strokeWidth={1.75} className={`shrink-0 ${onSettings ? "text-base-content" : "text-base-content/60 group-hover:text-base-content"}`} />
                 <Tip show text="Settings" />
               </Link>
             )}
@@ -185,7 +185,7 @@ export default function Sidebar() {
           </div>
         </nav>
 
-        <div className="shrink-0 space-y-1.5 border-t border-[var(--border-subtle)] p-3">
+        <div className="shrink-0 space-y-2 border-t border-[var(--border-subtle)] p-4">
           {update.available && open && (
             <div className="mb-1 flex items-start gap-2.5 rounded-[10px] border border-warning/25 bg-warning/[0.08] px-3 py-2.5">
               <LuCircleArrowUp size={17} className="mt-0.5 shrink-0 text-warning" />
@@ -195,8 +195,8 @@ export default function Sidebar() {
 
           <div ref={helpRef} className="relative">
             <button type="button" onClick={() => setHelpOpen((v) => !v)} aria-expanded={helpOpen} aria-label={open ? undefined : "Help & learning"} className={`${row(false)} w-full`}>
-              <LuCircleHelp size={21} strokeWidth={1.8} className="shrink-0 text-base-content/60 group-hover:text-base-content" />
-              <Label show={open}>Help &amp; learning</Label>
+              <LuCircleHelp size={24} strokeWidth={1.75} className="shrink-0 text-base-content/60 group-hover:text-base-content" />
+              <Label show={open} className="text-[17px] font-medium">Help &amp; learning</Label>
               <Tip show={!open && !helpOpen} text="Help & learning" />
             </button>
             <AnimatePresence>
@@ -219,10 +219,10 @@ export default function Sidebar() {
           <div ref={accountRef} className="relative">
             <button type="button" onClick={() => setAccountOpen((v) => !v)} aria-expanded={accountOpen} aria-label={`Account: ${email || name}`}
               className={`group relative flex w-full items-center rounded-[12px] transition-colors hover:bg-base-200/80 ${open ? "gap-3 p-2" : "justify-center p-1.5"} ${accountOpen ? "bg-base-200/80" : ""}`}>
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#f29a6b] to-[#d4553a] text-[14px] font-semibold text-white">{initials(name)}</span>
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#f29a6b] to-[#d4553a] text-[15px] font-semibold text-white">{initials(name)}</span>
               {open && (
                 <span className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[14px] font-semibold text-base-content">{name}</span>
+                  <span className="block truncate text-[16px] font-semibold text-base-content">{name}</span>
                   <span className="block truncate text-[12px] text-base-content/50">{email || (update.current ? `v${update.current}` : "Self-hosted")}</span>
                 </span>
               )}
@@ -252,7 +252,7 @@ export default function Sidebar() {
           const active = isActive(item.href);
           return (
             <Link key={item.href} href={item.href} aria-label={item.label} aria-current={active ? "page" : undefined} className={`flex h-11 w-11 items-center justify-center rounded-[12px] transition-colors ${active ? "bg-primary/[0.09] text-base-content" : "text-base-content/55"}`}>
-              <item.icon size={21} strokeWidth={1.8} />
+              <item.icon size={24} strokeWidth={1.75} />
             </Link>
           );
         })}
@@ -274,13 +274,13 @@ export default function Sidebar() {
                   const active = isActive(item.href);
                   return (
                     <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined} className={`flex h-12 items-center gap-3.5 rounded-[10px] px-3 text-[16px] font-medium ${active ? "bg-primary/[0.09] text-base-content" : "text-base-content/75 hover:bg-base-200"}`}>
-                      <item.icon size={21} strokeWidth={1.8} className={active ? "text-base-content" : "text-base-content/55"} />{item.label}
+                      <item.icon size={24} strokeWidth={1.75} className={active ? "text-base-content" : "text-base-content/55"} />{item.label}
                     </Link>
                   );
                 })}
                 {SETTINGS.map((s) => (
                   <Link key={s.href} href={s.href} className="flex h-12 items-center gap-3.5 rounded-[10px] px-3 text-[16px] font-medium text-base-content/75 hover:bg-base-200">
-                    <s.icon size={21} strokeWidth={1.8} className="text-base-content/55" />{s.label}
+                    <s.icon size={24} strokeWidth={1.75} className="text-base-content/55" />{s.label}
                   </Link>
                 ))}
               </div>
