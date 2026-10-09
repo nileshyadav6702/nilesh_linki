@@ -2,8 +2,8 @@ import { z } from "zod";
 import { aiJson } from "@/lib/ai/client";
 import { getDb } from "@/lib/db";
 import {
-  companyFacts, currentRoleFromExperience, lookalikeSearchUrl, parseFlagshipProfile, publicIdFromUrl, rankLookalikes,
-  type LookalikeLead, type LookalikeProfile, type LookalikeScope,
+  companyFacts, currentRoleFromExperience, flagshipSearchUrl, lookalikeSearchUrl, parseFlagshipProfile, parseSearchCards, publicIdFromUrl, rankLookalikes,
+  type LookalikeCandidate, type LookalikeLead, type LookalikeProfile, type LookalikeScope,
 } from "@/lib/agents/lookalike-rules";
 
 /**
@@ -162,28 +162,76 @@ async function readPage<T>(ctx: import("playwright").BrowserContext, accountId: 
 }
 
 /** First page of the lookalike search, ranked by match. Retries without the industry filter when it finds no one. */
+/** Accounts LinkedIn sent to the Sales Navigator upsell, so the next search goes straight to regular search. */
+const noSalesNav = new Map<string, number>();
+const NO_SALES_NAV_TTL = 24 * 3600_000;
+const lacksSalesNav = (err: unknown) => err instanceof Error && /premium|upsell|sales\/login|may not have Sales Navigator/i.test(err.message);
+
+/**
+ * First page of the lookalike search, ranked by match. Uses Sales Navigator when the account
+ * has it (retrying without the industry filter if that finds no one), else LinkedIn's regular
+ * people search. The returned URL is what the agent's lookalike source keeps importing from.
+ */
 export async function searchLookalikes(workspaceId: string, scope: LookalikeScope, seedName: string | null, accountId?: string | null): Promise<{ leads: LookalikeLead[]; searchUrl: string }> {
   if (!scope.title.trim()) throw new LookalikeError("Add the role to look for.");
   const account = pickAccount(workspaceId, accountId);
   const { scrapeNavigatorUrl } = await import("@/lib/linkedin/scraper");
   return onSession(account, async (ctx) => {
-    let failed: unknown = null;
-    const run = async (u: string) => {
-      try { return (await scrapeNavigatorUrl(ctx, u, { maxPages: 1 })).profiles; } catch (err) { failed = err; return []; }
-    };
-    let searchUrl = lookalikeSearchUrl(scope);
-    let found = await run(searchUrl);
-    if (!found.length && scope.industryId && !scope.relatedIndustries) {
-      searchUrl = lookalikeSearchUrl(scope, { withIndustry: false });
+    let found: LookalikeCandidate[] = [];
+    let searchUrl = "";
+    if ((noSalesNav.get(account) ?? 0) < Date.now()) {
+      let failed: unknown = null;
+      const run = async (u: string) => {
+        try { return (await scrapeNavigatorUrl(ctx, u, { maxPages: 1 })).profiles; } catch (err) { failed = err; return []; }
+      };
+      searchUrl = lookalikeSearchUrl(scope);
       found = await run(searchUrl);
+      if (!found.length && !failed && scope.industryId && !scope.relatedIndustries) {
+        searchUrl = lookalikeSearchUrl(scope, { withIndustry: false });
+        found = await run(searchUrl);
+      }
+      if (failed) {
+        console.warn("[lookalike] Sales Navigator search failed, using regular search:", failed instanceof Error ? failed.message : failed);
+        if (lacksSalesNav(failed)) noSalesNav.set(account, Date.now() + NO_SALES_NAV_TTL);
+      }
     }
-    if (!found.length && failed) {
-      console.error("[lookalike] search failed:", failed instanceof Error ? failed.message : failed);
-      throw new LookalikeError("Sales Navigator didn't return results. Make sure this LinkedIn account has Sales Navigator, then try again.", 502);
+    if (!found.length) {
+      searchUrl = flagshipSearchUrl(scope);
+      found = await scrapePeopleSearch(ctx, account, searchUrl);
     }
-    if (!found.length) throw new LookalikeError("No similar people found on Sales Navigator. Try turning on similar roles or related industries, or widen the company sizes.", 404);
+    if (!found.length) throw new LookalikeError("No similar people found on LinkedIn. Try turning on similar roles, adding more titles, or choosing Any location.", 404);
     return { leads: rankLookalikes(found, scope, seedName), searchUrl };
   });
+}
+
+/** Runs in the page: every result card of a LinkedIn people search (the profile link, card text and photo). */
+// No named inner functions in page code: some bundlers (tsx/esbuild keepNames) wrap them in a
+// __name() helper that doesn't exist inside the browser page.
+const SEARCH_DOM = (): Array<{ href: string; text: string; photo: string | null }> => {
+  const links = Array.from(document.querySelectorAll("main a[href*='/in/']")) as HTMLAnchorElement[];
+  const out = new Map<string, { href: string; text: string; photo: string | null }>();
+  for (const a of links) {
+    const href = a.href.split("?")[0].replace(/\/$/, "");
+    if (out.has(href) || !/\/in\/[^/]+$/.test(href)) continue;
+    // Widen to the card: the largest ancestor that still holds links to this one person only.
+    let card: HTMLElement = a;
+    while (card.parentElement && card.parentElement.tagName !== "MAIN") {
+      const people = new Set(Array.from(card.parentElement.querySelectorAll("a[href*='/in/']")).map((x) => (x as HTMLAnchorElement).href.split("?")[0].replace(/\/$/, "")));
+      if (people.size > 1) break;
+      card = card.parentElement;
+    }
+    const text = card.innerText ?? "";
+    if (!text.trim()) continue;
+    const img = Array.from(card.querySelectorAll("img")).find((i) => /profile-displayphoto/.test((i as HTMLImageElement).src)) as HTMLImageElement | undefined;
+    out.set(href, { href, text, photo: img?.src ?? null });
+  }
+  return Array.from(out.values());
+};
+
+/** One page of a regular LinkedIn people search, parsed into candidates. Also used by the agent's lookalike source. */
+export async function scrapePeopleSearch(ctx: import("playwright").BrowserContext, accountId: string, url: string): Promise<LookalikeCandidate[]> {
+  const page = await readPage(ctx, accountId, url, SEARCH_DOM);
+  return parseSearchCards(page.dom ?? []);
 }
 
 /** AI suggestions for titles close to the seed's (for "Include similar roles"). */

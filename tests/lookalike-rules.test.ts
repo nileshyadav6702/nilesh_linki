@@ -119,3 +119,32 @@ describe("profile page parsing", () => {
     expect(sizeBucket("no headcount")).toBeNull();
   });
 });
+
+describe("regular LinkedIn search (no Sales Navigator)", () => {
+  it("builds a boolean title query with the city, or a geo filter when the id is known", async () => {
+    const { flagshipSearchUrl, isFlagshipSearchUrl } = await import("@/lib/agents/lookalike-rules");
+    const url = flagshipSearchUrl({ ...scope, geoId: null });
+    expect(isFlagshipSearchUrl(url)).toBe(true);
+    expect(new URL(url).searchParams.get("keywords")).toBe('("VP of Sales" OR "Chief Sales Officer") South Delhi');
+    const geo = new URL(flagshipSearchUrl(scope, 3));
+    expect(geo.searchParams.get("keywords")).not.toContain("Delhi");
+    expect(geo.searchParams.get("geoUrn")).toBe('["105556991"]');
+    expect(geo.searchParams.get("page")).toBe("3");
+  });
+
+  it("parses result cards, preferring the Current: line for title and company", async () => {
+    const { parseSearchCards } = await import("@/lib/agents/lookalike-rules");
+    const people = parseSearchCards([
+      { href: "https://www.linkedin.com/in/sunil-sharma?mini=1", text: "Sunil Sharma\n • 3rd+\n\nManaging Director & VP - Sales, Sophos\n\nSouth Delhi, Delhi, India\n\nFollow\n\nCurrent: Vice President - Sales (India & SAARC) at Sophos\n\n6,573 followers" },
+      { href: "https://www.linkedin.com/in/rajendar", text: "Rajendar Kumar • 3rd+\n\nVP Sales at Likraft\n\nGurugram, Haryana, India\n\nMessage\n\nPast: VP of Sales & Marketing at Likraft Battery" },
+      { href: "https://www.linkedin.com/company/acme", text: "Acme" },
+    ]);
+    expect(people).toHaveLength(2);
+    expect(people[0]).toMatchObject({ fullName: "Sunil Sharma", title: "Vice President - Sales (India & SAARC)", company: "Sophos", location: "South Delhi, Delhi, India", linkedinUrl: "https://www.linkedin.com/in/sunil-sharma/" });
+    expect(people[1]).toMatchObject({ fullName: "Rajendar Kumar", title: "VP Sales", company: "Likraft", location: "Gurugram, Haryana, India" });
+  });
+
+  it("treats VP and Vice President as the same title and scores without industry", () => {
+    expect(matchScore(candidate({ title: "Vice President of Sales", companyIndustry: null }), scope)).toBe(100);
+  });
+});

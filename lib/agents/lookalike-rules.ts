@@ -202,7 +202,61 @@ export function lookalikeSearchUrl(scope: LookalikeScope, opts: { withIndustry?:
   return `https://www.linkedin.com/sales/search/people?query=(spellCorrectionEnabled:true,filters:List(${filters.join(",")}))`;
 }
 
-const words = (s: string | null | undefined) => new Set((s ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1 && !STOP.has(w)));
+/**
+ * Regular LinkedIn people search for the scope, for accounts without Sales Navigator. Title
+ * filters are Premium-only there, so titles go in as a boolean keyword query; the city joins
+ * the keywords unless a geo id can filter by place.
+ */
+export function flagshipSearchUrl(scope: LookalikeScope, page = 1): string {
+  const titles = scopeTitles(scope).slice(0, 5);
+  const titleQuery = titles.length > 1 ? `(${titles.map((t) => `"${t}"`).join(" OR ")})` : titles[0] ? `"${titles[0]}"` : "";
+  const city = scope.geoId ? "" : cleanText(scope.location?.split(",")[0]);
+  const params = new URLSearchParams({ keywords: [titleQuery, city].filter(Boolean).join(" "), origin: "FACETED_SEARCH" });
+  if (scope.geoId) params.set("geoUrn", `["${scope.geoId}"]`);
+  if (page > 1) params.set("page", String(page));
+  return `https://www.linkedin.com/search/results/people/?${params.toString()}`;
+}
+
+export const isFlagshipSearchUrl = (u: string) => /linkedin\.com\/search\/results\/people\/?\?/i.test(u);
+
+/** One result card from the people search page: the profile link and the card's text. */
+export interface SearchCard { href: string; text: string; photo?: string | null }
+
+const NOISE = /^(•\s*)?(1st|2nd|3rd\+?)$|^(Connect|Message|Follow|Following|Pending)$|followers$|mutual connection|^Status is|^View .+ profile$/i;
+
+/** People search cards → candidates (title and company from the "Current:" line, else the headline). */
+export function parseSearchCards(cards: SearchCard[]): LookalikeCandidate[] {
+  const out: LookalikeCandidate[] = [];
+  for (const card of cards) {
+    const url = card.href.match(/^https?:\/\/(?:www\.)?linkedin\.com\/in\/[^/?#]+/i)?.[0];
+    if (!url) continue;
+    const lines = card.text.split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+    const name = lines[0]?.split(/\s+•\s+/)[0].trim();
+    if (!name || /^LinkedIn Member$/i.test(name)) continue;
+    const rest = lines.slice(1).filter((l) => !NOISE.test(l) && !l.startsWith("Past:"));
+    const currentLine = rest.find((l) => /^Current:/i.test(l));
+    const [headline, location] = rest.filter((l) => l !== currentLine);
+    const current = currentLine?.replace(/^Current:\s*/i, "").match(/^(.*?)\s+at\s+(.+)$/i);
+    const fromHeadline = headline?.split(/\s+(?:at|@)\s+/i) ?? [];
+    out.push({
+      salesNavUrn: `${url}/`, salesNavUrl: `${url}/`, linkedinUrl: `${url}/`, fullName: name,
+      title: current?.[1]?.trim() || fromHeadline[0]?.trim() || null,
+      company: current?.[2]?.trim() || (fromHeadline.length > 1 ? fromHeadline[1].trim() : null),
+      location: location ?? null, companyIndustry: null, profileImageUrl: card.photo ?? null,
+    });
+  }
+  return out;
+}
+
+/** Title abbreviations spelled out, so "VP Sales" and "Vice President of Sales" compare equal. */
+const ABBR: Record<string, string> = {
+  vp: "vice president", svp: "senior vice president", evp: "executive vice president", avp: "assistant vice president",
+  cso: "chief sales officer", cro: "chief revenue officer", ceo: "chief executive officer", cto: "chief technology officer",
+  cfo: "chief financial officer", coo: "chief operating officer", cmo: "chief marketing officer", md: "managing director",
+  gm: "general manager", sr: "senior", jr: "junior", mgr: "manager", bd: "business development",
+};
+const words = (s: string | null | undefined) => new Set((s ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u)
+  .flatMap((w) => (ABBR[w] ?? w).split(" ")).filter((w) => w.length > 1 && !STOP.has(w)));
 const STOP = new Set(["of", "and", "the", "at", "in", "for", "to", "&"]);
 const overlap = (a: Set<string>, b: Set<string>) => {
   if (!a.size || !b.size) return 0;
@@ -219,7 +273,10 @@ export function matchScore(c: Pick<LookalikeCandidate, "title" | "location" | "c
   const ind = scope.industry ? overlap(words(scope.industry), words(c.companyIndustry)) : 1;
   // A title that only shares a seniority word still reads as related, not as a miss.
   const titlePts = title >= 0.99 ? 50 : 30 + title * 20;
-  return Math.round(Math.min(100, titlePts + 25 * Math.min(1, loc * 1.5) + 25 * Math.min(1, ind * 1.5)));
+  const locPts = 25 * Math.min(1, loc * 1.5);
+  // Regular LinkedIn search shows no industry: score on title and place alone, scaled to 100.
+  if (scope.industry && !c.companyIndustry) return Math.round(Math.min(100, ((titlePts + locPts) / 75) * 100));
+  return Math.round(Math.min(100, titlePts + locPts + 25 * Math.min(1, ind * 1.5)));
 }
 
 /** Best matches first, the seed person and duplicates dropped. */

@@ -1,4 +1,5 @@
 import { hasActiveImport, startImport } from "@/lib/import-jobs";
+import { isFlagshipSearchUrl } from "@/lib/agents/lookalike-rules";
 import type { SourceRunner } from "@/lib/signals/sources/types";
 
 /** Sales Navigator people-search URL for a boolean keyword query. */
@@ -7,12 +8,43 @@ export function salesNavSearchUrl(keywords: string): string {
   return `https://www.linkedin.com/sales/search/people?query=(keywords%3A${encodeURIComponent(q)})`;
 }
 
+/** Regular LinkedIn search pages read per run, and the deepest page before starting over. */
+const PAGES_PER_RUN = 2;
+const MAX_PAGE = 10;
+
 /**
  * Fills capacity when signals run dry: imports people matching the ICP's Sales Navigator
  * keyword query into the agent's list through the existing paced importer. The agent
  * loop adopts those list members as low-intent "lookalike" leads.
+ *
+ * A Warm Lookalike agent stores the search built from its seed profile instead: a Sales
+ * Navigator search goes through the importer the same way; a regular LinkedIn people search
+ * (accounts without Sales Navigator) is read a couple of pages per run, leads emitted directly.
  */
 export const lookalikeRunner: SourceRunner = async (ctx) => {
+  const flagship = ctx.config.urls.find(isFlagshipSearchUrl) ?? null;
+  if (flagship) {
+    if (!ctx.browser || !ctx.agent.linkedin_account_id) throw new Error("Lookalike search needs a connected LinkedIn account on the agent");
+    const { scrapePeopleSearch } = await import("@/lib/agents/lookalike-search");
+    let pageNo = Number(ctx.cursor.page ?? 0);
+    for (let i = 0; i < PAGES_PER_RUN && !ctx.isFull(); i++) {
+      pageNo = pageNo >= MAX_PAGE ? 1 : pageNo + 1;
+      const url = new URL(flagship);
+      if (pageNo > 1) url.searchParams.set("page", String(pageNo)); else url.searchParams.delete("page");
+      const people = await scrapePeopleSearch(ctx.browser, ctx.agent.linkedin_account_id, url.toString());
+      if (!people.length) { pageNo = 0; break; }
+      for (const p of people) {
+        ctx.emitLead(
+          { name: p.fullName ?? "LinkedIn member", profileUrl: p.linkedinUrl, title: p.title, company: p.company, location: p.location, profileImageUrl: p.profileImageUrl },
+          { type: "lookalike", title: "Looks like your best customer", sourceUrl: p.linkedinUrl, dedupeKey: `lookalike:${ctx.agent.id}:${p.linkedinUrl}` },
+        );
+      }
+    }
+    ctx.cursor.page = pageNo;
+    ctx.cursor.last_import_at = new Date().toISOString();
+    return;
+  }
+
   // The wizard's Warm Lookalike stores the full Sales Navigator search built from a seed profile.
   const searchUrl = ctx.config.urls.find((u) => /linkedin\.com\/sales\/search\/people\?/.test(u)) ?? null;
   const query = ctx.config.keywords[0] || ctx.icp?.sales_nav_keywords;
