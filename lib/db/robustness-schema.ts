@@ -7,6 +7,12 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Treg data calls (lib/treg/client.ts): what each workspace spends, for the daily cap and reporting.
+  `CREATE TABLE IF NOT EXISTS treg_calls (
+    id TEXT PRIMARY KEY, workspace_id TEXT, endpoint TEXT NOT NULL, purpose TEXT, status INTEGER,
+    cost_micro INTEGER NOT NULL DEFAULT 0, served_by TEXT, error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_treg_calls_ws_day ON treg_calls(workspace_id, created_at)",
   // Integrations page (lib/integrations): one connection per app; config holds the encrypted keys.
   `CREATE TABLE IF NOT EXISTS integration_connections (
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL,

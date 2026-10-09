@@ -130,6 +130,8 @@ export function defaultAccountPhases(db: ReturnType<typeof getDb> = getDb()): Ac
     {
       // Leads parked as needs_data (no headline/about to score): a few budgeted profile reads.
       label: "Needs-data enrichment", timeoutMs: NEEDS_DATA_TIMEOUT_MS, run: async (accountId, lease) => {
+        // With treg configured, profiles are read there (lib/treg/enrich.ts) and the session is left for outreach.
+        if ((await import("@/lib/treg/client")).tregEnabled()) return;
         const { enrichNeedsDataLeads } = await import("@/lib/linkedin/needs-data");
         await enrichNeedsDataLeads({}, undefined, { accountId, shouldStop: () => !lease.isHeld() });
       },

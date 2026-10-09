@@ -1,10 +1,10 @@
 import type Database from "better-sqlite3";
+import { sourceNeedsLinkedIn } from "@/lib/agents/store";
 import { getDb } from "@/lib/db";
 import { getIcp, getLatestIcp } from "@/lib/icp/store";
 import { listSources, type Agent, type AgentSource } from "@/lib/agents/store";
 import { scoreNewLeads } from "@/lib/agents/fit";
 import { runSource } from "@/lib/signals/engine";
-import { SOURCE_TYPES } from "@/lib/signals/types";
 import { discoveryPausedUntil, pauseDiscovery } from "@/lib/linkedin/budget";
 
 /**
@@ -62,7 +62,7 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
   let filtered = 0;
 
   // Cheap sources first: existing lists, job boards, news.
-  for (const s of sources.filter((x) => !SOURCE_TYPES[x.source_type].needsLinkedIn)) {
+  for (const s of sources.filter((x) => !sourceNeedsLinkedIn(x.source_type))) {
     if (have() >= POOL || Date.now() > deadline) break;
     const r = await runSource(s, { maxNew: POOL - have() });
     filtered += r.filtered;
@@ -72,7 +72,7 @@ export async function runPreview(agent: Agent, budgetMs = 120_000): Promise<Prev
 
   // Competitor pages are read from the feed, so they still work after the daily search allowance is used up.
   const linkedinSources = sources
-    .filter((x) => SOURCE_TYPES[x.source_type].needsLinkedIn && x.source_type !== "lookalike" && x.source_type !== "job_change")
+    .filter((x) => sourceNeedsLinkedIn(x.source_type) && x.source_type !== "lookalike" && x.source_type !== "job_change")
     .sort((a, b) => Number(b.source_type === "competitor_engagement") - Number(a.source_type === "competitor_engagement"));
   if (linkedinSources.length && have() < SAMPLE) {
     const account = agent.linkedin_account_id ? db.prepare("SELECT is_authenticated FROM accounts WHERE id = ?").get(agent.linkedin_account_id) as { is_authenticated: number } | undefined : undefined;

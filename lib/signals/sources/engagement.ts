@@ -1,5 +1,7 @@
-import { fetchPostEngagers, fetchRecentPosts, parseEntityUrl, searchPostsByKeyword, engagerKey, type PostRef } from "@/lib/linkedin/engagers";
+import { fetchPostEngagers, fetchRecentPosts, parseEntityUrl, searchPostsByKeyword, engagerKey, type Engager, type EntityRef, type PostRef } from "@/lib/linkedin/engagers";
 import type { SourceRunContext, SourceRunner } from "@/lib/signals/sources/types";
+import { tregEnabled } from "@/lib/treg/client";
+import { tregPostEngagers, tregRecentPosts, tregSearchPosts } from "@/lib/treg/linkedin";
 import type { SignalType } from "@/lib/signals/types";
 
 /** Posts older than this carry little intent; skip them. */
@@ -18,7 +20,31 @@ function entityLabel(url: string): string {
   return raw.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-async function harvestPost(ctx: SourceRunContext, post: PostRef, type: SignalType, what: string) {
+/** Where post and engagement data comes from: treg when configured, else the agent's LinkedIn session. */
+interface PostData {
+  posts(entity: EntityRef, count: number): Promise<PostRef[]>;
+  search(keyword: string, count: number): Promise<PostRef[]>;
+  engagers(post: PostRef, opts: { reactions?: number }): Promise<Engager[]>;
+}
+
+function postData(ctx: SourceRunContext): PostData {
+  if (tregEnabled()) {
+    return {
+      posts: (e, n) => tregRecentPosts(ctx.workspaceId, e, n),
+      search: (k, n) => tregSearchPosts(ctx.workspaceId, k, n),
+      engagers: (p, o) => tregPostEngagers(ctx.workspaceId, p, o),
+    };
+  }
+  const voyager = ctx.voyager;
+  if (!voyager) throw new Error("This source needs an authenticated LinkedIn account on the agent");
+  return {
+    posts: (e, n) => fetchRecentPosts(voyager, e, n),
+    search: (k, n) => searchPostsByKeyword(voyager, k, n),
+    engagers: (p, o) => fetchPostEngagers(voyager, p.activityUrn, o),
+  };
+}
+
+async function harvestPost(ctx: SourceRunContext, data: PostData, post: PostRef, type: SignalType, what: string) {
   const seen = (ctx.cursor.posts ?? {}) as Record<string, string>;
   const firstSeen = seen[post.activityUrn];
   if (firstSeen && ageDays(firstSeen) > REVISIT_DAYS) return;
@@ -26,7 +52,7 @@ async function harvestPost(ctx: SourceRunContext, post: PostRef, type: SignalTyp
   seen[post.activityUrn] = firstSeen ?? new Date().toISOString();
   ctx.cursor.posts = seen;
 
-  const engagers = await fetchPostEngagers(ctx.voyager!, post.activityUrn, { reactions: ctx.config.max_engagers_per_post });
+  const engagers = await data.engagers(post, { reactions: ctx.config.max_engagers_per_post });
   const excerpt = post.text ? `"${post.text.slice(0, 160)}${post.text.length > 160 ? "…" : ""}"` : null;
   for (const e of engagers) {
     if (ctx.isFull()) return;
@@ -49,22 +75,22 @@ async function harvestPost(ctx: SourceRunContext, post: PostRef, type: SignalTyp
 /** competitor_engagement / influencer_engagement / own_content_engagement share one runner. */
 export function engagementRunner(type: SignalType): SourceRunner {
   return async (ctx) => {
-    if (!ctx.voyager) throw new Error("This source needs an authenticated LinkedIn account on the agent");
+    const data = postData(ctx);
     for (const url of ctx.config.urls) {
       const entity = parseEntityUrl(url);
       if (!entity) continue;
-      const posts = await fetchRecentPosts(ctx.voyager, entity, ctx.config.posts_per_entity);
+      const posts = await data.posts(entity, ctx.config.posts_per_entity);
       const what = type === "own_content_engagement" ? "your post" : `${entityLabel(url)}'s post`;
-      for (const post of posts) { if (ctx.isFull()) return; await harvestPost(ctx, post, type, what); }
+      for (const post of posts) { if (ctx.isFull()) return; await harvestPost(ctx, data, post, type, what); }
     }
   };
 }
 
 export const keywordRunner: SourceRunner = async (ctx) => {
-  if (!ctx.voyager) throw new Error("This source needs an authenticated LinkedIn account on the agent");
+  const data = postData(ctx);
   const keywords = ctx.config.keywords.length ? ctx.config.keywords : (ctx.icp?.keywords ?? []).slice(0, 5);
   for (const keyword of keywords) {
-    const posts = await searchPostsByKeyword(ctx.voyager, keyword, ctx.config.posts_per_entity);
-    for (const post of posts) { if (ctx.isFull()) return; await harvestPost(ctx, post, "keyword_engagement", `a post about "${keyword}"`); }
+    const posts = await data.search(keyword, ctx.config.posts_per_entity);
+    for (const post of posts) { if (ctx.isFull()) return; await harvestPost(ctx, data, post, "keyword_engagement", `a post about "${keyword}"`); }
   }
 };

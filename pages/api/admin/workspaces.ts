@@ -36,7 +36,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       (SELECT COUNT(*) FROM suppressions s    WHERE s.workspace_id  = w.id) AS suppressions,
       (SELECT ROUND(SUM(g.cost_usd), 4) FROM agent_sessions g WHERE g.workspace_id = w.id) AS ai_cost_usd,
       (SELECT MAX(d.occurred_at) FROM domain_events d WHERE d.workspace_id = w.id) AS last_event_at,
-      (SELECT COALESCE(SUM(cl.credits), 0) FROM credit_ledger cl WHERE cl.workspace_id = w.id) AS credits
+      (SELECT COALESCE(SUM(cl.credits), 0) FROM credit_ledger cl WHERE cl.workspace_id = w.id) AS credits,
+      (SELECT ROUND(COALESCE(SUM(tc.cost_micro), 0) / 1000000.0, 4) FROM treg_calls tc WHERE tc.workspace_id = w.id AND tc.created_at > datetime('now', '-30 days')) AS data_cost_usd
     FROM workspaces w
     ORDER BY w.created_at DESC`).all();
 

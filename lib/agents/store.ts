@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { tregEnabled } from "@/lib/treg/client";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { isSourceType, SOURCE_TYPES, type SourceType } from "@/lib/signals/types";
@@ -190,6 +191,10 @@ export function deleteSource(id: string, workspaceId: string): void {
   getDb().prepare("DELETE FROM agent_sources WHERE id = ? AND workspace_id = ?").run(id, workspaceId);
 }
 
+/** Sources treg can run without the agent's LinkedIn session (lib/treg). */
+export const TREG_SOURCES: ReadonlySet<SourceType> = new Set<SourceType>(["competitor_engagement", "influencer_engagement", "own_content_engagement", "keyword_engagement", "job_change", "lookalike"]);
+
+/** Whether a source must run through the agent's LinkedIn browser session. With treg configured, most do not. */
 export function sourceNeedsLinkedIn(type: SourceType): boolean {
-  return SOURCE_TYPES[type].needsLinkedIn;
+  return SOURCE_TYPES[type].needsLinkedIn && !(tregEnabled() && TREG_SOURCES.has(type));
 }

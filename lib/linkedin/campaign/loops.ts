@@ -79,7 +79,9 @@ export function ensureGlobalRunnerStarted(): void {
   startLoop("AI agents", "agents-runner", async () => {
     const { runDueHttpSources } = await import("@/lib/signals/engine");
     const { runActiveAgents } = await import("@/lib/agents/loop");
+    const { enrichNeedsDataViaTreg } = await import("@/lib/treg/enrich");
     await runDueHttpSources();
+    await enrichNeedsDataViaTreg();
     await runActiveAgents();
   });
   // List imports drive the LinkedIn session, so they run inside linkedinLoop, not here.

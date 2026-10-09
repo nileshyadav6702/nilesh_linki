@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { sourceNeedsLinkedIn } from "@/lib/agents/store";
 import { getSessionContext, saveSessionState } from "@/lib/linkedin/session";
 import { VoyagerClient, VoyagerBlockedError, VoyagerBudgetExceeded } from "@/lib/linkedin/voyager";
 import { discoveryPausedUntil, pauseDiscovery } from "@/lib/linkedin/budget";
@@ -53,7 +54,7 @@ function accountCanDiscover(account: AccountRow | undefined): account is Account
 }
 
 function linkedInSourceTypes(): SourceType[] {
-  return (Object.keys(SOURCE_TYPES) as SourceType[]).filter((t) => SOURCE_TYPES[t].needsLinkedIn);
+  return (Object.keys(SOURCE_TYPES) as SourceType[]).filter((t) => sourceNeedsLinkedIn(t));
 }
 
 /**

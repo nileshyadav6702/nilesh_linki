@@ -1,6 +1,11 @@
 import { scrapeProfile } from "@/lib/linkedin/profile-scrape";
 import { consume } from "@/lib/linkedin/budget";
-import type { SourceRunner } from "@/lib/signals/sources/types";
+import type { SourceRunContext, SourceRunner } from "@/lib/signals/sources/types";
+import { tregEnabled } from "@/lib/treg/client";
+import { tregProfile } from "@/lib/treg/linkedin";
+
+/** Profiles re-read per run through treg (~$0.0012 each): no LinkedIn budget, so more per run. */
+const TREG_PER_RUN = 40;
 
 /** How many contacts to re-check per run: each costs a full profile load. */
 const PER_RUN = 5;
@@ -23,6 +28,7 @@ export function sameCompany(a: string | null | undefined, b: string | null | und
  * job_change signal when their current employer differs from what we stored.
  */
 export const jobChangeRunner: SourceRunner = async (ctx) => {
+  if (tregEnabled()) return tregJobChanges(ctx);
   if (!ctx.browser || !ctx.agent.linkedin_account_id) throw new Error("Job-change tracking needs an authenticated LinkedIn account on the agent");
   const rows = ctx.db.prepare(`SELECT t.id, t.company, t.title, t.sales_nav_url, t.linkedin_url, t.full_name FROM targets t
       JOIN list_targets lt ON lt.target_id = t.id
@@ -51,3 +57,31 @@ export const jobChangeRunner: SourceRunner = async (ctx) => {
     });
   }
 };
+
+/** Same check through treg: public profile → current employer vs the one we stored. */
+async function tregJobChanges(ctx: SourceRunContext) {
+  if (!ctx.agent.list_id) return;
+  const rows = ctx.db.prepare(`SELECT t.id, t.company, t.linkedin_url FROM targets t
+      JOIN list_targets lt ON lt.target_id = t.id
+     WHERE lt.list_id = ? AND t.linkedin_url LIKE '%linkedin.com/in/%'
+       AND (t.posts_scraped_at IS NULL OR t.posts_scraped_at < datetime('now', ?))
+     ORDER BY t.posts_scraped_at IS NOT NULL, t.posts_scraped_at LIMIT ?`)
+    .all(ctx.agent.list_id, `-${RECHECK_DAYS} days`, TREG_PER_RUN) as Array<{ id: string; company: string | null; linkedin_url: string }>;
+  for (const t of rows) {
+    const profile = await tregProfile(ctx.workspaceId, t.linkedin_url);
+    ctx.db.prepare("UPDATE targets SET posts_scraped_at = datetime('now'), headline = COALESCE(?, headline), summary = COALESCE(?, summary) WHERE id = ?")
+      .run(profile?.headline ?? null, profile?.about ?? null, t.id);
+    const current = profile?.current;
+    if (!current?.company || sameCompany(current.company, t.company)) continue;
+    ctx.db.prepare("UPDATE targets SET company = ?, title = COALESCE(?, title) WHERE id = ?").run(current.company, current.title || null, t.id);
+    ctx.emitForTarget(t.id, {
+      type: "job_change",
+      title: `Started as ${current.title || "a new role"} at ${current.company}`,
+      snippet: t.company ? `Previously at ${t.company}` : null,
+      sourceUrl: profile?.linkedin_url ?? t.linkedin_url,
+      dedupeKey: `job_change:${t.id}:${norm(current.company)}`,
+      occurredAt: current.started,
+      metadata: { from_company: t.company, to_company: current.company, new_title: current.title },
+    });
+  }
+}

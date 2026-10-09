@@ -1,9 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
-import { getAgent, listSources } from "@/lib/agents/store";
+import { getAgent, listSources, sourceNeedsLinkedIn } from "@/lib/agents/store";
 import { runAgentPass } from "@/lib/agents/loop";
 import { runSource } from "@/lib/signals/engine";
-import { SOURCE_TYPES } from "@/lib/signals/types";
 import { requireWorkspace } from "@/lib/workspace";
 import { CREDIT_COSTS, debit, InsufficientCreditsError, refund } from "@/lib/credits/ledger";
 
@@ -34,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const http: Array<{ source_type: string; ingested: number; error: string | null }> = [];
     let queued = 0;
     for (const s of sources) {
-      if (SOURCE_TYPES[s.source_type].needsLinkedIn) {
+      if (sourceNeedsLinkedIn(s.source_type)) {
         db.prepare("UPDATE agent_sources SET next_run_at = datetime('now') WHERE id = ?").run(s.id);
         queued++;
       } else {

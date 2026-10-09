@@ -1,6 +1,24 @@
 import { hasActiveImport, startImport } from "@/lib/import-jobs";
 import { isFlagshipSearchUrl } from "@/lib/agents/lookalike-rules";
-import type { SourceRunner } from "@/lib/signals/sources/types";
+import type { SourceRunContext, SourceRunner } from "@/lib/signals/sources/types";
+import { tregEnabled } from "@/lib/treg/client";
+import { tregPeopleSearch } from "@/lib/treg/people";
+
+/** Rows per treg people-search run (each row costs ~$0.0004). */
+const TREG_PAGE = 50;
+
+/** With treg: ICP people search on a leads database, paged with a stored token. */
+async function tregLookalike(ctx: SourceRunContext) {
+  if (!ctx.icp) throw new Error("Set up the agent's targeting first: lookalike search uses its job titles, industries and sizes");
+  const r = await tregPeopleSearch(ctx.workspaceId, ctx.icp, TREG_PAGE, (ctx.cursor.treg_token as string | undefined) ?? null);
+  for (const p of r.leads) {
+    if (ctx.isFull()) break;
+    ctx.emitLead(p, { type: "lookalike", title: "Looks like your best customer", sourceUrl: p.profileUrl, dedupeKey: `lookalike:${ctx.agent.id}:${p.profileUrl}` });
+  }
+  // Out of pages: start again from the top next time (new people join the database).
+  ctx.cursor.treg_token = r.token;
+  ctx.cursor.last_import_at = new Date().toISOString();
+}
 
 /** Sales Navigator people-search URL for a boolean keyword query. */
 export function salesNavSearchUrl(keywords: string): string {
@@ -22,6 +40,7 @@ const MAX_PAGE = 10;
  * (accounts without Sales Navigator) is read a couple of pages per run, leads emitted directly.
  */
 export const lookalikeRunner: SourceRunner = async (ctx) => {
+  if (tregEnabled()) return tregLookalike(ctx);
   const flagship = ctx.config.urls.find(isFlagshipSearchUrl) ?? null;
   if (flagship) {
     if (!ctx.browser || !ctx.agent.linkedin_account_id) throw new Error("Lookalike search needs a connected LinkedIn account on the agent");

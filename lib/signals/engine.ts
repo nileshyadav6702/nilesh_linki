@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { sourceNeedsLinkedIn } from "@/lib/agents/store";
 import type Database from "better-sqlite3";
 import type { BrowserContext } from "playwright";
 import { getDb } from "@/lib/db";
@@ -146,7 +147,7 @@ export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLi
 
 /** Due sources of one kind. `accountId` narrows to agents reading through that LinkedIn account. */
 export function dueSources(kind: "linkedin" | "http", limit = 20, accountId?: string): AgentSource[] {
-  const types = (Object.keys(SOURCE_TYPES) as SourceType[]).filter((t) => SOURCE_TYPES[t].needsLinkedIn === (kind === "linkedin"));
+  const types = (Object.keys(SOURCE_TYPES) as SourceType[]).filter((t) => sourceNeedsLinkedIn(t) === (kind === "linkedin"));
   const placeholders = types.map(() => "?").join(",");
   const byAccount = accountId !== undefined ? "AND a.linkedin_account_id = ?" : "";
   return getDb().prepare(`SELECT s.* FROM agent_sources s JOIN agents a ON a.id = s.agent_id

@@ -53,6 +53,32 @@ const prospeoNoResult = (b: ProspeoBody | null) => !!b?.error && /NO_RESULT|NO_M
 
 export const PROVIDERS: Provider[] = [
   {
+    // treg.to routed email finder (cheapest provider first, verified in the same call). Key: TREG_API_KEY.
+    key: "treg", label: "Treg", needsKey: true,
+    async find(q) {
+      if (!q.domain && !q.linkedinUrl) return null;
+      const { tregCall, TregError } = await import("@/lib/treg/client");
+      const body: Record<string, string> = {};
+      if (q.domain) body.domain = q.domain;
+      if (q.firstName) body.first_name = q.firstName;
+      if (q.lastName) body.last_name = q.lastName;
+      if (q.fullName) body.full_name = q.fullName;
+      if (q.linkedinUrl) body.linkedin_url = q.linkedinUrl;
+      try {
+        const r = await tregCall<{ output?: { email?: string | null; confidence?: number }; _treg?: { verification?: { verdict?: string } } }>("treg.people.email.find", {
+          workspaceId: null, purpose: "email_find", body, maxCostUsd: 0.03, headers: { "X-Treg-Route-Verify": "true" },
+        });
+        const email = r.data?.output?.email;
+        if (!email) return null;
+        const verdict = (r.data?._treg?.verification?.verdict ?? "").toLowerCase();
+        return { email, verified: /^(valid|deliverable|ok|safe)$/.test(verdict) || (r.data?.output?.confidence ?? 0) >= 0.9, raw: { verdict, served_by: r.servedBy } };
+      } catch (err) {
+        if (err instanceof TregError && err.status === 404) return null;
+        throw new ProviderError("treg", err instanceof Error ? err.message : String(err), err instanceof TregError ? err.status : null);
+      }
+    },
+  },
+  {
     key: "apollo", label: "Apollo", needsKey: true,
     async find(q, key) {
       if (!q.linkedinUrl || !key) return null;
@@ -161,6 +187,7 @@ export function setProviderOrder(db: Database.Database, workspaceId: string, ord
 }
 
 function apiKeyFor(db: Database.Database, workspaceId: string, key: string): string | null {
+  if (key === "treg") return process.env.TREG_API_KEY?.trim() || null;
   const row = db.prepare("SELECT api_key FROM integrations WHERE key = ? AND workspace_id = ?").get(key, workspaceId) as { api_key: string | null } | undefined;
   return decryptSecret(row?.api_key ?? null);
 }
