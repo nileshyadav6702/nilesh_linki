@@ -3,7 +3,7 @@ import { aiJson } from "@/lib/ai/client";
 import { getDb } from "@/lib/db";
 import {
   companyFacts, currentRoleFromExperience, flagshipSearchUrl, lookalikeSearchUrl, parseFlagshipProfile, parseSearchCards, publicIdFromUrl, rankLookalikes,
-  type LookalikeCandidate, type LookalikeLead, type LookalikeProfile, type LookalikeScope,
+  type LookalikeCandidate, type LookalikeLead, type SearchCard, type LookalikeProfile, type LookalikeScope,
 } from "@/lib/agents/lookalike-rules";
 
 /**
@@ -135,7 +135,7 @@ const COMPANY_DOM = (): string[] => {
  * Open a LinkedIn page the way a person would (charged to the account's daily read budget),
  * keep the voyager responses it loads and run `extract` on the rendered page.
  */
-async function readPage<T>(ctx: import("playwright").BrowserContext, accountId: string, url: string, extract: () => T): Promise<{ bodies: string[]; dom: T | null }> {
+async function readPage<T>(ctx: import("playwright").BrowserContext, accountId: string, url: string, extract: (() => T) | string): Promise<{ bodies: string[]; dom: T | null }> {
   const { consume } = await import("@/lib/linkedin/budget");
   const { VoyagerBlockedError, VoyagerBudgetExceeded } = await import("@/lib/linkedin/voyager");
   if (!consume(accountId, "voyager_read")) throw new VoyagerBudgetExceeded("voyager_read");
@@ -154,7 +154,10 @@ async function readPage<T>(ctx: import("playwright").BrowserContext, accountId: 
     await page.mouse.wheel(0, 1800 + Math.random() * 600);
     await page.waitForTimeout(2000 + Math.random() * 1200);
     await Promise.all(pending);
-    const dom = await page.evaluate(extract).catch(() => null);
+    const dom = await (typeof extract === "string" ? page.evaluate(extract) as Promise<T> : page.evaluate(extract)).catch((err: unknown) => {
+      console.warn(`[lookalike] reading ${url} failed:`, err instanceof Error ? err.message : err);
+      return null;
+    });
     return { bodies, dom };
   } finally {
     await page.close().catch(() => {});
@@ -199,39 +202,58 @@ export async function searchLookalikes(workspaceId: string, scope: LookalikeScop
       searchUrl = flagshipSearchUrl(scope);
       found = await scrapePeopleSearch(ctx, account, searchUrl);
     }
+    // Still no one: drop the place from the query (ranking still prefers it), then keep only the main title.
+    if (!found.length && scope.location) {
+      searchUrl = flagshipSearchUrl({ ...scope, location: null, geoId: null });
+      found = await scrapePeopleSearch(ctx, account, searchUrl);
+    }
+    if (!found.length && scope.includeSimilarRoles && scope.similarTitles.length) {
+      searchUrl = flagshipSearchUrl({ ...scope, includeSimilarRoles: false, location: null, geoId: null });
+      found = await scrapePeopleSearch(ctx, account, searchUrl);
+    }
     if (!found.length) throw new LookalikeError("No similar people found on LinkedIn. Try turning on similar roles, adding more titles, or choosing Any location.", 404);
     return { leads: rankLookalikes(found, scope, seedName), searchUrl };
   });
 }
 
 /** Runs in the page: every result card of a LinkedIn people search (the profile link, card text and photo). */
-// No named inner functions in page code: some bundlers (tsx/esbuild keepNames) wrap them in a
-// __name() helper that doesn't exist inside the browser page.
-const SEARCH_DOM = (): Array<{ href: string; text: string; photo: string | null }> => {
-  const links = Array.from(document.querySelectorAll("main a[href*='/in/']")) as HTMLAnchorElement[];
-  const out = new Map<string, { href: string; text: string; photo: string | null }>();
-  for (const a of links) {
-    const href = a.href.split("?")[0].replace(/\/$/, "");
-    if (out.has(href) || !/\/in\/[^/]+$/.test(href)) continue;
-    // Widen to the card: the largest ancestor that still holds links to this one person only.
-    let card: HTMLElement = a;
+// Page code as a plain script string: the app's bundlers transform function bodies (helpers like
+// tsx's __name), and a transformed function can throw inside the LinkedIn page.
+const SEARCH_DOM = String.raw`(() => {
+  var clean = function (h) { return h.split("?")[0].replace(/\/$/, ""); };
+  var links = Array.prototype.slice.call(document.querySelectorAll("main a[href*='/in/']"));
+  var out = {};
+  var order = [];
+  for (var i = 0; i < links.length; i++) {
+    var a = links[i];
+    var href = clean(a.href);
+    if (out[href] || !/\/in\/[^/]+$/.test(href)) continue;
+    // Widen to the card: the largest ancestor that still links to this one person only.
+    var card = a;
     while (card.parentElement && card.parentElement.tagName !== "MAIN") {
-      const people = new Set(Array.from(card.parentElement.querySelectorAll("a[href*='/in/']")).map((x) => (x as HTMLAnchorElement).href.split("?")[0].replace(/\/$/, "")));
-      if (people.size > 1) break;
+      var seen = {};
+      var inner = card.parentElement.querySelectorAll("a[href*='/in/']");
+      for (var j = 0; j < inner.length; j++) seen[clean(inner[j].href)] = 1;
+      if (Object.keys(seen).length > 1) break;
       card = card.parentElement;
     }
-    const text = card.innerText ?? "";
+    var text = card.innerText || "";
     if (!text.trim()) continue;
-    const img = Array.from(card.querySelectorAll("img")).find((i) => /profile-displayphoto/.test((i as HTMLImageElement).src)) as HTMLImageElement | undefined;
-    out.set(href, { href, text, photo: img?.src ?? null });
+    var photo = null;
+    var imgs = card.querySelectorAll("img");
+    for (var k = 0; k < imgs.length; k++) if (/profile-displayphoto/.test(imgs[k].src)) { photo = imgs[k].src; break; }
+    out[href] = { href: href, text: text, photo: photo };
+    order.push(href);
   }
-  return Array.from(out.values());
-};
+  return order.map(function (h) { return out[h]; });
+})()`;
 
 /** One page of a regular LinkedIn people search, parsed into candidates. Also used by the agent's lookalike source. */
 export async function scrapePeopleSearch(ctx: import("playwright").BrowserContext, accountId: string, url: string): Promise<LookalikeCandidate[]> {
-  const page = await readPage(ctx, accountId, url, SEARCH_DOM);
-  return parseSearchCards(page.dom ?? []);
+  const page = await readPage<SearchCard[]>(ctx, accountId, url, SEARCH_DOM);
+  const people = parseSearchCards(page.dom ?? []);
+  console.log(`[lookalike] people search: ${page.dom?.length ?? "no"} cards, ${people.length} people · ${url}`);
+  return people;
 }
 
 /** AI suggestions for titles close to the seed's (for "Include similar roles"). */
