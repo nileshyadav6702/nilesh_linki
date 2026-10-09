@@ -36,6 +36,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     addMessages(db, id, [{ externalId: `local:${randomUUID()}`, direction: "out", senderName: "You", bodyText: body, sentAt: now }]);
     upsertThread(db, { workspaceId: ctx.workspaceId, channel: t.channel as "linkedin" | "email", accountId: String(t.account_id), externalId: String(t.external_id), snippet: body.slice(0, 200), lastMessageAt: now });
+    // The AI draft answered the message we just replied to; it's spent.
+    db.prepare("UPDATE inbox_threads SET ai_draft = NULL WHERE id = ?").run(id);
     recordAudit(ctx, "inbox.reply_sent", "inbox_thread", id, { channel: t.channel });
     return res.json({ ok: true });
   } catch (err) {

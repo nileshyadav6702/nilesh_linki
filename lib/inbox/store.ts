@@ -91,12 +91,15 @@ const FILTER_SQL: Record<InboxFilter, string> = {
   all: "",
 };
 
+/** A LinkedIn seat set to "only conversations with my contacts" hides threads with people who aren't contacts. */
+const CONTACTS_ONLY = " AND NOT (t.channel = 'linkedin' AND t.target_id IS NULL AND EXISTS (SELECT 1 FROM accounts sa WHERE sa.id = t.account_id AND sa.inbox_contacts_only = 1))";
+
 export function listThreads(db: Database.Database, workspaceId: string, opts: { scope: AccountScope; filter: InboxFilter; q?: string | null; limit?: number; offset?: number }) {
   const s = scopeWhere(opts.scope);
   const params: unknown[] = [workspaceId, ...s.params];
   let sql = `SELECT t.id, t.channel, t.account_id, t.subject, t.participant_name, t.participant_headline, t.participant_email, t.participant_url, t.participant_photo,
       t.target_id, t.snippet, t.last_message_at, t.unread, t.interested, t.archived, t.has_inbound
-    FROM inbox_threads t WHERE t.workspace_id = ? AND t.deleted = 0${s.sql}${FILTER_SQL[opts.filter]}`;
+    FROM inbox_threads t WHERE t.workspace_id = ? AND t.deleted = 0${CONTACTS_ONLY}${s.sql}${FILTER_SQL[opts.filter]}`;
   if (opts.q) {
     const like = `%${opts.q}%`;
     sql += " AND (t.participant_name LIKE ? OR t.participant_email LIKE ? OR t.subject LIKE ? OR t.snippet LIKE ?)";
@@ -109,7 +112,7 @@ export function listThreads(db: Database.Database, workspaceId: string, opts: { 
 
 /** Thread counts per account (and per channel) for the account switcher. */
 export function accountCounts(db: Database.Database, workspaceId: string) {
-  const rows = db.prepare(`SELECT channel, account_id, COUNT(*) n FROM inbox_threads WHERE workspace_id = ? AND deleted = 0 GROUP BY channel, account_id`).all(workspaceId) as Array<{ channel: Channel; account_id: string; n: number }>;
+  const rows = db.prepare(`SELECT channel, account_id, COUNT(*) n FROM inbox_threads t WHERE workspace_id = ? AND deleted = 0${CONTACTS_ONLY} GROUP BY channel, account_id`).all(workspaceId) as Array<{ channel: Channel; account_id: string; n: number }>;
   const linkedin = db.prepare("SELECT id, name, email FROM accounts WHERE workspace_id = ? ORDER BY created_at").all(workspaceId) as Array<{ id: string; name: string | null; email: string | null }>;
   const email = db.prepare("SELECT id, from_email, from_name, provider FROM email_accounts WHERE workspace_id = ? ORDER BY created_at").all(workspaceId) as Array<{ id: string; from_email: string | null; from_name: string | null; provider: string | null }>;
   const count = (ch: Channel, id?: string) => rows.filter((r) => r.channel === ch && (!id || r.account_id === id)).reduce((n, r) => n + r.n, 0);

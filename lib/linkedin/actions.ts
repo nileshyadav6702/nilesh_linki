@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "crypto";
-import { localDayBoundsUtc } from "@/lib/outreach/schedule";
+import { localDayBoundsUtc, localWeekStartUtc } from "@/lib/outreach/schedule";
 
 /**
  * Claim-before-send for LinkedIn actions, atomic track claims and the structured daily-cap
@@ -162,6 +162,38 @@ export function linkedinActionsToday(db: DB, accountId: string, type: LinkedinAc
     AND created_at >= ? AND created_at < ? AND message LIKE ?`)
     .get(accountId, day.start, day.end, LEGACY_LOG_PREFIX[type]) as { c: number }).c;
   return Math.max(structured, legacy);
+}
+
+/** Actions of `type` spent this week (Monday 00:00 on the account's calendar onwards). */
+export function linkedinActionsThisWeek(db: DB, accountId: string, type: LinkedinActionType, timezone: string, at: Date = new Date()): number {
+  return (db.prepare(`SELECT COUNT(*) c FROM linkedin_actions
+    WHERE account_id = ? AND type = ? AND status IN ('sending','sent','uncertain') AND created_at >= ?`)
+    .get(accountId, type, localWeekStartUtc(timezone || "UTC", at)) as { c: number }).c;
+}
+
+/** This week's usage per quota, as the settings drawer shows it (likes count as visits, voice notes as messages). */
+export function weeklyUsage(db: DB, accountId: string, timezone: string): { visit: number; connect: number; message: number } {
+  const w = (t: LinkedinActionType) => linkedinActionsThisWeek(db, accountId, t, timezone);
+  return { visit: w("visit") + w("like"), connect: w("connect"), message: w("message") + w("voice") };
+}
+
+interface QuotaLimits {
+  daily_connection_limit: number; daily_message_limit: number; daily_visit_limit: number;
+  weekly_connection_limit?: number | null; weekly_message_limit?: number | null; weekly_visit_limit?: number | null; timezone: string;
+}
+
+/**
+ * Lowers today's caps to what the weekly quotas have left: daily = min(daily, sent today +
+ * (weekly − sent this week)). Mutates `limits` (one tick's copy). No weekly quota: unchanged.
+ */
+export function applyWeeklyQuota(db: DB, accountId: string, limits: QuotaLimits, today: { connect: number; message: number; visit: number }): void {
+  if (limits.weekly_connection_limit == null && limits.weekly_message_limit == null && limits.weekly_visit_limit == null) return;
+  const week = weeklyUsage(db, accountId, limits.timezone);
+  const clamp = (daily: number, weekly: number | null | undefined, usedToday: number, usedWeek: number) =>
+    weekly == null ? daily : Math.min(daily, usedToday + Math.max(0, weekly - usedWeek));
+  limits.daily_connection_limit = clamp(limits.daily_connection_limit ?? 20, limits.weekly_connection_limit, today.connect, week.connect);
+  limits.daily_message_limit = clamp(limits.daily_message_limit ?? 50, limits.weekly_message_limit, today.message, week.message);
+  limits.daily_visit_limit = clamp(limits.daily_visit_limit ?? 150, limits.weekly_visit_limit, today.visit, week.visit);
 }
 
 /**

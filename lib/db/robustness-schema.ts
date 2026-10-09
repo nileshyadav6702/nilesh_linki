@@ -11,6 +11,15 @@ const STATEMENTS: string[] = [
   "ALTER TABLE targets ADD COLUMN signal_strength REAL",
   "ALTER TABLE targets ADD COLUMN contact_relevance REAL",
   "ALTER TABLE targets ADD COLUMN score_breakdown TEXT",
+  // LinkedIn seat settings: country, weekly quotas (lib/linkedin/actions.ts applyWeeklyQuota), inbox filter and AI reply drafts.
+  "ALTER TABLE accounts ADD COLUMN country TEXT",
+  "ALTER TABLE accounts ADD COLUMN weekly_connection_limit INTEGER",
+  "ALTER TABLE accounts ADD COLUMN weekly_message_limit INTEGER",
+  "ALTER TABLE accounts ADD COLUMN weekly_visit_limit INTEGER",
+  "ALTER TABLE accounts ADD COLUMN inbox_contacts_only INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE accounts ADD COLUMN ai_draft_replies INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE accounts ADD COLUMN booking_url TEXT",
+  "ALTER TABLE accounts ADD COLUMN reply_instructions TEXT",
   // Company enrichment (lib/treg/company.ts): company-page firmographics and a cached funding lookup.
   "ALTER TABLE companies ADD COLUMN specialties TEXT",
   "ALTER TABLE companies ADD COLUMN org_type TEXT",
@@ -111,6 +120,9 @@ const STATEMENTS: string[] = [
     UNIQUE(channel, account_id, external_id)
   )`,
   "CREATE INDEX IF NOT EXISTS idx_inbox_threads_list ON inbox_threads(workspace_id, deleted, last_message_at)",
+  // AI reply draft for the latest inbound message (lib/inbox/ai-draft.ts); ai_draft_for is that message's id.
+  "ALTER TABLE inbox_threads ADD COLUMN ai_draft TEXT",
+  "ALTER TABLE inbox_threads ADD COLUMN ai_draft_for TEXT",
   `CREATE TABLE IF NOT EXISTS inbox_messages (
     id TEXT PRIMARY KEY,
     thread_id TEXT NOT NULL REFERENCES inbox_threads(id) ON DELETE CASCADE,

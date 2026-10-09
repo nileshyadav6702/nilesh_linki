@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { RiArchiveLine, RiDeleteBin6Line, RiFireLine, RiFireFill, RiLinkedinBoxFill, RiLoader4Line, RiMailLine, RiMailUnreadLine, RiMore2Fill, RiSendPlane2Line } from "react-icons/ri";
+import { RiArchiveLine, RiDeleteBin6Line, RiFireLine, RiFireFill, RiLinkedinBoxFill, RiLoader4Line, RiMailLine, RiMailUnreadLine, RiMore2Fill, RiSendPlane2Line, RiSparkling2Line } from "react-icons/ri";
 import { useDismiss } from "@/components/agents/leads/Listbox";
 import { ago, PersonAvatar, type Message, type ThreadRow } from "@/components/inbox/kit";
 
@@ -38,6 +38,7 @@ function Menu({ email, onArchive, onDelete }: { email: boolean; onArchive: () =>
 export default function ThreadView({ id, onChanged, onRemoved }: { id: string; onChanged: (patch: Partial<ThreadRow>) => void; onRemoved: () => void }) {
   const [data, setData] = useState<{ thread: ThreadRow & { url: string | null }; messages: Message[] } | null>(null);
   const [draft, setDraft] = useState("");
+  const [fromAi, setFromAi] = useState(false);
   const [sending, setSending] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const end = useRef<HTMLDivElement>(null);
@@ -48,7 +49,11 @@ export default function ThreadView({ id, onChanged, onRemoved }: { id: string; o
     void (async () => {
       setData(null); setDraft("");
       const d = await fetch(`/api/inbox/threads/${id}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-      if (alive) setData(d);
+      if (alive) {
+        setData(d);
+        // The seat drafted an answer to their latest message (Settings → LinkedIn seat → AI draft reply).
+        if (d?.thread?.ai_draft) { setDraft(d.thread.ai_draft); setFromAi(true); } else setFromAi(false);
+      }
     })();
     return () => { alive = false; };
   }, [id]);
@@ -84,7 +89,7 @@ export default function ThreadView({ id, onChanged, onRemoved }: { id: string; o
       if (!r.ok) throw new Error(d.error ?? "Could not send");
       const now = new Date().toISOString();
       setData((cur) => cur && { ...cur, messages: [...cur.messages, { id: `local-${now}`, direction: "out", sender_name: "You", sender_email: null, body_text: body, body_html: null, sent_at: now }] });
-      setDraft("");
+      setDraft(""); setFromAi(false);
       onChanged({ snippet: body, last_message_at: now });
     } catch (err) { toast.error(err instanceof Error ? err.message : "Could not send"); }
     finally { setSending(false); }
@@ -145,6 +150,12 @@ export default function ThreadView({ id, onChanged, onRemoved }: { id: string; o
       </div>
 
       <div className="border-t border-[var(--border-subtle)] px-6 py-4">
+        {fromAi && draft && (
+          <div className="mb-2 flex items-center gap-2 text-[13px] text-[#a43fc0]">
+            <RiSparkling2Line size={15} /> AI draft. Review and edit before sending; nothing goes out until you press Send.
+            <button type="button" onClick={() => { setDraft(""); setFromAi(false); }} className="ml-auto text-base-content/50 hover:text-base-content hover:underline">Clear</button>
+          </div>
+        )}
         <div className="rounded-[14px] border border-[var(--border-strong)] bg-base-100 focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-[var(--ring)]">
           <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={3} placeholder={linkedin ? "Type a message..." : `Reply to ${t.participant_email ?? "this email"}...`}
             onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void send(); } }}

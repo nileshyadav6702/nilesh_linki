@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { WORKER_ID, type ActiveLease } from "@/lib/email/infrastructure";
 import { shouldSyncAccepted, syncAcceptedConnections } from "@/lib/linkedin/sync-accepted";
-import { markTrackActionsUncertain, recoverStaleLinkedinActions, linkedinActionsToday, claimTrack, releaseTrack } from "@/lib/linkedin/actions";
+import { markTrackActionsUncertain, recoverStaleLinkedinActions, linkedinActionsToday, claimTrack, releaseTrack, applyWeeklyQuota } from "@/lib/linkedin/actions";
 import { premium } from "@/lib/premium";
 import { localDayBoundsUtc } from "@/lib/outreach/schedule";
 import { guard, WatchdogTimeoutError } from "@/lib/watchdog";
@@ -87,6 +87,7 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
   const stillActive = db.prepare(`
     SELECT r.id as run_id, r.workflow_id, r.account_id, r.email_account_id,
            a.daily_connection_limit, a.daily_message_limit, a.daily_inmail_limit, a.daily_visit_limit,
+           a.weekly_connection_limit, a.weekly_message_limit, a.weekly_visit_limit,
            a.active_hours_start, a.active_hours_end, a.timezone, a.working_days
     FROM runs r
     JOIN accounts a ON a.id = r.account_id
@@ -117,6 +118,8 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
     inmailsSentToday.set(accountId, linkedinActionsToday(db, accountId, "inmail", tz));
     // Likes share the visit cap; voice notes share the message cap.
     visitsSentToday.set(accountId, linkedinActionsToday(db, accountId, "visit", tz) + linkedinActionsToday(db, accountId, "like", tz));
+    // A weekly quota (Settings → LinkedIn seat) caps today at what is left of the week.
+    applyWeeklyQuota(db, accountId, accountLimits, { connect: connectsSentToday.get(accountId) ?? 0, message: messagesSentToday.get(accountId) ?? 0, visit: visitsSentToday.get(accountId) ?? 0 });
   }
 
   // Steps cache: (workflow_id, track) → steps filtered by that track

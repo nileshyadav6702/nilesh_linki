@@ -24,6 +24,7 @@
     "@types/nodemailer": "^8.0.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
+    "countries-and-timezones": "^3.10.0",
     "daisyui": "^5.5.19",
     "date-fns": "^4.4.0",
     "driver.js": "^1.6.0",

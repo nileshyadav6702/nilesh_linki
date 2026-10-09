@@ -22,7 +22,8 @@ export async function syncLinkedInInbox(accountId: string): Promise<{ threads: n
   const { consume } = await import("@/lib/linkedin/budget");
   const { linkedInImageUrl } = await import("@/lib/linkedin/images");
 
-  return withAccountSession(accountId, async () => {
+  const changedIds: string[] = [];
+  const result = await withAccountSession(accountId, async () => {
     const ctx = await getSessionContext(accountId);
     const captured: Array<{ url: string; body: string }> = [];
     let convs: ParsedConversation[] = [];
@@ -62,7 +63,7 @@ export async function syncLinkedInInbox(accountId: string): Promise<{ threads: n
       });
       // The list already carries each conversation's latest message.
       if (c.preview) messages += addMessages(db, t.id, [c.preview]);
-      if (t.changed) changed.push({ id: t.id, conv: c });
+      if (t.changed) { changed.push({ id: t.id, conv: c }); changedIds.push(t.id); }
     }
     // Full history for conversations with new activity, a few per run (each costs a LinkedIn read).
     if (queryId && changed.length) {
@@ -78,6 +79,10 @@ export async function syncLinkedInInbox(accountId: string): Promise<{ threads: n
     db.prepare("UPDATE accounts SET inbox_synced_at = datetime('now') WHERE id = ?").run(accountId);
     return { threads: convs.length, messages };
   });
+  // Drafted after the session is released: AI calls shouldn't hold the account's browser lease.
+  const { draftPendingReplies } = await import("@/lib/inbox/ai-draft");
+  await draftPendingReplies(db, accountId, changedIds).catch((err) => console.warn("[inbox] AI drafts:", err instanceof Error ? err.message : err));
+  return result;
 }
 
 /** Older messages of one conversation, on demand when it is opened in the inbox. */

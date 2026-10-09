@@ -6,6 +6,7 @@ export interface ThreadRow {
   id: string; channel: "linkedin" | "email"; account_id: string; subject: string | null; participant_name: string | null; participant_headline: string | null;
   participant_email: string | null; participant_url: string | null; participant_photo: string | null; target_id: string | null; snippet: string | null;
   last_message_at: string; unread: number; interested: number; archived: number; has_inbound: number;
+  ai_draft?: string | null;
 }
 
 export interface Message { id: string; direction: "in" | "out"; sender_name: string | null; sender_email: string | null; body_text: string | null; body_html: string | null; sent_at: string }

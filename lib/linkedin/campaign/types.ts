@@ -12,6 +12,9 @@ export interface AccountLimits extends ScheduleConfig {
   daily_message_limit: number;
   daily_inmail_limit: number;
   daily_visit_limit: number;
+  weekly_connection_limit?: number | null;
+  weekly_message_limit?: number | null;
+  weekly_visit_limit?: number | null;
 }
 
 export interface EmailAccountLimits extends ScheduleConfig {

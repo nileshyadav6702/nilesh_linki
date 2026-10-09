@@ -2,7 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { requireWorkspace, recordAudit } from "@/lib/workspace";
 import { encryptSecret } from "@/lib/crypto";
-import { linkedinActionsToday } from "@/lib/linkedin/actions";
+import { linkedinActionsToday, weeklyUsage } from "@/lib/linkedin/actions";
+import { parseSeatSettings, weeklyToDaily } from "@/lib/linkedin/quotas";
 import { normalizeProxyUrl } from "@/lib/linkedin/proxy";
 
 // Excludes cookies_json — the frontend never uses the raw session blob, only
@@ -10,7 +11,8 @@ import { normalizeProxyUrl } from "@/lib/linkedin/proxy";
 const ACCOUNT_COLUMNS = `id, name, email, is_authenticated, daily_connection_limit, daily_message_limit, daily_inmail_limit, daily_visit_limit,
   active_hours_start, active_hours_end, timezone, working_days, created_at,
   inbox_synced_at, accepted_sync_at, li_connections, li_pending, li_profile_views,
-  li_stats_synced_at, connections_synced_through_ms, proxy_url, proxy_username, (proxy_password IS NOT NULL AND proxy_password <> '') AS has_proxy_password`;
+  li_stats_synced_at, connections_synced_through_ms, proxy_url, proxy_username,
+  country, weekly_connection_limit, weekly_message_limit, weekly_visit_limit, inbox_contacts_only, ai_draft_replies, booking_url, reply_instructions, (proxy_password IS NOT NULL AND proxy_password <> '') AS has_proxy_password`;
 
 /** The account as the settings drawer sees it, with today's action counts on the account's own day. */
 function accountView(db: ReturnType<typeof getDb>, id: string, workspaceId: string) {
@@ -18,7 +20,7 @@ function accountView(db: ReturnType<typeof getDb>, id: string, workspaceId: stri
   if (!account) return null;
   const tz = String(account.timezone || "UTC");
   const today = (t: "visit" | "connect" | "message" | "inmail" | "like" | "voice") => linkedinActionsToday(db, id, t, tz);
-  return { ...account, has_proxy_password: !!account.has_proxy_password, usage_today: { visit: today("visit") + today("like"), connect: today("connect"), message: today("message") + today("voice"), inmail: today("inmail") } };
+  return { ...account, has_proxy_password: !!account.has_proxy_password, usage_today: { visit: today("visit") + today("like"), connect: today("connect"), message: today("message") + today("voice"), inmail: today("inmail") }, usage_week: weeklyUsage(db, id, tz) };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -67,6 +69,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (typeof body.proxy_password === "string") {
       db.prepare("UPDATE accounts SET proxy_password = ? WHERE id = ? AND workspace_id = ?").run(body.proxy_password ? encryptSecret(body.proxy_password) : null, id, ctx.workspaceId);
+    }
+    // Seat settings from the drawer: country, weekly quotas (spread into daily caps), inbox and AI replies.
+    const seat = parseSeatSettings(body);
+    if ("error" in seat) return res.status(400).json({ error: seat.error });
+    const cur = db.prepare("SELECT working_days FROM accounts WHERE id = ? AND workspace_id = ?").get(id, ctx.workspaceId) as { working_days: string | null } | undefined;
+    const activeDays = String(cur?.working_days || "1,2,3,4,5").split(",").filter(Boolean).length || 5;
+    for (const [col, v] of Object.entries(seat.values)) db.prepare(`UPDATE accounts SET ${col} = ? WHERE id = ? AND workspace_id = ?`).run(v, id, ctx.workspaceId);
+    for (const [weekly, daily] of [["weekly_connection_limit", "daily_connection_limit"], ["weekly_visit_limit", "daily_visit_limit"], ["weekly_message_limit", "daily_message_limit"]] as const) {
+      const w = seat.values[weekly];
+      if (typeof w === "number") db.prepare(`UPDATE accounts SET ${daily} = ? WHERE id = ? AND workspace_id = ?`).run(weeklyToDaily(daily, w, activeDays), id, ctx.workspaceId);
     }
     recordAudit(ctx, "account.updated", "account", id);
     return res.json(accountView(db, id, ctx.workspaceId));

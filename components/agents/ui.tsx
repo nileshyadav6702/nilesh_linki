@@ -132,7 +132,7 @@ export function timeAgo(iso: string | null | undefined): string {
 
 /* ─── Agents section kit: icon tiles, tabs, toggles, stat tiles, avatars ───────────────────── */
 
-export type Tone = "coral" | "teal" | "amber" | "ink" | "success" | "error" | "linkedin";
+export type Tone = "coral" | "teal" | "amber" | "ink" | "success" | "error" | "linkedin" | "indigo" | "violet";
 
 const TONE: Record<Tone, string> = {
   coral: "bg-primary/10 text-primary",
@@ -142,6 +142,8 @@ const TONE: Record<Tone, string> = {
   success: "bg-success/12 text-[#3a8c4f]",
   error: "bg-error/10 text-error",
   linkedin: "bg-[#0a66c2]/10 text-[#0a66c2]",
+  indigo: "bg-[#6366f1]/12 text-[#5457e0]",
+  violet: "bg-[#c026d3]/10 text-[#b02ac6]",
 };
 
 /** A soft-tinted rounded square holding an icon — the leading mark of rows and cards. */

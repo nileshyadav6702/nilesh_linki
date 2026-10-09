@@ -99,6 +99,15 @@ export function localDayBoundsUtc(tz: string, at: Date = new Date()): { start: s
   return { start: sqliteUtc(startMs), end: sqliteUtc(endMs) };
 }
 
+/** Monday 00:00 of the account-local week containing `at`, as a SQLite UTC timestamp. */
+export function localWeekStartUtc(tz: string, at: Date = new Date()): string {
+  const zone = safeZone(tz || "UTC");
+  const { year, month, day, isoWeekday } = zonedParts(zone, at);
+  // Step back from local noon (DST-safe), then take that day's midnight.
+  const monday = zonedParts(zone, new Date(zonedTimeToUtcMs(zone, year, month, day, 12) - (isoWeekday - 1) * 86_400_000));
+  return sqliteUtc(zonedTimeToUtcMs(zone, monday.year, monday.month, monday.day, 0));
+}
+
 /**
  * Pick a slot inside [start, end) on the account-local day containing `onDate`.
  *
