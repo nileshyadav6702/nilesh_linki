@@ -3,8 +3,8 @@ import { RiArrowRightSLine } from "react-icons/ri";
 import { useDismiss } from "@/components/agents/leads/Listbox";
 
 /**
- * "Why?" after rejecting a lead: a category, then an optional detail. Entirely optional:
- * Esc or a click away closes it and the rejection stands without a reason.
+ * "Why?" after rejecting a lead: a category saves at once; only "Other..." asks for the reason
+ * in words. Entirely optional: Esc or a click away closes it and the rejection stands without one.
  */
 
 const GROUPS: Array<{ label: string | null; items: string[] }> = [
@@ -24,9 +24,11 @@ export default function RejectMenu({ onSave, onClose }: { onSave: (reason: strin
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const save = () => {
-    const base = category && category !== "Other..." ? category : "Other";
-    onSave(detail.trim() ? `${base}: ${detail.trim()}` : base);
+  const OTHER = "Other...";
+  const save = () => onSave(detail.trim() ? `Other: ${detail.trim()}` : "Other");
+  const pick = (it: string) => {
+    if (it === OTHER) { setCategory(it); setDetail(""); return; }
+    onSave(it);
   };
 
   return (
@@ -40,9 +42,9 @@ export default function RejectMenu({ onSave, onClose }: { onSave: (reason: strin
           <div key={gi} className={gi ? "border-t border-[var(--border-subtle)] pt-1" : "pt-1"}>
             {g.label && <div className="px-5 pb-1 pt-2 text-[13px] font-medium uppercase tracking-[0.04em] text-base-content/45">{g.label}</div>}
             {g.items.map((it) => (
-              <button key={it} type="button" role="menuitem" onClick={() => { setCategory(it); setDetail(""); }}
+              <button key={it} type="button" role="menuitem" onClick={() => pick(it)}
                 className={`flex w-full items-center justify-between px-5 py-2.5 text-left text-[17px] transition-colors ${category === it ? "bg-primary/10 text-primary" : "text-base-content/85 hover:bg-base-200"}`}>
-                {it} <RiArrowRightSLine size={20} className="text-base-content/45" />
+                {it} {it === OTHER && <RiArrowRightSLine size={20} className="text-base-content/45" />}
               </button>
             ))}
           </div>
@@ -51,7 +53,7 @@ export default function RejectMenu({ onSave, onClose }: { onSave: (reason: strin
       {category && (
         <form className="wizard-rise mb-2 w-[340px] space-y-3 rounded-[14px] border border-[var(--border-subtle)] bg-base-100 p-3 shadow-[var(--shadow-overlay)]"
           onSubmit={(e) => { e.preventDefault(); save(); }}>
-          <input autoFocus value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Why is this lead not a fit?" aria-label={`${category}: details`}
+          <input autoFocus value={detail} onChange={(e) => setDetail(e.target.value)} placeholder="Why is this lead not a fit?" aria-label="Why is this lead not a fit?"
             className="h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-3 text-[15px] outline-none focus:border-primary/60 focus:ring-2 focus:ring-[var(--ring)]" />
           <div className="flex justify-end">
             <button type="submit" className="h-10 rounded-[8px] bg-base-content px-4 text-[15px] font-medium text-base-100 hover:opacity-90">Save reason</button>
