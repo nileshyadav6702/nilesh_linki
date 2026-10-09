@@ -52,7 +52,7 @@ export function isAiBlockingError(err: unknown): err is AiNotConfiguredError | A
 
 export interface AiConfig { apiKey: string; model: string }
 
-export type AiPurpose = "icp_extract" | "fit_score" | "first_touch" | "reply_draft" | "reply_classify" | "sequence_write" | "funding_extract" | "lookalike_query" | "hiring_match";
+export type AiPurpose = "icp_extract" | "fit_score" | "first_touch" | "reply_draft" | "reply_classify" | "sequence_write" | "funding_extract" | "lookalike_query" | "hiring_match" | "competitor_check";
 
 /** Key from the environment (lib/ai/models.ts); the model is picked for the task, never by the user. */
 export function getWorkspaceAi(workspaceId: string, purpose: string = "fit_score"): AiConfig {

@@ -46,6 +46,9 @@ export function findTargetSuppression(workspaceId: string, targetId: string): { 
     if (domain) candidates.push(["domain", normalizeSuppression("domain", domain)]);
   }
   if (target.linkedin_url) candidates.push(["linkedin", normalizeSuppression("linkedin", target.linkedin_url)]);
+  // The company's website domain too, so a blocklisted company stops LinkedIn outreach as well as email.
+  const company = getDb().prepare("SELECT c.domain, c.website FROM targets t JOIN companies c ON c.id = t.company_id WHERE t.id = ?").get(targetId) as { domain: string | null; website: string | null } | undefined;
+  for (const raw of [company?.domain, company?.website]) if (raw) candidates.push(["domain", normalizeSuppression("domain", raw).replace(/^www\./, "")]);
   if (target.phone) candidates.push(["phone", normalizeSuppression("phone", target.phone)]);
   for (const [kind, value] of candidates) {
     const row = getDb().prepare("SELECT kind, value, reason FROM suppressions WHERE workspace_id = ? AND kind = ? AND value = ?").get(workspaceId, kind, value) as { kind: string; value: string; reason: string } | undefined;

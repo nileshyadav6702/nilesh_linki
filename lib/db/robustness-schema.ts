@@ -7,6 +7,15 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Organization blocklist (lib/blocklist): company name shown next to a blocked domain.
+  "ALTER TABLE suppressions ADD COLUMN label TEXT",
+  // AI Competitor Filtering: one verdict per company, cached; "allowed" is the user's override.
+  `CREATE TABLE IF NOT EXISTS competitor_checks (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, company_key TEXT NOT NULL,
+    company_name TEXT, domain TEXT, is_competitor INTEGER NOT NULL DEFAULT 0, reason TEXT,
+    allowed INTEGER NOT NULL DEFAULT 0, checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (workspace_id, company_key)
+  )`,
   // Credits (lib/credits/ledger.ts): every grant, debit and refund; the balance is their sum.
   `CREATE TABLE IF NOT EXISTS credit_ledger (
     id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

@@ -11,6 +11,8 @@ import { draftableSteps, queueDraft, strongestSignals, writeSequence } from "@/l
 import { autoApproveDue } from "@/lib/agents/approvals";
 import { enrollLead, workflowChannels } from "@/lib/agents/enroll";
 import { findEmailCharged } from "@/lib/credits/charge";
+import { blockedReason } from "@/lib/blocklist/store";
+import { competitorReason } from "@/lib/blocklist/competitors";
 import { balance, CREDIT_COSTS, ensureBilling, InsufficientCreditsError } from "@/lib/credits/ledger";
 import type { Agent } from "@/lib/agents/store";
 import { clearFailure, inBackoff, recordFailure } from "@/lib/agents/backoff";
@@ -89,6 +91,13 @@ async function draftQualified(db: Database.Database, agent: Agent, icp: ReturnTy
   for (const lead of leads) {
     if (agent.exclude_first_degree && lead.degree === 1) {
       db.prepare("UPDATE targets SET agent_status = 'skipped', skip_reason = 'Already a 1st-degree connection', agent_status_at = datetime('now') WHERE id = ?").run(lead.id);
+      continue;
+    }
+    // Organization blocklist, then AI Competitor Filtering (when on).
+    const blocked = blockedReason(db, agent.workspace_id, lead.id);
+    const competitor = blocked ? null : await competitorReason(db, agent.workspace_id, icp?.data ?? null, lead);
+    if (blocked || competitor) {
+      db.prepare("UPDATE targets SET agent_status = 'skipped', skip_reason = ?, agent_status_at = datetime('now') WHERE id = ?").run(blocked ?? `Competitor: ${competitor}`, lead.id);
       continue;
     }
     // Workspace preference: one conversation per company at a time.

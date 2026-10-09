@@ -16,6 +16,7 @@ export const CREDIT_COSTS = {
   lead_import_per: 2, // 1 credit per 2 Sales Navigator leads imported
   engager_import_per: 30, // 1 credit per 30 post engagers imported
   agent_launch: 10, // "Launch now" instead of waiting for the schedule
+  competitor_filter_per_seat: 50, // AI Competitor Filtering, per member per month
 } as const;
 
 export const DEFAULT_CREDITS_PER_SEAT = 200;
@@ -30,6 +31,7 @@ export const LEDGER_TYPES = {
   engager_import: "Post engager import",
   agent_launch: "Instant agent launch",
   agent_launch_refund: "Instant agent launch refund",
+  competitor_filter: "AI Competitor Filtering",
 } as const;
 export type LedgerType = keyof typeof LEDGER_TYPES;
 const GRANTS: LedgerType[] = ["monthly_grant", "admin_grant", "purchase"];
@@ -80,6 +82,7 @@ export function ensureBilling(db: DB, workspaceId: string, now = new Date()): Bi
       let start = next;
       while (next <= now) {
         insert(db, workspaceId, { type: "monthly_grant", credits: row.credits_per_seat * seats(db, workspaceId), units: seats(db, workspaceId), at: sqlTime(next) });
+        renewCompetitorFilter(db, workspaceId, sqlTime(next));
         start = next;
         next = addMonths(next, 1);
       }
@@ -88,6 +91,15 @@ export function ensureBilling(db: DB, workspaceId: string, now = new Date()): Bi
     }
     return row;
   }).immediate();
+}
+
+/** AI Competitor Filtering renews with each refill; it switches off when the balance can't cover it. */
+function renewCompetitorFilter(db: DB, workspaceId: string, at: string) {
+  const key = `competitor_filter:${workspaceId}`;
+  if ((db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as { value: string } | undefined)?.value !== "1") return;
+  const cost = CREDIT_COSTS.competitor_filter_per_seat * seats(db, workspaceId);
+  if (balance(db, workspaceId) >= cost) insert(db, workspaceId, { type: "competitor_filter", credits: -cost, units: seats(db, workspaceId), note: "Monthly renewal", at });
+  else db.prepare("UPDATE app_settings SET value = '0', updated_at = datetime('now') WHERE key = ?").run(key);
 }
 
 export interface DebitInput { type: LedgerType; credits: number; userId?: string | null; units?: number | null; refId?: string | null; provider?: string | null; note?: string | null }
