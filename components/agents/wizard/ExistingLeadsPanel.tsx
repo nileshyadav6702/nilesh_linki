@@ -79,8 +79,8 @@ function ListPicker({ value, onChange, lists, used, onCreated, label = "Lead lis
 
 function Choice({ on, onClick, icon, title, text, children }: { on: boolean; onClick: () => void; icon: ReactNode; title: string; text: string; children?: ReactNode }) {
   return (
-    <section className={`overflow-hidden rounded-[16px] border transition-colors duration-200 ${on ? "border-primary/25 bg-primary/[0.05]" : "border-[var(--border-subtle)] bg-base-100"}`}>
-      <button type="button" role="radio" aria-checked={on} onClick={onClick} className="flex w-full items-center gap-5 px-6 py-6 text-left">
+    <section className={`rounded-[16px] border transition-colors duration-200 ${on ? "border-primary/25 bg-primary/[0.05]" : "border-[var(--border-subtle)] bg-base-100"}`}>
+      <button type="button" role="radio" aria-checked={on} onClick={onClick} className="flex w-full items-center gap-5 rounded-[16px] px-6 py-6 text-left">
         <span className="shrink-0 text-base-content">{icon}</span>
         <span className="min-w-0 flex-1"><span className="block text-[17px] font-medium">{title}</span><span className="block text-[17px] text-base-content/60">{text}</span></span>
         <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-all ${on ? "border-primary/70 shadow-[0_0_0_4px_rgba(217,119,87,0.15)]" : "border-primary/60"}`}>
