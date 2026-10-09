@@ -19,7 +19,7 @@ export default function Pagination({ page, pageSize, total, setPage, setPageSize
           Show:
           <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))} aria-label="Contacts per page"
             className="h-11 rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-3 pr-8 text-[16px] outline-none focus:ring-2 focus:ring-[var(--ring)]">
-            {[25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+            {[25, 50, 100, 200, 1000].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
           per page
         </label>

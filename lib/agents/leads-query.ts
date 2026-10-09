@@ -102,7 +102,8 @@ export function parseLeadsQuery(raw: Raw): ParseResult {
       step: step.value, approval: approval.value, emailEnrich: email.value, phoneEnrich: phone.value,
       signalType: signalType || null, verdict: verdict.value, q: q || null,
       sort: sort.value ?? "score_desc",
-      limit: Number.isFinite(limitRaw) ? Math.min(100, Math.max(1, Math.floor(limitRaw))) : 50,
+      // Up to 1000 rows: the Contacts table offers 25 / 50 / 100 / 200 / 1000 per page.
+      limit: Number.isFinite(limitRaw) ? Math.min(1000, Math.max(1, Math.floor(limitRaw))) : 50,
       offset: Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0,
       facets: ["1", "true"].includes(one(raw, "facets")),
     },
