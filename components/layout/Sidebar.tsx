@@ -21,12 +21,14 @@ import {
   RiCloseLine,
   RiShieldUserLine,
   RiRobot2Line,
+  RiBrainLine,
 } from "react-icons/ri";
 import { pathToTourPage, replayPageTour } from "@/lib/tour";
 
 const LEARNING_PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLBf6xNJOmsIQ";
 
 const dailyNav = [
+  { href: "/copilot", label: "Copilot", icon: RiBrainLine, tour: "nav-copilot" },
   { href: "/agents", label: "Agents", icon: RiRobot2Line, tour: "nav-agents" },
   { href: "/inbox", label: "Inbox", icon: RiInboxLine, tour: "nav-inbox" },
 ];

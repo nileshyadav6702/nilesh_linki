@@ -6,7 +6,7 @@ import TourGate from "@/components/onboarding/TourGate";
 
 const hasNoLayout = (path: string) => path === "/login" || path === "/onboarding" || path.startsWith("/invite/");
 /** Data-dense pages (the leads table) that use the full content width instead of the 1240px column. */
-const WIDE_ROUTES = new Set(["/agents", "/agents/[id]", "/agents/new", "/leads"]);
+const WIDE_ROUTES = new Set(["/agents", "/agents/[id]", "/agents/new", "/copilot", "/leads"]);
 
 export default function Layout({ children }: { children: ReactNode }) {
   const router = useRouter();
