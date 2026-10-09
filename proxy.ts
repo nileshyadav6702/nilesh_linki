@@ -27,10 +27,12 @@ const ROLE_HEADER = "x-workspace-role";
 //                                   connection attempt.
 //  - /api/u/*                       Signed one-click unsubscribe links (RFC 8058); the HMAC
 //                                   token is the credential, mail clients POST without a session.
+//  - /api/join/*                    Invite-link lookup is public (the token is the credential);
+//                                   joining checks the session itself, like /api/invitations/*.
 //  - /api/health                    Unauthenticated liveness/readiness probe for the
 //                                   container healthcheck and uptime monitors; exposes
 //                                   no data beyond up/down + uptime.
-const PUBLIC_API_PREFIXES = ["/api/auth/", "/api/invitations/", "/api/oauth/", "/api/mcp", "/api/v1/", "/api/t/", "/api/u/", "/api/health"];
+const PUBLIC_API_PREFIXES = ["/api/auth/", "/api/invitations/", "/api/join/", "/api/oauth/", "/api/mcp", "/api/v1/", "/api/t/", "/api/u/", "/api/health"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

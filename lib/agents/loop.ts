@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { getDb } from "@/lib/db";
 import { isAiConfigured, isAiBlockingError } from "@/lib/ai/client";
 import { getIcp, getLatestIcp } from "@/lib/icp/store";
+import { companyAlreadyInOutreach, getWorkspacePref } from "@/lib/workspace-prefs";
 import { ingestSignal } from "@/lib/platform/signals";
 import { emitDomainEvent } from "@/lib/platform/events";
 import { communityAi } from "@/lib/community-ai";
@@ -74,14 +75,20 @@ async function draftQualified(db: Database.Database, agent: Agent, icp: ReturnTy
   const room = agent.daily_lead_cap - handledToday(db, agent.id);
   if (room <= 0) return { drafted: 0, enrolled: 0 };
   const take = Math.min(room, 10);
-  const leads = (db.prepare(`SELECT id, linkedin_url, email, degree FROM targets WHERE agent_id = ? AND agent_status = 'qualified'
-    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, take * 3) as Array<{ id: string; linkedin_url: string | null; email: string | null; degree: number | null }>)
+  const leads = (db.prepare(`SELECT id, linkedin_url, email, degree, company, company_id FROM targets WHERE agent_id = ? AND agent_status = 'qualified'
+    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, take * 3) as Array<{ id: string; linkedin_url: string | null; email: string | null; degree: number | null; company: string | null; company_id: string | null }>)
     .filter((l) => !inBackoff("draft", l.id)).slice(0, take);
   const aiReady = isAiConfigured(agent.workspace_id);
+  const companyDedup = getWorkspacePref(db, agent.workspace_id, "company_dedup");
   let drafted = 0; let enrolled = 0;
   for (const lead of leads) {
     if (agent.exclude_first_degree && lead.degree === 1) {
       db.prepare("UPDATE targets SET agent_status = 'skipped', skip_reason = 'Already a 1st-degree connection', agent_status_at = datetime('now') WHERE id = ?").run(lead.id);
+      continue;
+    }
+    // Workspace preference: one conversation per company at a time.
+    if (companyDedup && companyAlreadyInOutreach(db, agent.workspace_id, lead)) {
+      db.prepare("UPDATE targets SET agent_status = 'skipped', skip_reason = 'Someone from this company is already being contacted', agent_status_at = datetime('now') WHERE id = ?").run(lead.id);
       continue;
     }
     const steps = draftableSteps(db, agent, lead);

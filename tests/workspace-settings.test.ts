@@ -24,12 +24,12 @@ beforeAll(() => {
 
 describe("workspace preferences", () => {
   it("defaults to on with no agents, then reflects and sets every agent", () => {
-    expect(call("GET").body.prefs).toEqual({ auto_enrich_emails: true, exclude_first_degree: true });
+    expect(call("GET").body.prefs).toEqual({ auto_enrich_emails: true, exclude_first_degree: true, company_dedup: false });
     const db = getDb();
     db.prepare("INSERT INTO agents (id, workspace_id, name, enrich_emails, exclude_first_degree) VALUES ('wp-a1', ?, 'A', 1, 1), ('wp-a2', ?, 'B', 0, 1)").run(WS, WS);
     expect(call("GET").body.prefs.auto_enrich_emails).toBe(false);
-    const res = call("PATCH", { auto_enrich_emails: true, exclude_first_degree: false });
-    expect(res.body.prefs).toEqual({ auto_enrich_emails: true, exclude_first_degree: false });
+    const res = call("PATCH", { auto_enrich_emails: true, exclude_first_degree: false, company_dedup: true });
+    expect(res.body.prefs).toEqual({ auto_enrich_emails: true, exclude_first_degree: false, company_dedup: true });
     expect(db.prepare("SELECT SUM(enrich_emails) e, SUM(exclude_first_degree) x FROM agents WHERE workspace_id = ?").get(WS)).toEqual({ e: 2, x: 0 });
   });
 

@@ -7,6 +7,14 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Shareable workspace invite link (lib/workspace-join-links.ts).
+  `CREATE TABLE IF NOT EXISTS workspace_join_links (
+    id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE, token_enc TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member',
+    max_uses INTEGER NOT NULL, uses INTEGER NOT NULL DEFAULT 0, created_by TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), revoked_at TEXT
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_join_links_ws ON workspace_join_links(workspace_id, revoked_at)",
   // Unified inbox: every LinkedIn conversation and mailbox thread of the workspace's
   // connected accounts, synced in (not only campaign replies), with local triage state.
   `CREATE TABLE IF NOT EXISTS inbox_threads (

@@ -17,7 +17,8 @@ body {
 h1,h2,h3,h4,h5,h6,p,figure { margin: 0; }
 a { color: var(--primary); text-decoration: none; }
 a:hover { color: var(--primary-hover); text-decoration: underline; text-underline-offset: 2px; }
-button, input, textarea, select { font: inherit; color: inherit; }
+/* Layered so utility classes (text size / colour on a button or input) still win. */
+@layer base { button, input, textarea, select { font: inherit; color: inherit; } }
 :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 code, kbd, samp, pre { font-family: var(--font-mono); }
 ::selection { background: color-mix(in srgb, var(--primary) 22%, transparent); }

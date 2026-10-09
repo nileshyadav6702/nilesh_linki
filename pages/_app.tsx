@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import Layout from "@/components/layout/Layout";
 import { Toaster } from "sonner";
 
-const isPublicPath = (path: string) => path === "/login" || path.startsWith("/invite/");
+const isPublicPath = (path: string) => path === "/login" || path.startsWith("/invite/") || path.startsWith("/join/");
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();

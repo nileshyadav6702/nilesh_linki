@@ -18,13 +18,13 @@ type Profile = Pick<Icp, "company_name" | "company_industry" | "company_size" | 
 const PROFILE_KEYS: Array<keyof Profile> = ["company_name", "company_industry", "company_size", "company_linkedin_url", "offer", "pain_points", "value_props", "social_proof"];
 const LIMITS = { offer: 1200, pains: 3000 };
 
-const field = "h-12 w-full rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-4 text-[16px] text-base-content outline-none transition placeholder:text-base-content/40 focus:border-primary/60 focus:ring-2 focus:ring-[var(--ring)]";
-const area = "block w-full resize-y rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-4 pb-8 pt-3 text-[16px] leading-relaxed text-base-content outline-none transition placeholder:text-base-content/40 focus:border-primary/60 focus:ring-2 focus:ring-[var(--ring)]";
+const field = "h-[52px] w-full rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-4 text-[17px] text-base-content outline-none transition placeholder:text-base-content/40 focus:border-primary/60 focus:ring-2 focus:ring-[var(--ring)]";
+const area = "block w-full resize-y rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-4 pb-8 pt-3 text-[17px] leading-relaxed text-base-content outline-none transition placeholder:text-base-content/40 focus:border-primary/60 focus:ring-2 focus:ring-[var(--ring)]";
 
 function Field({ label, required, children, className = "" }: { label: string; required?: boolean; children: ReactNode; className?: string }) {
   return (
     <div className={className}>
-      <div className="mb-2.5 text-[16px] font-medium text-base-content">{label}{required && <span className="text-base-content/70"> *</span>}</div>
+      <div className="mb-2.5 text-[17px] font-medium text-base-content">{label}{required && <span className="text-base-content/70"> *</span>}</div>
       {children}
     </div>
   );
@@ -58,15 +58,15 @@ function ListEditor({ items, onChange, placeholder, max = 12 }: { items: string[
   );
 }
 
-function Check({ on, onChange, title, text }: { on: boolean; onChange: (v: boolean) => void; title: string; text: string }) {
+function Check({ on, onChange, title, text, locked, tag }: { on: boolean; onChange: (v: boolean) => void; title: string; text: string; locked?: boolean; tag?: string }) {
   return (
-    <label className="flex cursor-pointer items-start gap-4">
-      <input type="checkbox" className="peer sr-only" checked={on} onChange={(e) => onChange(e.target.checked)} />
+    <label className={`flex items-start gap-4 ${locked ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}>
+      <input type="checkbox" className="peer sr-only" checked={on} disabled={locked} onChange={(e) => onChange(e.target.checked)} />
       <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] border-2 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--ring)] ${on ? "border-primary bg-primary text-primary-content" : "border-primary/40 bg-base-100"}`}>
         {on && <LuCheck size={18} strokeWidth={3} />}
       </span>
       <span>
-        <span className="block text-[17px] font-medium text-base-content">{title}</span>
+        <span className="flex flex-wrap items-center gap-2 text-[17px] font-medium text-base-content">{title}{tag && <span className="rounded-full bg-base-200 px-2.5 py-0.5 text-[12px] font-medium text-base-content/60">{tag}</span>}</span>
         <span className="mt-1 block text-[15px] text-base-content/60">{text}</span>
       </span>
     </label>
@@ -79,7 +79,7 @@ export default function WorkspaceTab() {
   const [website, setWebsite] = useState("");
   const [savedWebsite, setSavedWebsite] = useState("");
   const [pains, setPains] = useState("");
-  const [prefs, setPrefs] = useState<{ auto_enrich_emails: boolean; exclude_first_degree: boolean } | null>(null);
+  const [prefs, setPrefs] = useState<{ auto_enrich_emails: boolean; exclude_first_degree: boolean; company_dedup: boolean } | null>(null);
   const [savedPrefs, setSavedPrefs] = useState<typeof prefs>(null);
   const [busy, setBusy] = useState<"save" | "ai" | null>(null);
 
@@ -174,7 +174,7 @@ export default function WorkspaceTab() {
           </Field>
           <Field label="Company Size" required>
             <Listbox label="Company size" value={profile.company_size} onChange={(v) => set("company_size", v)} options={SIZES} placeholder="Select company size"
-              className="[&>button]:h-12 [&>button]:rounded-[8px] [&>button]:border-[var(--border-strong)] [&>button]:px-4 [&>button]:text-[16px]" />
+              className="[&>button]:h-[52px] [&>button]:rounded-[8px] [&>button]:border-[var(--border-strong)] [&>button]:px-4 [&>button]:text-[17px]" />
           </Field>
         </div>
 
@@ -205,6 +205,12 @@ export default function WorkspaceTab() {
                 title="Auto-enrich email addresses" text="Automatically find email addresses for qualified leads, for every agent with an email step." />
               <Check on={prefs.exclude_first_degree} onChange={(v) => setPrefs({ ...prefs, exclude_first_degree: v })}
                 title="Skip people you're already connected with" text="Agents leave out your 1st-degree LinkedIn connections when finding new leads." />
+              <Check on={false} onChange={() => {}} locked tag="Coming soon"
+                title="Auto-enrich phone numbers" text="Automatically find phone numbers for qualified leads. Needs a phone data provider, which isn't connected yet." />
+              <Check on onChange={() => {}} locked tag="Always on"
+                title="Prevent contact duplication across team members" text="Each person exists once in the workspace, so two members' agents never import or contact the same lead twice." />
+              <Check on={prefs.company_dedup} onChange={(v) => setPrefs({ ...prefs, company_dedup: v })}
+                title="Prevent company duplication across team members" text="Agents skip a lead when someone from the same company is already being contacted in this workspace." />
             </> : <LuLoaderCircle size={20} className="animate-spin text-base-content/40" />}
           </div>
         </div>

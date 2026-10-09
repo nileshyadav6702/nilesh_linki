@@ -28,6 +28,7 @@ export const signupSchema = z.object({
     .max(200, "Password is too long.")
     .refine((p) => p.length >= 8, "Password must be at least 8 characters."),
   invite_token: z.string().max(400).optional(),
+  join_token: z.string().max(200).optional(),
 });
 
 // --- Public API (pages/api/v1) -----------------------------------------
