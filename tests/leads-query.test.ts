@@ -78,8 +78,8 @@ describe("parseLeadsQuery", () => {
     }
   });
   it("defaults to active leads ranked by score and clamps paging", () => {
-    const r = parseLeadsQuery({ limit: "5000", offset: "-3" });
-    expect(r.ok && r.query).toMatchObject({ status: "active", sort: "score_desc", limit: 1000, offset: 0, facets: false });
+    const r = parseLeadsQuery({ limit: "9000", offset: "-3" });
+    expect(r.ok && r.query).toMatchObject({ status: "active", sort: "score_desc", limit: 5000, offset: 0, facets: false });
     const legacy = parseLeadsQuery({ status: "enrolled", facets: "1" });
     expect(legacy.ok && legacy.query).toMatchObject({ status: "enrolled", facets: true });
   });

@@ -8,7 +8,7 @@ import LeadDrawer from "@/components/agents/LeadDrawer";
 import { useDismiss } from "@/components/agents/leads/Listbox";
 import Confirm from "@/components/contacts/Confirm";
 import ContactsTable, { type ResearchResult } from "@/components/contacts/ContactsTable";
-import Pagination from "@/components/contacts/Pagination";
+import Pagination, { ALL_ROWS } from "@/components/contacts/Pagination";
 import { useContacts, type ContactRow } from "@/components/contacts/useContacts";
 import DeepResearchDrawer from "@/components/lists/DeepResearchDrawer";
 import { requireSignedIn } from "@/lib/agents/page-auth";
@@ -68,7 +68,7 @@ export default function ListDetail() {
   const router = useRouter();
   const id = String(router.query.id ?? "");
   const base = useMemo(() => ({ list: id }), [id]);
-  const c = useContacts(base);
+  const c = useContacts(base, 50);
   const rows = useMemo(() => c.rows ?? [], [c.rows]);
   const [list, setList] = useState<ListInfo | null>(null);
   const [lists, setLists] = useState<ListInfo[]>([]);
@@ -212,7 +212,7 @@ export default function ListDetail() {
                 onRemove={(tid) => void removeFromList([tid])} onDelete={(tid) => setConfirm({ ids: [tid] })} onChanged={() => void load()}
                 research={research?.results ?? {}} hidden={["list"]} sizesKey="linki.list.columns.v1" />
             )}
-          <Pagination page={c.page} pageSize={c.pageSize} total={c.total} setPage={(p) => { c.setPage(p); setSelected(new Set()); }} setPageSize={c.setPageSize} />
+          <Pagination page={c.page} pageSize={c.pageSize} total={c.total} setPage={(p) => { c.setPage(p); setSelected(new Set()); }} setPageSize={c.setPageSize} sizes={[25, 50, 100, 200, ALL_ROWS]} />
         </section>
       </div>
 

@@ -29,11 +29,11 @@ export function contactParams(f: ContactFilters, q: string, extra: Record<string
 }
 
 /** `base`: filters that are always on (a list page passes its list). */
-export function useContacts(base: Partial<ContactFilters> = {}) {
+export function useContacts(base: Partial<ContactFilters> = {}, initialPageSize = 100) {
   const [filters, setFilters] = useState<ContactFilters>(() => ({ ...EMPTY_FILTERS, ...base }));
   const [q, setQ] = useState("");
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSizeState] = useState(100);
+  const [pageSize, setPageSizeState] = useState(initialPageSize);
   const [rows, setRows] = useState<ContactRow[] | null>(null);
   const [total, setTotal] = useState(0);
   const [signals, setSignals] = useState<Array<{ type: string; count: number }>>([]);
