@@ -25,6 +25,17 @@ export interface LeadDetail {
 
 const str = (v: unknown) => (v === null || v === undefined || v === "" ? null : String(v));
 
+/** "Seed · $2.9M · January 2024" from the company's cached funding lookup. */
+function fundingLine(json: string | null): string | null {
+  if (!json) return null;
+  try {
+    const r = JSON.parse(json) as { stage?: string | null; amountUsd?: number | null; announcedOn?: string };
+    const amt = r.amountUsd ? (r.amountUsd >= 1e6 ? `$${(r.amountUsd / 1e6).toFixed(1)}M` : `$${Math.round(r.amountUsd / 1e3)}K`) : null;
+    const when = r.announcedOn ? new Date(r.announcedOn).toLocaleDateString(undefined, { month: "long", year: "numeric" }) : null;
+    return [r.stage, amt, when].filter(Boolean).join(" · ") || null;
+  } catch { return null; }
+}
+
 function whenSends(iso: string | null): string | null {
   if (!iso) return null;
   const m = Math.round((Date.parse(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`) - Date.now()) / 60_000);
@@ -286,6 +297,10 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
                 <Rows rows={[
                   ["Industry", str(co?.industry ?? c.company_industry)],
                   ["Company Size", size ? (/^\d+$/.test(size) ? `${size} employees` : size) : null],
+                  ["Founded", str(co?.founded_year)],
+                  ["Company Type", str(co?.org_type)],
+                  ["Latest Funding", fundingLine(str(co?.last_funding_json))],
+                  ["Specialties", str(co?.specialties)],
                   ["Location", location ? <span className="inline-flex items-center gap-1.5"><RiMap2Line size={17} className="text-base-content/50" />{location}</span> : null],
                 ]} />
               </Section>

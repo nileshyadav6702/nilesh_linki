@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { RiCloseLine, RiDeleteBin6Line, RiLinkedinBoxFill, RiMore2Fill } from "react-icons/ri";
-import { Avatar, Flames, timeAgo } from "@/components/agents/ui";
+import { Avatar, timeAgo } from "@/components/agents/ui";
+import { ScoreCell } from "./ScoreCard";
 import { ApprovalCell, EmailCell, OutreachCell, PhoneCell, SignalCell } from "./cells";
 import { FloatingMenu } from "./Menu";
 import type { LeadRowData } from "./types";
@@ -35,12 +36,18 @@ export default function LeadRow({ lead: r, selected, pinned, scrolled, showAgent
               {r.linkedin_url && <a href={r.linkedin_url} target="_blank" rel="noreferrer" onClick={stop} aria-label="LinkedIn profile" className="shrink-0 text-[#0a66c2] hover:opacity-80"><RiLinkedinBoxFill size={16} /></a>}
             </div>
             <div className="truncate text-[14.5px] text-base-content/60">{r.title ?? r.headline}</div>
-            {r.company && <div className="truncate text-[13.5px] text-base-content/40">@ {r.company}</div>}
+            {r.company && (
+              <div className="flex min-w-0 items-center gap-1.5 text-[13.5px] text-base-content/40">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {r.company_logo ? <img src={r.company_logo} alt="" width={16} height={16} className="h-4 w-4 shrink-0 rounded-[4px] object-cover ring-1 ring-[var(--border-subtle)]" /> : <span>@</span>}
+                <span className="truncate">{r.company}</span>
+              </div>
+            )}
           </div>
         </div>
       </td>
       <td className={`${td} w-[320px] min-w-[260px] max-w-[340px]`}><SignalCell lead={r} /></td>
-      <td className={`${td} w-[96px]`} title={r.fit_reason ?? undefined}><Flames score={r.lead_score ?? r.intent_score} /></td>
+      <td className={`${td} w-[96px]`}><ScoreCell lead={r} /></td>
       <td className={`${td} w-[230px] max-w-[240px]`}><EmailCell lead={r} /></td>
       <td className={`${td} w-[150px] max-w-[170px]`}><PhoneCell lead={r} /></td>
       <td className={`${td} min-w-[320px]`}><OutreachCell outreach={r.outreach} /></td>

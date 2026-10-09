@@ -28,6 +28,7 @@ export const fitBatchSchema = z.object({
 interface LeadRow {
   id: string; full_name: string | null; headline: string | null; title: string | null; company: string | null;
   location: string | null; summary: string | null; company_industry: string | null; company_size: string | null; company_description: string | null;
+  company_specialties?: string | null; company_founded?: number | null; company_type?: string | null;
 }
 
 export function hasProfileText(l: Pick<LeadRow, "headline" | "summary" | "title">): boolean {
@@ -50,7 +51,8 @@ export function ruleFit(l: Pick<LeadRow, "headline" | "title">, icp: Icp | null)
  * since been filled in (profile enrichment, job-change re-check). Leads in retry backoff wait.
  */
 const LEAD_COLUMNS = `t.id, t.full_name, t.headline, t.title, t.company, t.location, t.summary,
-        c.industry company_industry, COALESCE(c.employee_count, c.employee_range) company_size, c.description company_description`;
+        c.industry company_industry, COALESCE(c.employee_count, c.employee_range) company_size, c.description company_description,
+        c.specialties company_specialties, c.founded_year company_founded, c.org_type company_type`;
 
 /** Same rows re-read after enrichment filled them in. */
 function reloadRows(db: Database.Database, rows: LeadRow[]): LeadRow[] {
@@ -145,11 +147,8 @@ export async function scoreNewLeads(db: Database.Database, agent: Agent, icp: Ic
     return all.length;
   }
   let loaded = loadUnscored(db, agent, icpId, limit);
-  // Thin leads (no company data yet): read profile + company first, so fit is judged on facts.
-  if (tregEnabled() && icp && loaded.length) {
-    const thin = loaded.filter((l) => !l.company_industry && !l.company_description).map((l) => l.id);
-    if (thin.length && (await enrichForScoring(db, agent.workspace_id, thin))) loaded = reloadRows(db, loaded);
-  }
+  // Read profile + company (page, funding) first, so fit is judged on facts, not "company unknown".
+  if (tregEnabled() && icp && loaded.length && (await enrichForScoring(db, agent.workspace_id, loaded.map((l) => l.id)))) loaded = reloadRows(db, loaded);
   const requireText = opts.requireProfileText ?? true;
   let screenedOut = 0;
   const screened = icp ? loaded.filter((l) => {
@@ -226,7 +225,8 @@ async function scoreBatch(db: Database.Database, agent: Agent, icp: Icp, icpId: 
       leads: batch.map((l, index) => ({
         index, name: l.full_name, headline: l.headline, title: l.title, company: l.company, location: l.location,
         about: l.summary?.slice(0, 500) ?? null, company_industry: l.company_industry, company_size: l.company_size,
-        company_description: l.company_description?.slice(0, 300) ?? null, signals: topSignals(db, l.id),
+        company_description: l.company_description?.slice(0, 300) ?? null,
+        company_specialties: l.company_specialties?.slice(0, 200) ?? null, company_founded: l.company_founded ?? null, company_type: l.company_type ?? null, signals: topSignals(db, l.id),
       })),
       feedback: feedbackExamples(db, agent.id),
     },

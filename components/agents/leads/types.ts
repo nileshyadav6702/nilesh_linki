@@ -2,7 +2,7 @@
 
 export interface StepRef { type: string; order: number; label: string; accepted?: boolean }
 export interface Outreach { track: string; state: string; prev: StepRef | null; next: StepRef | null; waiting: string | null; next_at: string | null }
-export interface LeadSignal { id: string; type: string; title: string; snippet: string | null; source_url: string | null; metadata_json?: string | null; occurred_at: string }
+export interface LeadSignal { id: string; type: string; title: string; snippet: string | null; source_url: string | null; metadata_json?: string | null; occurred_at: string; weight?: number | null }
 
 export interface LeadRowData {
   id: string; full_name: string | null; profile_image_url?: string | null; headline: string | null; title: string | null; company: string | null; linkedin_url: string | null;
@@ -10,6 +10,7 @@ export interface LeadRowData {
   lead_score: number | null; intent_score: number; fit_reason: string | null; fit_verdict: string | null; replied?: boolean;
   agent_status: string | null; agent_name: string | null; created_at: string;
   signals: LeadSignal[]; signal_count?: number;
+  score_breakdown?: string | null; company_logo?: string | null; company_domain?: string | null; company_industry?: string | null;
   drafts: Array<{ id: string }>;
 }
 

@@ -11,6 +11,11 @@ const STATEMENTS: string[] = [
   "ALTER TABLE targets ADD COLUMN signal_strength REAL",
   "ALTER TABLE targets ADD COLUMN contact_relevance REAL",
   "ALTER TABLE targets ADD COLUMN score_breakdown TEXT",
+  // Company enrichment (lib/treg/company.ts): company-page firmographics and a cached funding lookup.
+  "ALTER TABLE companies ADD COLUMN specialties TEXT",
+  "ALTER TABLE companies ADD COLUMN org_type TEXT",
+  "ALTER TABLE companies ADD COLUMN funding_checked_at TEXT",
+  "ALTER TABLE companies ADD COLUMN last_funding_json TEXT",
   // Treg data calls (lib/treg/client.ts): what each workspace spends, for the daily cap and reporting.
   `CREATE TABLE IF NOT EXISTS treg_calls (
     id TEXT PRIMARY KEY, workspace_id TEXT, endpoint TEXT NOT NULL, purpose TEXT, status INTEGER,

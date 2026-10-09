@@ -5,16 +5,13 @@ import { toast } from "sonner";
 import { RiAtLine, RiFireFill, RiHeartPulseLine, RiLoader4Line, RiPhoneLine, RiSparkling2Line } from "react-icons/ri";
 import { signalLine } from "@/components/agents/signal-line";
 import type { ContactRow } from "@/components/contacts/useContacts";
+import { SCORE_TIERS, ScoreBreakdown, signalName, strongestSignal } from "@/components/agents/leads/ScoreCard";
 import { failToast } from "@/components/settings/billing/credits-toast";
 
 /** Cells for the Contacts table: AI score with an explanation card, copyable email / phone, approval. */
 
-const BANDS = [
-  { min: 70, label: "Hot", text: "High-priority lead: strong fit and intent", tint: "bg-[#fdeee6] text-[#d4572a]" },
-  { min: 50, label: "Warm", text: "Good fit showing interest; worth a timely touch", tint: "bg-[#fdf3e4] text-[#c27a1e]" },
-  { min: 0, label: "Cool", text: "Early interest or a looser fit; nurture before pitching", tint: "bg-base-200 text-base-content/60" },
-];
-const bandOf = (score: number) => BANDS.find((b) => score >= b.min)!;
+const TINTS = { 1: "bg-base-200 text-base-content/60", 2: "bg-[#fdf3e4] text-[#c27a1e]", 3: "bg-[#fdeee6] text-[#d4572a]" } as const;
+const bandOf = (score: number) => { const n = flamesFor(score); return { ...SCORE_TIERS[n], text: SCORE_TIERS[n].line, tint: TINTS[n] }; };
 
 function Flame({ on, size = 20 }: { on: boolean; size?: number }) {
   return <RiFireFill size={size} className={on ? "text-[#ef6c3a]" : "text-base-content/15"} aria-hidden="true" />;
@@ -33,7 +30,7 @@ export function ScoreCell({ row }: { row: ContactRow }) {
   const [at, setAt] = useState<{ x: number; y: number; below: boolean } | null>(null);
   if (score === null || score === undefined) return <span className="text-[13px] text-base-content/30">—</span>;
   const band = bandOf(score);
-  const s = row.signals[0];
+  const s = strongestSignal(row.signals);
   const show = () => {
     const r = ref.current?.getBoundingClientRect();
     if (r) setAt({ x: Math.min(window.innerWidth - 410, Math.max(10, r.left + r.width / 2 - 200)), y: r.top, below: r.top < 300 });
@@ -54,9 +51,10 @@ export function ScoreCell({ row }: { row: ContactRow }) {
           <div className="flex justify-center py-3"><Flames score={score} size={30} /></div>
           <div className="space-y-2.5 border-t border-[var(--border-subtle)] bg-base-200/30 px-5 py-3.5 text-[14px] leading-snug text-base-content/80">
             {row.fit_reason && <div className="flex gap-2.5"><RiSparkling2Line size={16} className="mt-0.5 shrink-0 text-primary" />{row.fit_reason}</div>}
-            {s && <div className="flex gap-2.5"><RiHeartPulseLine size={16} className="mt-0.5 shrink-0 text-[#d4572a]" />{[signalLine(s).lead, signalLine(s).link, signalLine(s).tail].filter(Boolean).join("")}</div>}
+            {s && <div className="flex gap-2.5"><RiHeartPulseLine size={16} className="mt-0.5 shrink-0 text-[#d4572a]" /><span>{[signalLine(s).lead, signalLine(s).link, signalLine(s).tail].filter(Boolean).join("")}<span className="text-base-content/50"> · {signalName(s)}</span></span></div>}
             {!row.fit_reason && !s && <div className="text-base-content/50">Scored from the profile alone; no signal yet.</div>}
           </div>
+          <ScoreBreakdown raw={row.score_breakdown} color={band.color} className="border-t border-[var(--border-subtle)] px-5 py-3.5" />
         </div>, document.body)}
     </span>
   );

@@ -62,7 +62,7 @@ const CONTACT_COLUMNS = `id, full_name, first_name, last_name, headline, title, 
 export function getLeadDetail(db: Database.Database, workspaceId: string, targetId: string): LeadDetail | null {
   const contact = db.prepare(`SELECT ${CONTACT_COLUMNS} FROM targets WHERE id = ? AND workspace_id = ?`).get(targetId, workspaceId) as Record<string, unknown> | undefined;
   if (!contact) return null;
-  const company = contact.company_id ? db.prepare("SELECT id, name, domain, website, industry, employee_count, employee_range, location, description, linkedin_url, logo_url FROM companies WHERE id = ?").get(contact.company_id) as Record<string, unknown> | undefined : undefined;
+  const company = contact.company_id ? db.prepare("SELECT id, name, domain, website, industry, employee_count, employee_range, location, description, linkedin_url, logo_url, founded_year, specialties, org_type, last_funding_json FROM companies WHERE id = ?").get(contact.company_id) as Record<string, unknown> | undefined : undefined;
   const signals = db.prepare("SELECT id, type, title, snippet, source_url, occurred_at, metadata_json FROM signals WHERE target_id = ? ORDER BY occurred_at DESC LIMIT 20").all(targetId) as LeadDetail["signals"];
   const agent = contact.agent_id ? db.prepare(`SELECT a.id, a.name, a.mode, a.outreach_enabled, a.status, a.workflow_id, w.name workflow_name
     FROM agents a LEFT JOIN workflows w ON w.id = a.workflow_id WHERE a.id = ?`).get(contact.agent_id) as LeadDetail["agent"] | undefined : undefined;

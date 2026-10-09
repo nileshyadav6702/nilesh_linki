@@ -76,7 +76,13 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
               {r.linkedin_url && <a href={r.linkedin_url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} aria-label="LinkedIn profile" className="shrink-0 text-[#3730a3] hover:opacity-80"><RiLinkedinBoxFill size={18} /></a>}
             </div>
             <div className="truncate text-[14px] text-base-content/70">{r.title ?? r.headline}</div>
-            {r.company && <div className="truncate text-[14px] text-base-content/55"><span className="text-base-content/35">@</span>{r.company}</div>}
+            {r.company && (
+              <div className="flex min-w-0 items-center gap-1.5 text-[14px] text-base-content/55">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {r.company_logo ? <img src={r.company_logo} alt="" width={16} height={16} className="h-4 w-4 shrink-0 rounded-[4px] object-cover ring-1 ring-[var(--border-subtle)]" /> : <span className="text-base-content/35">@</span>}
+                <span className="truncate">{r.company}</span>
+              </div>
+            )}
           </div>
         </div>
       ),

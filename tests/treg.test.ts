@@ -117,6 +117,40 @@ describe("treg routing and enrichment", () => {
   });
 });
 
+describe("company enrichment before scoring", () => {
+  it("reads photo, company page and funding once, and puts a recent round on the lead as a signal", async () => {
+    const db = getDb();
+    const a = upsertLead(db, WS, null, { name: "Fran Funded", profileUrl: "https://www.linkedin.com/in/fran-funded" }).targetId;
+    const b = upsertLead(db, WS, null, { name: "Gus Funded", profileUrl: "https://www.linkedin.com/in/gus-funded" }).targetId;
+    const announced = new Date(Date.now() - 40 * 86_400_000).toISOString();
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: URL) => {
+      const u = String(url); calls.push(u);
+      if (u.includes("user.profile")) return json(200, {
+        output: { full_name: "Fran Funded", headline: "Head of Sales at Fundco", about: null, location: "Paris" },
+        raw: { output: { data: { profilePictureUrl: "https://media.licdn.com/p.jpg", experience: [{ title: "Head of Sales", company: "Fundco", companyUrl: "https://www.linkedin.com/company/fundco/", endDate: "" }] } } },
+      });
+      if (u.includes("company.profile")) return json(200, {
+        output: { name: "Fundco", description: "Sales software", website: "https://fundco.io", employees: 42, location: "Paris", linkedin_url: "https://www.linkedin.com/company/fundco" },
+        raw: { data: { industries: "Software Development", logo: "https://media.licdn.com/logo.png", founded: 2019, specialties: "Sales, CRM", company_size: "11-50 employees", organization_type: "Privately Held" } },
+      });
+      return json(200, { fundingRounds: [{ id: 7, announcedOn: announced, moneyRaised: 2_900_000, name: "Seed Round", stage: "Seed" }, { id: 3, announcedOn: "2020-01-01T00:00:00Z", stage: "Pre-seed" }] });
+    }));
+    const { enrichForScoring } = await import("@/lib/treg/enrich");
+    expect(await enrichForScoring(db, WS, [a, b])).toBe(2);
+    // One company page and one funding lookup, shared by both leads.
+    expect(calls.filter((u) => u.includes("company.profile"))).toHaveLength(1);
+    expect(calls.filter((u) => u.includes("funding_rounds"))).toHaveLength(1);
+    expect(db.prepare("SELECT profile_image_url FROM targets WHERE id = ?").get(a)).toEqual({ profile_image_url: "https://media.licdn.com/p.jpg" });
+    expect(db.prepare("SELECT c.logo_url, c.founded_year, c.specialties, c.employee_range, c.org_type, c.industry, c.domain FROM targets t JOIN companies c ON c.id = t.company_id WHERE t.id = ?").get(b))
+      .toEqual({ logo_url: "https://media.licdn.com/logo.png", founded_year: 2019, specialties: "Sales, CRM", employee_range: "11-50 employees", org_type: "Privately Held", industry: "Software Development", domain: "fundco.io" });
+    const sig = db.prepare("SELECT type, title, snippet FROM signals WHERE target_id = ? AND type = 'funding'").get(a) as { title: string; snippet: string };
+    expect(sig.title).toMatch(/^Raised funding · \w+ \d{4}$/);
+    expect(sig.snippet).toBe("Seed · $2.9M");
+    expect(db.prepare("SELECT COUNT(*) n FROM signals WHERE target_id = ? AND type = 'funding'").get(b)).toEqual({ n: 1 });
+  });
+});
+
 describe("treg-backed signal runner", () => {
   it("topic activity: searches posts, reads engagers and emits leads without a LinkedIn session", async () => {
     const { keywordRunner } = await import("@/lib/signals/sources/engagement");

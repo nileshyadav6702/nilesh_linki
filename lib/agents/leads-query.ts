@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { isSignalType } from "@/lib/signals/types";
+import { HOT_SCORE, WARM_SCORE } from "@/lib/signals/scoring";
 
 /**
  * The agent Leads feed: filter, sort, facet and page agent-sourced contacts.
@@ -15,7 +16,7 @@ export const LEAD_APPROVALS = ["pending", "approved", "rejected"] as const;
 export const EMAIL_ENRICH = ["found", "not_found", "not_enriched", "unsubscribed"] as const;
 export const PHONE_ENRICH = ["found", "not_found", "not_enriched"] as const;
 export const LEAD_SORTS = ["newest", "score_desc", "score_asc", "signal_desc", "signal_asc"] as const;
-/** AI score bands, as the flames show them: 1 = first signs of interest (<50), 2 = actively exploring (50-69), 3 = ready to engage (70+). */
+/** AI score bands, as the flames show them (lib/signals/scoring.ts): 1 = cool (<60), 2 = warm (60-79), 3 = hot (80+). */
 export const SCORE_BANDS = ["1", "2", "3"] as const;
 const VERDICTS = ["strong", "possible", "poor"] as const;
 
@@ -168,9 +169,9 @@ const PHONE_SQL: Record<PhoneEnrich, string> = {
 const SCORE = "COALESCE(t.lead_score, t.intent_score)";
 const SCORE_BAND_SQL: Record<(typeof SCORE_BANDS)[number], string> = {
   // Unscored contacts carry intent_score 0, not NULL: they have no band.
-  "1": `((t.lead_score IS NOT NULL OR t.intent_score > 0) AND ${SCORE} < 50)`,
-  "2": `(${SCORE} >= 50 AND ${SCORE} < 70)`,
-  "3": `(${SCORE} >= 70)`,
+  "1": `((t.lead_score IS NOT NULL OR t.intent_score > 0) AND ${SCORE} < ${WARM_SCORE})`,
+  "2": `(${SCORE} >= ${WARM_SCORE} AND ${SCORE} < ${HOT_SCORE})`,
+  "3": `(${SCORE} >= ${HOT_SCORE})`,
 };
 const SORT_SQL: Record<LeadSort, string> = {
   newest: "t.created_at DESC, t.id",
@@ -308,15 +309,16 @@ export function listLeads(db: Database.Database, workspaceId: string, q: LeadsQu
   const rows = db.prepare(`SELECT t.id, t.full_name, t.first_name, t.headline, t.title, t.company, t.location, t.linkedin_url, t.email, t.email_status, t.phone,
         t.profile_image_url, t.fit_score, t.fit_verdict, t.fit_reason, t.fit_confidence, t.intent_score, t.lead_score, t.agent_id,
         t.agent_status, t.agent_status_at, t.skip_reason, t.lead_source, t.created_at, t.connected_at, a.name agent_name,
+        t.score_breakdown, co.name company_name, co.logo_url company_logo, co.domain company_domain, co.industry company_industry,
         CASE WHEN ${REPLIED} THEN 1 ELSE 0 END replied,
         CASE WHEN NOT ${NO_EMAIL} AND ${UNSUBSCRIBED} THEN 1 ELSE 0 END email_unsubscribed,
         (SELECT MAX(s.occurred_at) FROM signals s WHERE s.target_id = t.id) last_signal_at,
         (SELECT l.name FROM list_targets lt JOIN lists l ON l.id = lt.list_id WHERE lt.target_id = t.id ORDER BY l.created_at DESC LIMIT 1) list_name,
         (SELECT COUNT(*) FROM list_targets lt WHERE lt.target_id = t.id) list_count
-      FROM targets t LEFT JOIN agents a ON a.id = t.agent_id
+      FROM targets t LEFT JOIN agents a ON a.id = t.agent_id LEFT JOIN companies co ON co.id = t.company_id
      WHERE ${where.sql}
      ORDER BY ${SORT_SQL[q.sort]} LIMIT ? OFFSET ?`).all(...where.params, q.limit, q.offset) as Array<Record<string, unknown> & { id: string; connected_at: string | null }>;
-  const signalsStmt = db.prepare("SELECT id, type, title, snippet, source_url, metadata_json, occurred_at, weight FROM signals WHERE target_id = ? ORDER BY occurred_at DESC LIMIT 5");
+  const signalsStmt = db.prepare("SELECT id, type, title, snippet, source_url, metadata_json, occurred_at, weight FROM signals WHERE target_id = ? ORDER BY occurred_at DESC LIMIT 8");
   const signalCountStmt = db.prepare("SELECT COUNT(*) n FROM signals WHERE target_id = ?");
   const draftsStmt = db.prepare("SELECT id, channel, subject, body, status, auto_approve_at FROM approval_queue WHERE target_id = ? AND status = 'pending' ORDER BY created_at");
   const outreach = outreachFor(db, rows);

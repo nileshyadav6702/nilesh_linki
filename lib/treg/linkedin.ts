@@ -139,6 +139,17 @@ export async function tregPostEngagers(workspaceId: string, post: PostRef, opts:
 export interface TregProfile {
   full_name: string | null; first_name: string | null; last_name: string | null; headline: string | null; about: string | null;
   location: string | null; linkedin_url: string | null; current: { company: string | null; title: string | null; started: string | null; companyUrl?: string | null } | null;
+  avatar_url?: string | null;
+}
+
+/** First http(s) string under any of `keys`, searched depth-first through a vendor's raw payload. */
+export function deepPick(raw: unknown, keys: string[], depth = 0): string | null {
+  if (depth > 6 || !raw || typeof raw !== "object") return null;
+  if (Array.isArray(raw)) { for (const x of raw) { const v = deepPick(x, keys, depth + 1); if (v) return v; } return null; }
+  const o = raw as Obj;
+  for (const k of keys) if (typeof o[k] === "string" && /^https?:\/\//.test(o[k] as string)) return o[k] as string;
+  for (const v of Object.values(o)) { const f = deepPick(v, keys, depth + 1); if (f) return f; }
+  return null;
 }
 
 /** The current job from a vendor's raw profile (experience lists differ per vendor). */
@@ -188,10 +199,14 @@ export async function tregProfile(workspaceId: string, url: string): Promise<Tre
   return {
     full_name: str(o.full_name), first_name: str(o.first_name), last_name: str(o.last_name), headline: str(o.headline), about: str(o.about),
     location: str(o.location), linkedin_url: str(o.linkedin_url), current: currentPosition(isObj(r.data) ? r.data.raw : null),
+    avatar_url: str(o.avatar_url) ?? deepPick(isObj(r.data) ? r.data.raw : null, ["profilePictureUrl", "profile_picture_url", "profilePicture", "avatarUrl", "avatar", "photoUrl"]),
   };
 }
 
-export interface TregCompany { name: string; description: string | null; website: string | null; employees: string | null; location: string | null; industry: string | null; linkedin_url: string | null }
+export interface TregCompany {
+  name: string; description: string | null; website: string | null; employees: string | null; location: string | null; industry: string | null; linkedin_url: string | null;
+  logo?: string | null; founded?: number | null; specialties?: string | null; size_range?: string | null; org_type?: string | null;
+}
 
 /** Company page firmographics (size, description, website; industry when the vendor has it). */
 export async function tregCompany(workspaceId: string, url: string): Promise<TregCompany | null> {
@@ -211,6 +226,16 @@ export async function tregCompany(workspaceId: string, url: string): Promise<Tre
     if (industry || d > 5) return;
     if (isObj(v)) { const i = v.industry ?? v.industries; if (typeof i === "string") industry = i; else if (Array.isArray(i) && typeof i[0] === "string") industry = i[0]; else for (const x of Object.values(v)) find(x, d + 1); }
   };
-  find(isObj(r.data) ? r.data.raw : null, 0);
-  return { name: str(o.name)!, description: str(o.description), website: str(o.website), employees: typeof o.employees === "number" ? String(o.employees) : str(o.employees), location: str(o.location), industry, linkedin_url: str(o.linkedin_url) };
+  const raw = isObj(r.data) ? r.data.raw : null;
+  find(raw, 0);
+  // The company page's own fields (tikhub nests them under raw.data).
+  const d: Obj = isObj(raw) && isObj(raw.data) ? raw.data : isObj(raw) ? raw : {};
+  const founded = Number(d.founded ?? d.founded_year ?? d.foundedOn);
+  const specialties = Array.isArray(d.specialties) ? d.specialties.filter((x) => typeof x === "string").join(", ") : str(d.specialties);
+  return {
+    name: str(o.name)!, description: str(o.description), website: str(o.website), employees: typeof o.employees === "number" ? String(o.employees) : str(o.employees),
+    location: str(o.location), industry, linkedin_url: str(o.linkedin_url),
+    logo: str(o.logo) ?? deepPick(raw, ["logo", "logo_url", "logoUrl"]), founded: founded >= 1800 && founded <= 2100 ? founded : null,
+    specialties: specialties?.slice(0, 500) ?? null, size_range: str(d.company_size) ?? str(d.companySize), org_type: str(d.organization_type) ?? str(d.companyType),
+  };
 }

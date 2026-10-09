@@ -1,6 +1,7 @@
 import { RiArrowRightLine, RiAtLine, RiMailForbidLine, RiPhoneLine } from "react-icons/ri";
 import { signalLine } from "@/components/agents/signal-line";
 import { Pill, SIGNAL_LABEL } from "@/components/agents/ui";
+import { MoreSignals } from "./ScoreCard";
 import type { LeadRowData, Outreach } from "./types";
 
 const muted = "inline-flex h-7 w-7 items-center justify-center rounded-full bg-base-200 text-base-content/35";
@@ -26,7 +27,7 @@ export function SignalCell({ lead }: { lead: LeadRowData }) {
             : <span className="text-primary">{line.link}</span>)}
           {line.tail}
         </span>
-        {more > 0 && <Pill className="shrink-0">+{more} signal{more > 1 ? "s" : ""}</Pill>}
+        {more > 0 && <MoreSignals lead={lead} more={more} />}
       </div>
       <div className="truncate text-[13.5px] text-base-content/45">{sub}</div>
     </div>

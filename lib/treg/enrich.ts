@@ -1,8 +1,8 @@
 import type Database from "better-sqlite3";
 import { getDb } from "@/lib/db";
 import { TregError, tregEnabled } from "@/lib/treg/client";
-import { randomUUID } from "crypto";
 import { tregCompany, tregProfile } from "@/lib/treg/linkedin";
+import { applyFunding, saveCompany } from "@/lib/treg/company";
 import { NEEDS_DATA_MAX_ATTEMPTS, NEEDS_DATA_RETRY_HOURS } from "@/lib/linkedin/needs-data";
 
 /**
@@ -15,37 +15,49 @@ export const TREG_ENRICH_PER_PASS = 40;
 const CONCURRENCY = 5;
 
 /**
- * Before scoring: leads that passed the free persona gate but arrived thin (an engager has a
- * name and headline, no company) get their profile and company firmographics read first, so
- * the model judges company size and industry instead of saying "company unknown". About
- * $0.002 a lead, once per lead (enriched_profile_at), only for leads about to be scored.
+ * Before scoring: every lead that passed the free persona gate gets its profile (headline,
+ * about, photo, current job) and its company (page firmographics and latest funding round)
+ * read first, so the model judges the company instead of saying "company unknown", and a
+ * recent round shows up as a signal. Profile ~$0.0012 once per lead (enriched_profile_at);
+ * company page $0.001 and funding $0.01 once per company, shared by every lead there.
  */
 export async function enrichForScoring(db: DB, workspaceId: string, targetIds: string[]): Promise<number> {
   if (!tregEnabled() || !targetIds.length) return 0;
-  const rows = db.prepare(`SELECT t.id, t.linkedin_url, t.company_id, c.description, c.employee_count FROM targets t LEFT JOIN companies c ON c.id = t.company_id
-    WHERE t.id IN (${targetIds.map(() => "?").join(",")}) AND t.enriched_profile_at IS NULL AND t.linkedin_url LIKE '%linkedin.com/in/%'
-      AND (t.company_id IS NULL OR (c.description IS NULL AND c.employee_count IS NULL))`).all(...targetIds) as Array<{ id: string; linkedin_url: string }>;
+  const rows = db.prepare(`SELECT t.id, t.linkedin_url, t.enriched_profile_at, t.company_id, c.linkedin_url company_url, c.profile_fetched_at, c.funding_checked_at
+    FROM targets t LEFT JOIN companies c ON c.id = t.company_id WHERE t.id IN (${targetIds.map(() => "?").join(",")})`).all(...targetIds) as Array<{
+      id: string; linkedin_url: string | null; enriched_profile_at: string | null; company_id: string | null; company_url: string | null; profile_fetched_at: string | null; funding_checked_at: string | null;
+    }>;
+  const pages = new Map<string, Promise<string | null>>(); // one company-page read per company per pass
+  const companyId = (url: string) => {
+    const key = url.toLowerCase().replace(/\/+$/, "");
+    if (!pages.has(key)) pages.set(key, tregCompany(workspaceId, url).then((c) => (c ? saveCompany(db, workspaceId, c) : null)));
+    return pages.get(key)!;
+  };
+  const funding = new Map<string, Promise<boolean>>();
   let done = 0;
   const queue = [...rows];
   const worker = async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
       try {
-        const p = await tregProfile(workspaceId, r.linkedin_url);
-        db.prepare(`UPDATE targets SET headline = COALESCE(headline, ?), summary = COALESCE(summary, ?), location = COALESCE(location, ?),
-            company = COALESCE(company, ?), title = COALESCE(title, ?), enriched_profile_at = datetime('now') WHERE id = ?`)
-          .run(p?.headline ?? null, p?.about ?? null, p?.location ?? null, p?.current?.company ?? null, p?.current?.title ?? null, r.id);
-        if (p?.current?.companyUrl) {
-          const c = await tregCompany(workspaceId, p.current.companyUrl);
-          if (c) {
-            const employees = Number((c.employees ?? "").replace(/[^\d]/g, "")) || null;
-            const existing = db.prepare("SELECT id FROM companies WHERE workspace_id = ? AND (linkedin_url = ? OR lower(name) = lower(?))").get(workspaceId, c.linkedin_url ?? "", c.name) as { id: string } | undefined;
-            const id = existing?.id ?? randomUUID();
-            if (!existing) db.prepare("INSERT INTO companies (id, workspace_id, name) VALUES (?, ?, ?)").run(id, workspaceId, c.name);
-            db.prepare(`UPDATE companies SET description = COALESCE(description, ?), website = COALESCE(website, ?), employee_count = COALESCE(employee_count, ?),
-                employee_range = COALESCE(employee_range, ?), location = COALESCE(location, ?), industry = COALESCE(industry, ?), linkedin_url = COALESCE(linkedin_url, ?) WHERE id = ?`)
-              .run(c.description?.slice(0, 2000) ?? null, c.website, employees, c.employees, c.location, c.industry, c.linkedin_url, id);
-            db.prepare("UPDATE targets SET company_id = COALESCE(company_id, ?) WHERE id = ?").run(id, r.id);
-          }
+        let coUrl = r.profile_fetched_at ? null : r.company_url;
+        if (!r.enriched_profile_at && r.linkedin_url?.includes("linkedin.com/in/")) {
+          const p = await tregProfile(workspaceId, r.linkedin_url);
+          db.prepare(`UPDATE targets SET headline = COALESCE(headline, ?), summary = COALESCE(summary, ?), location = COALESCE(location, ?), profile_image_url = COALESCE(profile_image_url, ?),
+              company = COALESCE(company, ?), title = COALESCE(title, ?), enriched_profile_at = datetime('now') WHERE id = ?`)
+            .run(p?.headline ?? null, p?.about ?? null, p?.location ?? null, p?.avatar_url ?? null, p?.current?.company ?? null, p?.current?.title ?? null, r.id);
+          if (p?.current?.companyUrl && !r.profile_fetched_at) coUrl = p.current.companyUrl;
+        }
+        let cid = r.company_id;
+        if (coUrl && /linkedin\.com\/(company|school|showcase)\//i.test(coUrl)) {
+          const id = await companyId(coUrl);
+          if (id) { db.prepare("UPDATE targets SET company_id = COALESCE(company_id, ?) WHERE id = ?").run(id, r.id); cid = cid ?? id; }
+        }
+        if (cid) {
+          // One at a time per company: the first lookup caches the round for the leads after it.
+          const target = r.id;
+          const next = (funding.get(cid) ?? Promise.resolve(false)).catch(() => false).then(() => applyFunding(db, workspaceId, cid!, target));
+          funding.set(cid, next);
+          await next;
         }
         done++;
       } catch (err) {
@@ -90,10 +102,10 @@ export async function enrichNeedsDataViaTreg(db: DB = getDb(), limit = TREG_ENRI
         const filled = !!(p.headline || p.about);
         db.prepare(`UPDATE targets SET headline = COALESCE(?, headline), summary = COALESCE(?, summary), location = COALESCE(location, ?),
             first_name = COALESCE(first_name, ?), last_name = COALESCE(last_name, ?), full_name = COALESCE(full_name, ?),
-            company = COALESCE(company, ?), title = COALESCE(title, ?),
+            company = COALESCE(company, ?), title = COALESCE(title, ?), profile_image_url = COALESCE(profile_image_url, ?),
             enriched_profile_at = CASE WHEN ? THEN datetime('now') ELSE enriched_profile_at END
           WHERE id = ?`)
-          .run(p.headline, p.about, p.location, p.first_name, p.last_name, p.full_name, p.current?.company ?? null, p.current?.title ?? null, filled ? 1 : 0, c.id);
+          .run(p.headline, p.about, p.location, p.first_name, p.last_name, p.full_name, p.current?.company ?? null, p.current?.title ?? null, p.avatar_url ?? null, filled ? 1 : 0, c.id);
         if (filled) result.filled++;
       } catch (err) {
         if (err instanceof TregError && err.code === "cap") { blockedWorkspaces.add(c.workspace_id); continue; }
