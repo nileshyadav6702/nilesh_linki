@@ -24,18 +24,18 @@ export function SettingsSection({ icon, tone, title, pill, subtitle, defaultOpen
   const [open, setOpen] = useState(defaultOpen);
   return (
     <section className="rounded-[12px] border border-[var(--border-subtle)] bg-base-100">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={`flex w-full items-center gap-3 px-5 py-4 text-left ${open ? "border-b border-[var(--border-subtle)] bg-primary/[0.03]" : ""}`}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className={`flex w-full items-center gap-4 px-6 py-5 text-left ${open ? "border-b border-[var(--border-subtle)] bg-primary/[0.03]" : ""}`}>
         <IconTile icon={icon} tone={tone} />
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-base-content">{title}</span>
-            {pill && <span className="rounded-full bg-base-200 px-2.5 py-0.5 text-[12px] font-medium text-base-content/65">{pill}</span>}
+            <span className="text-[17px] font-semibold text-base-content">{title}</span>
+            {pill && <span className="rounded-full bg-base-200 px-3 py-0.5 text-[13px] font-medium text-base-content/70">{pill}</span>}
           </span>
-          {subtitle && <span className="mt-0.5 block text-[13px] text-base-content/55">{subtitle}</span>}
+          {subtitle && <span className="mt-0.5 block text-[15px] text-base-content/60">{subtitle}</span>}
         </span>
-        <RiArrowDownSLine size={18} className={`shrink-0 text-base-content/45 transition-transform ${open ? "rotate-180" : ""}`} />
+        <RiArrowDownSLine size={22} className={`shrink-0 text-base-content/50 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div className="px-5 py-5">{children}</div>}
+      {open && <div className="wizard-rise px-6 py-6">{children}</div>}
     </section>
   );
 }

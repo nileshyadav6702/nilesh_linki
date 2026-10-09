@@ -1,5 +1,5 @@
 import Head from "next/head";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import { useRouter } from "next/router";
 import { GetServerSideProps } from "next";
 import { useSession } from "next-auth/react";
@@ -19,13 +19,14 @@ import DateField from "@/components/ui/DateField";
 import WorkspaceTab from "@/components/settings/WorkspaceTab";
 import MembersTab from "@/components/settings/MembersTab";
 import AccountTab from "@/components/settings/AccountTab";
+import SendersTab from "@/components/settings/SendersTab";
 import { Bar, BarChart, Cell, ResponsiveContainer } from "recharts";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ALL_TOUR_PAGES, TOUR_PAGE_LABELS, replayPageTour, type TourPage } from "@/lib/tour";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "workspace" | "members" | "account" | "linkedin" | "email" | "templates" | "integrations" | "ai" | "general";
+type Tab = "workspace" | "members" | "account" | "senders" | "templates" | "integrations" | "ai" | "general";
 
 interface LiAccount {
   id: string; name: string; email: string;
@@ -71,8 +72,10 @@ export const getServerSideProps: GetServerSideProps = async ({ query, req, res }
     .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at FROM email_accounts WHERE workspace_id=? ORDER BY created_at DESC")
     .all(workspaceId);
   const templates = db.prepare("SELECT * FROM templates WHERE workspace_id=? ORDER BY created_at DESC").all(workspaceId);
-  const validTabs: Tab[] = ["workspace", "members", "account", "linkedin", "email", "templates", "integrations", "ai", "general"];
-  const tab: Tab = validTabs.includes(query.tab as Tab) ? (query.tab as Tab) : "workspace";
+  const validTabs: Tab[] = ["workspace", "members", "account", "senders", "templates", "integrations", "ai", "general"];
+  // Old links to the LinkedIn / Email tabs open Sender accounts.
+  const asked = query.tab === "linkedin" || query.tab === "email" ? "senders" : query.tab;
+  const tab: Tab = validTabs.includes(asked as Tab) ? (asked as Tab) : "workspace";
   return { props: { liAccounts, emailAccounts, templates, initialTab: tab } };
 };
 
@@ -82,8 +85,7 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "workspace", label: "Workspace", icon: RiBuilding2Line },
   { key: "members", label: "Members", icon: RiTeamLine },
   { key: "account", label: "Account", icon: RiAccountCircleLine },
-  { key: "linkedin", label: "LinkedIn accounts", icon: RiLinkedinBoxLine },
-  { key: "email", label: "Email accounts", icon: RiMailLine },
+  { key: "senders", label: "Sender accounts", icon: RiLinkedinBoxLine },
   { key: "templates", label: "AI Outreach Templates", icon: RiMessage2Line },
   { key: "integrations", label: "Integrations", icon: RiPlugLine },
   { key: "ai", label: "AI", icon: RiRobot2Line },
@@ -192,6 +194,9 @@ export default function SettingsPage({
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>(initialTab);
+  const liHost = useRef<LinkedInHost>(null);
+  const mailHost = useRef<EmailHost>(null);
+  const [sendersKey, setSendersKey] = useState(0);
 
   const [hasMcp, setHasMcp] = useState(false);
   useEffect(() => {
@@ -234,8 +239,13 @@ export default function SettingsPage({
         {tab === "members" && <MembersTab />}
         {tab === "account" && <AccountTab />}
         <div>
-        {tab === "linkedin" && <LinkedInTab initialAccounts={initialLi} />}
-        {tab === "email" && <EmailTab initialAccounts={initialEmail} />}
+        {tab === "senders" && <>
+          <SendersTab reloadKey={sendersKey} onAddLinkedIn={() => liHost.current?.openAdd()} onAuthLinkedIn={(a) => liHost.current?.openAuth(a as unknown as LiAccount)}
+            onGmail={() => mailHost.current?.openGmail()} onSmtp={() => mailHost.current?.openSmtp()} onEditCredentials={(m) => mailHost.current?.openEdit(m as unknown as EmailAccount)} />
+          {/* The add / sign-in / connect dialogs live in the original tabs; their lists are hidden. */}
+          <LinkedInTab initialAccounts={initialLi} hideList host={liHost} onChanged={() => setSendersKey((k) => k + 1)} />
+          <EmailTab initialAccounts={initialEmail} hideList host={mailHost} onChanged={() => setSendersKey((k) => k + 1)} />
+        </>}
         {tab === "templates" && <TemplatesTab initialTemplates={initialTemplates} />}
         {tab === "integrations" && <IntegrationsTab />}
         {tab === "ai" && <AiTab />}
@@ -249,8 +259,12 @@ export default function SettingsPage({
 
 // ─── LinkedIn Tab ─────────────────────────────────────────────────────────────
 
-function LinkedInTab({ initialAccounts }: { initialAccounts: LiAccount[] }) {
+/** Dialogs the Sender accounts tab opens on the LinkedIn host (add an account, sign it in). */
+export interface LinkedInHost { openAdd(): void; openAuth(a: LiAccount): void }
+
+function LinkedInTab({ initialAccounts, hideList = false, host, onChanged }: { initialAccounts: LiAccount[]; hideList?: boolean; host?: Ref<LinkedInHost>; onChanged?: () => void }) {
   const [accounts, setAccounts] = useState<LiAccount[]>(initialAccounts);
+  useImperativeHandle(host, () => ({ openAdd: () => setShowModal(true), openAuth: (a: LiAccount) => openAuthModal(a) }));
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", daily_connection_limit: 20, daily_message_limit: 50, daily_inmail_limit: 15, daily_visit_limit: 150 });
   const [loading, setLoading] = useState(false);
@@ -321,6 +335,7 @@ function LinkedInTab({ initialAccounts }: { initialAccounts: LiAccount[] }) {
   async function refresh() {
     const res = await fetch("/api/accounts");
     setAccounts(await res.json());
+    onChanged?.();
   }
 
   async function createAccount(e: React.FormEvent) {
@@ -386,6 +401,7 @@ function LinkedInTab({ initialAccounts }: { initialAccounts: LiAccount[] }) {
 
   return (
     <div>
+      {!hideList && (<>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-base-content/50">LinkedIn accounts used for browser automation</p>
         <button
@@ -442,6 +458,7 @@ function LinkedInTab({ initialAccounts }: { initialAccounts: LiAccount[] }) {
           ))}
         </div>
       )}
+      </>)}
 
       {/* Add modal */}
       {showModal && (
@@ -634,7 +651,10 @@ function RampDiagram({ startDate, target }: { startDate: string; target: number 
 
 const PAGE_SIZE = 10;
 
-function EmailTab({ initialAccounts }: { initialAccounts: EmailAccount[] }) {
+/** Dialogs the Sender accounts tab opens on the email host (connect Gmail / SMTP, edit credentials). */
+export interface EmailHost { openGmail(): void; openSmtp(): void; openEdit(a: EmailAccount): void }
+
+function EmailTab({ initialAccounts, hideList = false, host, onChanged }: { initialAccounts: EmailAccount[]; hideList?: boolean; host?: Ref<EmailHost>; onChanged?: () => void }) {
   const [accounts, setAccounts] = useState<EmailAccount[]>(initialAccounts);
   const [page, setPage] = useState(1);
   const [showModal, setShowModal] = useState(false);
@@ -657,6 +677,7 @@ function EmailTab({ initialAccounts }: { initialAccounts: EmailAccount[] }) {
     const data = await res.json();
     setAccounts(data);
     setPage((p) => Math.min(p, Math.max(1, Math.ceil(data.length / PAGE_SIZE))));
+    onChanged?.();
   }
 
   function openCreate() {
@@ -871,8 +892,11 @@ function EmailTab({ initialAccounts }: { initialAccounts: EmailAccount[] }) {
     toast.success(paused ? "Sender deactivated — it won't send until reactivated" : "Sender reactivated");
   }
 
+  useImperativeHandle(host, () => ({ openGmail: () => openGmailConnect(), openSmtp: () => openCreate(), openEdit: (a: EmailAccount) => openEdit(a) }));
+
   return (
     <div>
+      {!hideList && (<>
       <div className="bg-base-200 border border-[var(--border-subtle)] rounded-2xl p-4 mb-5 text-xs text-base-content/60 leading-relaxed">
         <span className="font-medium text-base-content/80">Gmail app-password connection</span>{" "}
         verifies sending and inbox access before saving. Google requires 2-Step Verification before you can create an app password.
@@ -1013,6 +1037,7 @@ function EmailTab({ initialAccounts }: { initialAccounts: EmailAccount[] }) {
         </div>
       )}
 
+      </>)}
       {showGmailModal && (
         <div className="modal modal-open">
           <div className="modal-box bg-base-100 border border-[var(--border-subtle)] rounded-2xl shadow-[var(--shadow-modal)] max-w-lg">

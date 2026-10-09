@@ -81,10 +81,10 @@ export function SideDrawer({ title, icon, onClose, footer, children, width = 640
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <button type="button" className="absolute inset-0 bg-[#141413]/25" onClick={onClose} aria-label="Close" />
-      <aside style={{ maxWidth: width }} className="relative flex h-full w-full flex-col bg-base-100 shadow-[var(--shadow-popover)]">
+      <button type="button" className="backdrop-in absolute inset-0 bg-[#141413]/25" onClick={onClose} aria-label="Close" />
+      <aside style={{ maxWidth: width }} className="drawer-in relative flex h-full w-full flex-col bg-base-100 shadow-[var(--shadow-popover)]">
         <header className="flex items-center justify-between gap-3 border-b border-[var(--border-subtle)] px-6 py-4">
-          <h2 className="flex min-w-0 items-center gap-2 font-display text-[22px] leading-tight text-base-content">{icon}<span className="truncate">{title}</span></h2>
+          <div role="heading" aria-level={2} className="flex min-w-0 items-center gap-2 text-[22px] font-semibold leading-tight text-base-content">{icon}<span className="truncate">{title}</span></div>
           <button type="button" onClick={onClose} aria-label="Close" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-base-content/45 hover:bg-base-200 hover:text-base-content"><RiCloseLine size={20} /></button>
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>

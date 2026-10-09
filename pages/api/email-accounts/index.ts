@@ -3,6 +3,7 @@ import { getDb } from "@/lib/db";
 import { randomUUID } from "crypto";
 import { encryptSecret } from "@/lib/crypto";
 import { requireWorkspace, recordAudit } from "@/lib/workspace";
+import { campaignEmailsToday } from "@/lib/linkedin/actions";
 import { enableWarmup } from "@/lib/platform/deliverability";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -26,8 +27,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
                 AND r.status IN ('running', 'paused')) AS active_run_count
         FROM email_accounts ea WHERE ea.workspace_id = ? ORDER BY ea.created_at DESC
       `)
-      .all(ctx.workspaceId);
-    return res.json(accounts);
+      .all(ctx.workspaceId) as Array<{ id: string; timezone: string | null }>;
+    // Campaign emails sent today on each mailbox's own day (the "0/2 today" in Settings).
+    return res.json(accounts.map((a) => ({ ...a, sent_today: campaignEmailsToday(db, a.id, a.timezone || "UTC") })));
   }
 
   if (req.method === "POST") {
