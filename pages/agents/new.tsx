@@ -9,7 +9,7 @@ import TargetStep from "@/components/agents/wizard/TargetStep";
 import PreviewStep from "@/components/agents/wizard/PreviewStep";
 import OutreachStep, { outreachReady } from "@/components/agents/wizard/OutreachStep";
 import ReviewStep from "@/components/agents/wizard/ReviewStep";
-import { EMPTY_LOOKALIKE, sourcesFor, type LookalikeState, type WizardState } from "@/components/agents/wizard/types";
+import { EMPTY_EXISTING, EMPTY_LOOKALIKE, sourcesFor, type LookalikeState, type WizardState } from "@/components/agents/wizard/types";
 import { ErrorDialog, Stepper } from "@/components/agents/wizard/kit";
 import { scopeTitles, type LookalikeProfile, type LookalikeScope } from "@/lib/agents/lookalike-rules";
 import type { Icp } from "@/lib/icp/schema";
@@ -24,6 +24,7 @@ const INITIAL: WizardState = {
   name: "", website: "", icp: EMPTY_ICP, icpId: null, sourceKind: null, sources: [], listIds: [], importUrl: "", minScore: 55, agentId: null,
   outreach: { build: null, channel: "multi", goal: "conversations", tone: "professional", workflow_id: "", linkedin_account_id: "", email_account_id: "", exclude_first_degree: true, mode: "autopilot", booking_url: "", daily_lead_cap: 25 },
   lookalike: EMPTY_LOOKALIKE,
+  existing: EMPTY_EXISTING,
 };
 
 /** The ICP a Warm Lookalike agent scores against: the seed's role, place, industry and sizes. */
@@ -64,6 +65,8 @@ export default function NewAgent() {
   const set = (p: Partial<WizardState>) => setS((prev) => ({ ...prev, ...p }));
   const setLookalike = (p: Partial<LookalikeState>) => setS((prev) => ({ ...prev, lookalike: { ...prev.lookalike, ...p } }));
   const lookalike = s.sourceKind === "lookalike";
+  /** Sources that carry their own targeting skip Target and Preview and go straight to Outreach. */
+  const skipsTarget = lookalike || s.sourceKind === "existing";
 
   useEffect(() => {
     let alive = true;
@@ -194,6 +197,20 @@ export default function NewAgent() {
     }
   }
 
+  /** Existing leads: the agent works the chosen list; with no target roles yet, keep every lead (no ICP filtering). */
+  async function existingNext() {
+    setBusy(true);
+    try {
+      const noRoles = !roleTitles(s.icp).length;
+      const icp = noRoles ? { ...s.icp, match_mode: "skip" as const } : s.icp;
+      await saveTargetAndAgent(icp, noRoles ? null : s.icpId);
+      if (noRoles) set({ icp });
+      setStep(3);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create the agent");
+    } finally { setBusy(false); }
+  }
+
   function previous() {
     if (step === 0 && lookalike) {
       const phase = s.lookalike.phase;
@@ -201,12 +218,13 @@ export default function NewAgent() {
       else if (phase === "profile") setLookalike({ phase: "input", profile: null, scope: null });
       return;
     }
-    setStep(step === 3 && lookalike ? 0 : step - 1);
+    setStep(step === 3 && skipsTarget ? 0 : step - 1);
   }
 
   async function next() {
     if (blocker) return toast.error(blocker);
     if (step === 0 && lookalike) return lookalikeNext();
+    if (step === 0 && s.sourceKind === "existing") return existingNext();
     setBusy(true);
     try {
       if (step === 1) await saveTargetAndAgent();

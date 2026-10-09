@@ -29,7 +29,7 @@ function Stepper({ step }: { step: number }) {
 }
 
 /** Reads and checks the file in the browser; the server parses the same text again on import. */
-function parseFile(file: File): Promise<ParsedCsv> {
+export function parseFile(file: File): Promise<ParsedCsv> {
   return new Promise((resolve, reject) => {
     if (!/\.csv$/i.test(file.name) && file.type !== "text/csv") return reject(new Error("Choose a .csv file"));
     if (file.size > CSV_MAX_BYTES) return reject(new Error("This file is larger than 10MB. Split it into smaller files."));
@@ -42,6 +42,16 @@ function parseFile(file: File): Promise<ParsedCsv> {
       resolve({ name: file.name, text, headers, rows: parsed.data });
     }, () => reject(new Error("Could not read this file")));
   });
+}
+
+/** The import API's column mapping for the chosen fields plus the custom columns switched on. */
+export function csvMapping(map: Record<string, string>, customOn: string[]) {
+  return [
+    ...[...MANDATORY_FIELDS, ...OPTIONAL_FIELDS].filter((f) => map[f.key]).map((f) => f.target.kind === "standard"
+      ? { column: normalizeHeader(map[f.key]), kind: "standard", field: f.target.field }
+      : { column: normalizeHeader(map[f.key]), kind: "custom", key: f.target.key, name: f.label, fieldType: "text" }),
+    ...customOn.map((h) => ({ column: normalizeHeader(h), kind: "custom", key: customKeyFor(h), name: h, fieldType: "text" })),
+  ];
 }
 
 /** "Import contacts from CSV": upload → map columns → review → import into "<agent> - CSV Import". */
@@ -83,12 +93,7 @@ export default function CsvImportModal({ agentId, agentName, autoEnrichEmails, o
   async function runImport() {
     if (!csv) return;
     setImporting(true);
-    const mapping = [
-      ...[...MANDATORY_FIELDS, ...OPTIONAL_FIELDS].filter((f) => map[f.key]).map((f) => f.target.kind === "standard"
-        ? { column: normalizeHeader(map[f.key]), kind: "standard", field: f.target.field }
-        : { column: normalizeHeader(map[f.key]), kind: "custom", key: f.target.key, name: f.label, fieldType: "text" }),
-      ...customOn.map((h) => ({ column: normalizeHeader(h), kind: "custom", key: customKeyFor(h), name: h, fieldType: "text" })),
-    ];
+    const mapping = csvMapping(map, customOn);
     try {
       const r = await fetch(`/api/agents/${agentId}/import-csv`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ csv: csv.text, mapping }) });
       const d = await r.json().catch(() => ({ error: r.status === 413 ? "This CSV is too large. Split it into smaller files." : "Import failed" }));

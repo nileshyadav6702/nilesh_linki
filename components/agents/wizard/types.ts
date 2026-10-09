@@ -29,6 +29,14 @@ export interface LookalikeState {
   searchUrl: string;
 }
 
+/** Existing leads: an existing list, or a CSV imported into one (then that list feeds the agent). */
+export interface ExistingState {
+  mode: "list" | "csv" | null;
+  csvImported: { listId: string; listName: string; imported: number } | null;
+}
+
+export const EMPTY_EXISTING: ExistingState = { mode: null, csvImported: null };
+
 export const EMPTY_LOOKALIKE: LookalikeState = { url: "", phase: "input", profile: null, scope: null, leads: [], searchUrl: "" };
 
 export interface WizardState {
@@ -45,6 +53,7 @@ export interface WizardState {
   agentId: string | null;
   outreach: OutreachChoice;
   lookalike: LookalikeState;
+  existing: ExistingState;
 }
 
 /** The agent's sources for the chosen kind, in the shape POST /api/agents expects. */

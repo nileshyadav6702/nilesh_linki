@@ -84,7 +84,8 @@ const STATUS_PILL: Record<ReviewRow["status"], string> = {
 };
 const PREVIEW = 8;
 
-export function ReviewStep({ rows, total, agentName, autoEnrichEmails }: { rows: ReviewRow[]; total: number; agentName: string; autoEnrichEmails: boolean }) {
+/** `bare`: only the counts and the rows (the new-agent wizard shows its own destination list and actions). */
+export function ReviewStep({ rows, total, agentName, autoEnrichEmails, bare = false }: { rows: ReviewRow[]; total: number; agentName: string; autoEnrichEmails: boolean; bare?: boolean }) {
   const count = (s: ReviewRow["status"]) => rows.filter((r) => r.status === s).length;
   const stat = (label: string, n: number, cls: string) => (
     <div className={`rounded-[12px] border px-4 py-4 text-center ${cls}`}>
@@ -97,10 +98,10 @@ export function ReviewStep({ rows, total, agentName, autoEnrichEmails }: { rows:
   const listName = `${agentName} - CSV Import`;
   return (
     <div className="space-y-6">
-      <div>
+      {!bare && <div>
         <h3 className="text-[22px] font-semibold text-base-content">Review and import</h3>
         <p className="mt-1 text-[15px] text-base-content/55">Check the rows below. Duplicates of contacts already in your workspace are merged on import, not created twice.</p>
-      </div>
+      </div>}
       <div className="grid grid-cols-3 gap-3">
         {stat("Ready", count("ready"), "border-success/30 bg-success/10 text-[#2f7a43]")}
         {stat("Duplicates", count("duplicate"), "border-[#e8a55a]/40 bg-[#e8a55a]/12 text-[#a0601d]")}
@@ -130,6 +131,7 @@ export function ReviewStep({ rows, total, agentName, autoEnrichEmails }: { rows:
           {total > shown.length ? `${total - shown.length} more rows in this file · ${total} total` : `${total} total`}
         </div>
       </div>
+      {!bare && <>
       <div className="flex items-start gap-4 rounded-[12px] border border-[var(--border-subtle)] px-5 py-4">
         <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary"><RiLink size={18} /></span>
         <div>
@@ -144,6 +146,7 @@ export function ReviewStep({ rows, total, agentName, autoEnrichEmails }: { rows:
           {autoEnrichEmails && <p className="font-medium text-base-content">Emails will be found for qualified leads that don&apos;t have one, because &quot;Find emails for qualified leads&quot; is on in this agent&apos;s settings.</p>}
         </div>
       </div>
+      </>}
     </div>
   );
 }

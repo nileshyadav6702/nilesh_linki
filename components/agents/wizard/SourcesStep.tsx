@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
 import { RiFocus3Line, RiFolderOpenLine, RiGroupLine, RiLinkedinBoxLine, RiPencilLine, RiSparkling2Line } from "react-icons/ri";
 import { countSignals } from "@/components/agents/SourcePicker";
 import { Field, inputCls } from "@/components/agents/ui";
 import SignalsPicker from "@/components/agents/wizard/SignalsPicker";
 import LookalikePanel from "@/components/agents/wizard/LookalikePanel";
+import ExistingLeadsPanel from "@/components/agents/wizard/ExistingLeadsPanel";
 import { OptionCard, RecommendedBadge, StepHeading, StepSheet } from "@/components/agents/wizard/kit";
 import type { LookalikeState, WizardState } from "@/components/agents/wizard/types";
 import { publicIdFromUrl } from "@/lib/agents/lookalike-rules";
@@ -33,7 +33,11 @@ export function sourcesReady(s: WizardState): string | null {
     if (lk.phase !== "leads") return null;
     if (!lk.leads.length) return "No matches yet. Go back and widen the search scope";
   }
-  if (s.sourceKind === "existing" && !s.listIds.length) return "Pick at least one list";
+  if (s.sourceKind === "existing") {
+    if (!s.existing.mode) return "Pick a list or import a CSV";
+    if (s.existing.mode === "csv" && !s.existing.csvImported) return "Import your CSV to continue";
+    if (!s.listIds.length) return "Pick a lead list";
+  }
   if (s.sourceKind === "linkedin_import" && !/linkedin\.com\/sales\//.test(s.importUrl)) return "Paste a Sales Navigator list or search URL";
   if (!s.name.trim()) return "Give your agent a name";
   return null;
@@ -44,8 +48,6 @@ const tile = "flex h-10 w-10 items-center justify-center rounded-[10px] bg-prima
 export default function SourcesStep({ state, set, setLookalike, hasLinkedIn }: {
   state: WizardState; set: (p: Partial<WizardState>) => void; setLookalike: (p: Partial<LookalikeState>) => void; hasLinkedIn: boolean;
 }) {
-  const [lists, setLists] = useState<Array<{ id: string; name: string; target_count: number }>>([]);
-  useEffect(() => { fetch("/api/lists").then((r) => r.json()).then((l) => setLists(Array.isArray(l) ? l : [])).catch(() => {}); }, []);
   const signals = countSignals(state.sources);
   const chosen = KINDS.find((x) => x.kind === state.sourceKind);
 
@@ -104,18 +106,7 @@ export default function SourcesStep({ state, set, setLookalike, hasLinkedIn }: {
               : <p className="rounded-[12px] bg-[#e8a55a]/15 px-5 py-4 text-[15px] text-[#8a5a1f]">Warm Lookalike searches Sales Navigator, so it needs a connected LinkedIn account with Sales Navigator. Connect one in Settings first.</p>
           )}
 
-          {state.sourceKind === "existing" && (
-            <div className="space-y-2 rounded-[12px] border border-[var(--border-subtle)] p-5">
-              {lists.length === 0 && <p className="text-sm text-base-content/50">No lists yet. Import a CSV or Sales Navigator list from Lists first.</p>}
-              {lists.map((l) => (
-                <label key={l.id} className={`flex cursor-pointer items-center gap-3 rounded-[10px] border px-3 py-2.5 transition-colors ${state.listIds.includes(l.id) ? "border-primary/50 bg-primary/5" : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]"}`}>
-                  <input type="checkbox" className="checkbox checkbox-sm checkbox-primary" checked={state.listIds.includes(l.id)} onChange={(e) => set({ listIds: e.target.checked ? [...state.listIds, l.id] : state.listIds.filter((x) => x !== l.id) })} />
-                  <RiFolderOpenLine size={16} className="text-base-content/45" />
-                  <span className="flex-1 text-sm">{l.name}</span><span className="text-xs tabular-nums text-base-content/45">{l.target_count} contacts</span>
-                </label>
-              ))}
-            </div>
-          )}
+          {state.sourceKind === "existing" && <ExistingLeadsPanel state={state} set={set} />}
 
           {state.sourceKind === "linkedin_import" && (
             <div className="rounded-[12px] border border-[var(--border-subtle)] p-5">
