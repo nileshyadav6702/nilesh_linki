@@ -156,7 +156,10 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
         <tbody>
           {table.getRowModel().rows.map((r) => {
             const on = selected.has(r.id);
-            const bg = on ? "bg-primary/[0.07]" : "bg-base-100 group-hover:bg-base-200/60";
+            // Opaque tints (mixed with the canvas): the pinned contact column must hide what scrolls under it.
+            const bg = on
+              ? "bg-[color-mix(in_srgb,var(--color-primary)_8%,var(--color-base-100))]"
+              : "bg-base-100 group-hover:bg-[color-mix(in_srgb,var(--color-base-200)_70%,var(--color-base-100))]";
             return (
               <tr key={r.id} className="group cursor-pointer" onClick={() => onOpen(r.id)}>
                 <td className={`border-b border-[var(--border-subtle)] py-4 pl-5 align-middle ${bg} ${pinned ? "sticky left-0 z-10" : ""}`} onClick={(e) => e.stopPropagation()}>
