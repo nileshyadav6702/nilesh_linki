@@ -323,3 +323,7 @@ code, kbd, pre, .font-mono {
   to { opacity: 1; transform: none; }
 }
 .wizard-rise { animation: wizard-rise 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.insights-rise { animation: wizard-rise 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes insights-slashes { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.insights-slashes { animation: insights-slashes 900ms ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .insights-rise, .insights-slashes { animation: none; } }

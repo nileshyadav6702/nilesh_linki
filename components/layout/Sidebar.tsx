@@ -22,6 +22,7 @@ import {
   RiRobot2Line,
   RiBrainLine,
 } from "react-icons/ri";
+import { LuChartBarDecreasing } from "react-icons/lu";
 import { pathToTourPage, replayPageTour } from "@/lib/tour";
 
 const LEARNING_PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLBf6xNJOmsIQ";
@@ -32,6 +33,7 @@ const dailyNav = [
   // Contacts covers both "All contacts" and "Lists" (tabs on the page).
   { href: "/contacts", label: "Contacts", icon: RiContactsLine, tour: "nav-contacts" },
   { href: "/inbox", label: "Inbox", icon: RiInboxLine, tour: "nav-inbox" },
+  { href: "/insights", label: "Insights", icon: LuChartBarDecreasing, tour: "nav-insights" },
 ];
 
 const recordsNav = [
