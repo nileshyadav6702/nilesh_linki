@@ -20,6 +20,7 @@ import {
   RiShieldUserLine,
   RiRobot2Line,
   RiBrainLine,
+  RiDashboard3Line,
 } from "react-icons/ri";
 import { LuChartBarDecreasing } from "react-icons/lu";
 import { pathToTourPage, replayPageTour } from "@/lib/tour";
@@ -27,6 +28,7 @@ import { pathToTourPage, replayPageTour } from "@/lib/tour";
 const LEARNING_PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLBf6xNJOmsIQ";
 
 const dailyNav = [
+  { href: "/dashboard", label: "Dashboard", icon: RiDashboard3Line, tour: "nav-dashboard" },
   { href: "/copilot", label: "Copilot", icon: RiBrainLine, tour: "nav-copilot" },
   { href: "/agents", label: "Agents", icon: RiRobot2Line, tour: "nav-agents" },
   // Contacts covers both "All contacts" and "Lists" (tabs on the page).
@@ -42,7 +44,7 @@ const adminNav = [
 ];
 
 // Agents and Inbox sit on the phone bar. Records and workspace tools live in More.
-const mobilePrimary = [dailyNav[0], dailyNav[1]];
+const mobilePrimary = [dailyNav[0], dailyNav[1], dailyNav[2]];
 
 export const SIDEBAR_WIDTH_EXPANDED = 264;
 export const SIDEBAR_WIDTH_COLLAPSED = 264;
@@ -161,7 +163,7 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
   return (
     <>
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[264px] flex-col border-r border-[var(--border-subtle)] bg-base-100 md:flex">
-        <Link href="/agents" className="flex h-16 shrink-0 items-center gap-3 px-5">
+        <Link href="/dashboard" className="flex h-16 shrink-0 items-center gap-3 px-5">
           <Image src="/logo_linki.svg" alt="Linki" width={28} height={28} priority />
           <span className="font-display text-[22px] text-base-content">Linki</span>
         </Link>

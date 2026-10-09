@@ -705,5 +705,5 @@ export default function Dashboard() {
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const workspace = await getServerWorkspace(req, res);
   if (!workspace) return { redirect: { destination: "/login?callbackUrl=/agents", permanent: false } };
-  return { redirect: { destination: "/agents", permanent: false } };
+  return { redirect: { destination: "/dashboard", permanent: false } };
 };

@@ -326,4 +326,6 @@ code, kbd, pre, .font-mono {
 .insights-rise { animation: wizard-rise 320ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 @keyframes insights-slashes { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 .insights-slashes { animation: insights-slashes 900ms ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .insights-rise, .insights-slashes { animation: none; } }
+@keyframes dash-float { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(2px, -3px) rotate(-6deg); } }
+.dash-float { animation: dash-float 2.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .insights-rise, .insights-slashes, .dash-float { animation: none; } }
