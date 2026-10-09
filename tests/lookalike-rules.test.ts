@@ -6,7 +6,7 @@ import {
 const scope: LookalikeScope = {
   title: "VP of Sales", similarTitles: ["Chief Sales Officer"], includeSimilarRoles: true,
   location: "South Delhi, Delhi, India", geoId: "105556991", industry: "IT Services and IT Consulting", industryId: "96",
-  relatedIndustries: false, sizes: ["201-500"],
+  relatedIndustries: false, sizes: ["201-500 employees"],
 };
 
 const candidate = (over: Partial<LookalikeCandidate>): LookalikeCandidate => ({
@@ -113,9 +113,9 @@ describe("profile page parsing", () => {
 
   it("reads industry and headcount from a company top card", async () => {
     const { companyFacts, sizeBucket } = await import("@/lib/agents/lookalike-rules");
-    expect(companyFacts(["IT Services and IT Consulting", "New Delhi, New Delhi", "5K followers", "201-500 employees"])).toEqual({ industry: "IT Services and IT Consulting", size: "201-500" });
-    expect(sizeBucket("10,001+ employees")).toBe("10000+");
-    expect(sizeBucket("2-10 employees")).toBe("1-10");
+    expect(companyFacts(["IT Services and IT Consulting", "New Delhi, New Delhi", "5K followers", "201-500 employees"])).toEqual({ industry: "IT Services and IT Consulting", size: "201-500 employees" });
+    expect(sizeBucket("10,001+ employees")).toBe("10000+ employees");
+    expect(sizeBucket("2-10 employees")).toBe("1-10 employees");
     expect(sizeBucket("no headcount")).toBeNull();
   });
 });
@@ -146,5 +146,12 @@ describe("regular LinkedIn search (no Sales Navigator)", () => {
 
   it("treats VP and Vice President as the same title and scores without industry", () => {
     expect(matchScore(candidate({ title: "Vice President of Sales", companyIndustry: null }), scope)).toBe(100);
+  });
+});
+
+describe("company sizes", () => {
+  it("maps both size spellings to the Sales Navigator headcount code", () => {
+    expect(lookalikeSearchUrl({ ...scope, sizes: ["201-500"] })).toContain("type:COMPANY_HEADCOUNT,values:List((id:E,");
+    expect(lookalikeSearchUrl({ ...scope, sizes: ["201-500 employees", "10000+ employees"] })).toContain("(id:E,selectionType:INCLUDED),(id:I,");
   });
 });

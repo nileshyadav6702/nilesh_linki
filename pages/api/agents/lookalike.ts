@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 import { isAiBlockingError } from "@/lib/ai/client";
 import { fetchLookalikeProfile, LookalikeError, searchLookalikes, suggestSimilarTitles } from "@/lib/agents/lookalike-search";
-import { SIZE_PRESETS } from "@/lib/icp/targeting";
+import { sizePreset } from "@/lib/icp/targeting";
 import { requireWorkspace } from "@/lib/workspace";
 
 // POST /api/agents/lookalike { action: "profile", url }            → the seed person's profile
@@ -21,7 +21,8 @@ const scopeSchema = z.object({
   industry: text(160).nullable().default(null),
   industryId: id.default(null),
   relatedIndustries: z.boolean().default(false),
-  sizes: z.array(z.enum(SIZE_PRESETS.map((p) => p.value) as [string, ...string[]])).max(8).default([]),
+  // Either "201-500" or the stored "201-500 employees"; normalised to the stored preset value.
+  sizes: z.array(z.string().max(40).transform((v, c) => sizePreset(v)?.value ?? (c.addIssue({ code: "custom", message: `Unknown company size: ${v}` }), z.NEVER))).max(8).default([]),
 });
 const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("profile"), url: text(400).min(1, "Paste a LinkedIn profile URL"), account_id: z.string().max(100).nullish() }),

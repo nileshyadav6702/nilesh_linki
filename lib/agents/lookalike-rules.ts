@@ -5,6 +5,7 @@
  */
 
 import { INDUSTRY_TREE } from "@/lib/icp/data/industries";
+import { sizeKey } from "@/lib/icp/targeting";
 
 export interface LookalikeProfile {
   name: string;
@@ -21,7 +22,7 @@ export interface LookalikeProfile {
   linkedinUrl: string;
   /** The current employer's LinkedIn page, when the Experience section links it. */
   companyUrl?: string | null;
-  /** The employer's headcount as a SIZE_PRESETS value ("201-500"). */
+  /** The employer's headcount as a SIZE_PRESETS value ("201-500 employees"). */
   companySize?: string | null;
 }
 
@@ -156,12 +157,13 @@ export function currentRoleFromExperience(links: ExperienceLink[]): { title: str
     : { title: a, company: b.split(" · ")[0].trim() || null, companyUrl };
 }
 
-/** "201-500 employees" / "10,001+ employees" / "2-10 employees" → the SIZE_PRESETS value it falls in. */
+/** "201-500 employees" / "10,001+ employees" / "2-10 employees" → the SIZE_PRESETS value it falls in ("201-500 employees"). */
 export function sizeBucket(text: string | null | undefined): string | null {
   const m = (text ?? "").replace(/,/g, "").match(/(\d+)\s*(?:[-–]\s*(\d+)|\+)?\s*employees/i);
   if (!m) return null;
   const n = Number(m[2] ?? m[1]);
-  return n <= 10 ? "1-10" : n <= 50 ? "11-50" : n <= 200 ? "51-200" : n <= 500 ? "201-500" : n <= 1000 ? "501-1000" : n <= 5000 ? "1001-5000" : n <= 10000 ? "5001-10000" : "10000+";
+  const range = n <= 10 ? "1-10" : n <= 50 ? "11-50" : n <= 200 ? "51-200" : n <= 500 ? "201-500" : n <= 1000 ? "501-1000" : n <= 5000 ? "1001-5000" : n <= 10000 ? "5001-10000" : "10000+";
+  return `${range} employees`;
 }
 
 /** Industry and headcount from a company page's top-card items ("IT Services…", "New Delhi", "5K followers", "201-500 employees"). */
@@ -197,7 +199,7 @@ export function lookalikeSearchUrl(scope: LookalikeScope, opts: { withIndustry?:
   if ((opts.withIndustry ?? !scope.relatedIndustries) && scope.industryId) {
     filters.push(`(type:INDUSTRY,values:List((id:${scope.industryId},text:${encodeURIComponent(cleanText(scope.industry))},selectionType:INCLUDED)))`);
   }
-  const sizes = scope.sizes.map((s) => HEADCOUNT[s]).filter(Boolean);
+  const sizes = scope.sizes.map((s) => HEADCOUNT[sizeKey(s)]).filter(Boolean);
   if (sizes.length) filters.push(`(type:COMPANY_HEADCOUNT,values:List(${sizes.map((c) => `(id:${c},selectionType:INCLUDED)`).join(",")}))`);
   return `https://www.linkedin.com/sales/search/people?query=(spellCorrectionEnabled:true,filters:List(${filters.join(",")}))`;
 }
