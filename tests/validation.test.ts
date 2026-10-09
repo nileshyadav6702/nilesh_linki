@@ -35,6 +35,18 @@ describe("signupSchema", () => {
     const r = signupSchema.safeParse({ email: "a@b.com", password: 12345678 });
     expect(r.success).toBe(false);
   });
+
+  it("accepts and trims optional first and last name", () => {
+    const r = signupSchema.safeParse({ email: "a@b.com", password: "supersecret", first_name: " Ada ", last_name: "Lovelace" });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data).toMatchObject({ first_name: "Ada", last_name: "Lovelace" });
+  });
+
+  it("rejects an oversized first name", () => {
+    const r = signupSchema.safeParse({ email: "a@b.com", password: "supersecret", first_name: "x".repeat(101) });
+    expect(r.success).toBe(false);
+    if (!r.success) expect(firstIssue(r.error)).toBe("First name is too long.");
+  });
 });
 
 describe("suppressionCreateSchema", () => {

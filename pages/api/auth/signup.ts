@@ -22,7 +22,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!parsed.success) {
     return res.status(400).json({ error: firstIssue(parsed.error, "Email and password are required.") });
   }
-  const { email, password, invite_token, join_token } = parsed.data;
+  const { email, password, first_name, last_name, invite_token, join_token } = parsed.data;
 
   const db = getDb();
   const normalizedEmail = normalizeInvitationEmail(email);
@@ -39,7 +39,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const hash = await bcrypt.hash(password, 10);
   const userId = randomUUID();
-  db.prepare("INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)").run(userId, normalizedEmail, hash);
+  db.prepare("INSERT INTO users (id, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)")
+    .run(userId, normalizedEmail, hash, first_name || null, last_name || null);
   try {
     if (invite_token) acceptWorkspaceInvitation(invite_token, userId, normalizedEmail);
     else if (join_token) acceptJoinLink(db, join_token, userId);

@@ -39,6 +39,8 @@ export default function LoginPage() {
   // Mode lives in the URL (?mode=signup) so sign-up links can be shared.
   const mode: Mode = router.query.mode === "signup" ? "signup" : "signin";
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -75,7 +77,7 @@ export default function LoginPage() {
     const res = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName }),
     });
 
     const data = await res.json();
@@ -124,16 +126,33 @@ export default function LoginPage() {
                 <Image src="/logo_kairo.svg" alt="" width={44} height={44} priority />
                 <span className="text-[40px] font-semibold leading-none tracking-[-.03em] text-base-content">Kairo</span>
               </span>
-              <h1 className="pt-6 text-[24px] font-semibold tracking-[-.01em] text-base-content">{copy.heading}</h1>
+              <h1 className="pt-6 text-[24px] font-semibold tracking-[-.01em] text-base-content">
+                {mode === "signup"
+                  ? <>Signals <span className="px-1.5 text-primary">→</span> Conversations</>
+                  : copy.heading}
+              </h1>
               <p className="pt-2 text-[15px] text-base-content/55">{copy.sub}</p>
             </div>
 
             <form onSubmit={mode === "signin" ? handleSignIn : handleSignUp} className="flex flex-col gap-5">
+              {mode === "signup" && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="first-name" className="text-[14px] font-medium text-base-content/80">First name</label>
+                    <input id="first-name" className={inputClass} placeholder="First name" value={firstName} onChange={(event) => setFirstName(event.target.value)} autoComplete="given-name" maxLength={100} autoFocus required />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label htmlFor="last-name" className="text-[14px] font-medium text-base-content/80">Last name</label>
+                    <input id="last-name" className={inputClass} placeholder="Last name" value={lastName} onChange={(event) => setLastName(event.target.value)} autoComplete="family-name" maxLength={100} required />
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col gap-2">
                 <label htmlFor="email" className="text-[14px] font-medium text-base-content/80">
                   {mode === "signup" ? "Business email" : "Email address"}
                 </label>
-                <input id="email" type="email" className={inputClass} placeholder={mode === "signup" ? "you@company.com" : "Enter your email"} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" autoFocus required />
+                <input id="email" type="email" className={inputClass} placeholder={mode === "signup" ? "you@company.com" : "Enter your email"} value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" autoFocus={mode === "signin"} required />
               </div>
 
               <div className="flex flex-col gap-2">

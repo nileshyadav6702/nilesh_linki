@@ -27,6 +27,9 @@ export const signupSchema = z.object({
     .min(1, "Email and password are required.")
     .max(200, "Password is too long.")
     .refine((p) => p.length >= 8, "Password must be at least 8 characters."),
+  // Optional so invite/join signups (email + password only) keep working.
+  first_name: z.string().trim().max(100, "First name is too long.").optional(),
+  last_name: z.string().trim().max(100, "Last name is too long.").optional(),
   invite_token: z.string().max(400).optional(),
   join_token: z.string().max(200).optional(),
 });
