@@ -5,10 +5,12 @@ import { runAgentPass } from "@/lib/agents/loop";
 import { runSource } from "@/lib/signals/engine";
 import { SOURCE_TYPES } from "@/lib/signals/types";
 import { requireWorkspace } from "@/lib/workspace";
+import { CREDIT_COSTS, debit, InsufficientCreditsError, refund } from "@/lib/credits/ledger";
 
 // POST /api/agents/:id/run → run now: non-LinkedIn sources immediately, LinkedIn sources
 // queued for the runner's next discovery pass (they must share the browser session), then
-// one scoring/drafting pass.
+// one scoring/drafting pass. Costs CREDIT_COSTS.agent_launch (scheduled runs are free),
+// refunded when the run fails.
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") { res.setHeader("Allow", ["POST"]); return res.status(405).end(); }
   const ctx = requireWorkspace(req, res, "manager");
@@ -19,19 +21,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // ?source_id= runs just that source ("Launch now" on one row).
   const only = typeof req.query.source_id === "string" ? req.query.source_id : null;
   const sources = listSources(agent.id, ctx.workspaceId).filter((s) => s.enabled && (!only || s.id === only));
-  const http: Array<{ source_type: string; ingested: number; error: string | null }> = [];
-  let queued = 0;
-  for (const s of sources) {
-    if (SOURCE_TYPES[s.source_type].needsLinkedIn) {
-      db.prepare("UPDATE agent_sources SET next_run_at = datetime('now') WHERE id = ?").run(s.id);
-      queued++;
-    } else {
-      const r = await runSource(s);
-      http.push({ source_type: s.source_type, ingested: r.ingested, error: r.error });
-    }
+  if (only && !sources.length) return res.status(404).json({ error: "Source not found or turned off" });
+
+  const cost = CREDIT_COSTS.agent_launch;
+  try {
+    debit(db, ctx.workspaceId, { type: "agent_launch", credits: cost, userId: ctx.userId, refId: agent.id, note: only ? "One lead source" : null });
+  } catch (err) {
+    if (err instanceof InsufficientCreditsError) return res.status(402).json({ error: err.message, code: "insufficient_credits" });
+    throw err;
   }
-  const pass = only ? null : await runAgentPass(agent);
-  return res.json({ linkedin_sources_queued: queued, http_sources: http, pass, note: agent.status !== "active" && queued ? "LinkedIn sources run only while the agent is active" : undefined });
+  try {
+    const http: Array<{ source_type: string; ingested: number; error: string | null }> = [];
+    let queued = 0;
+    for (const s of sources) {
+      if (SOURCE_TYPES[s.source_type].needsLinkedIn) {
+        db.prepare("UPDATE agent_sources SET next_run_at = datetime('now') WHERE id = ?").run(s.id);
+        queued++;
+      } else {
+        const r = await runSource(s);
+        http.push({ source_type: s.source_type, ingested: r.ingested, error: r.error });
+      }
+    }
+    const pass = only ? null : await runAgentPass(agent);
+    return res.json({ credits_used: cost, linkedin_sources_queued: queued, http_sources: http, pass, note: agent.status !== "active" && queued ? "LinkedIn sources run only while the agent is active" : undefined });
+  } catch (err) {
+    refund(db, ctx.workspaceId, "agent_launch", cost, { userId: ctx.userId, refId: agent.id });
+    throw err;
+  }
 }
 
 export const config = { maxDuration: 300 };

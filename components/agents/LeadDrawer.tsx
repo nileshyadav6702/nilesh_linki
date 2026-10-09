@@ -11,6 +11,7 @@ import { InlineEdit, PencilButton } from "@/components/agents/InlineEdit";
 import { ActivityLog, CrunchbaseIcon, ExportMenu, LINK, Rows, Section, SignalList, TipLink, type SignalRow } from "@/components/agents/LeadDrawerParts";
 import { Avatar, Flames, StatusDot } from "@/components/agents/ui";
 import StepItem, { type Step } from "@/components/copilot/StepItem";
+import { failToast } from "@/components/settings/billing/credits-toast";
 
 export interface LeadDetail {
   contact: Record<string, string | number | null>;
@@ -87,7 +88,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
   async function act(action: string, reason?: string) {
     const r = await fetch(`/api/leads/${targetId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, reason }) });
     const x = await r.json();
-    if (!r.ok) return toast.error(x.error ?? "Failed");
+    if (!r.ok) return failToast(x, "Failed");
     if (action === "find_email") toast[x.found ? "success" : "message"](x.found ? `Found ${x.email}` : "No email found");
     else toast.success(action === "skip" ? "Lead rejected" : "Done");
     await load();

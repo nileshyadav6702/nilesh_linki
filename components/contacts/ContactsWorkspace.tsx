@@ -13,6 +13,7 @@ import ContactsTable from "@/components/contacts/ContactsTable";
 import FiltersPanel from "@/components/contacts/FiltersPanel";
 import Pagination from "@/components/contacts/Pagination";
 import { activeCount, contactParams, useContacts, type ContactFilters, type ContactRow } from "@/components/contacts/useContacts";
+import { failToast } from "@/components/settings/billing/credits-toast";
 
 interface ListRow { id: string; name: string; target_count: number }
 
@@ -156,7 +157,11 @@ export function ContactsWorkspace({ base, hidden, sizesKey, openLeadId, classNam
     setBusy(true);
     let found = 0;
     for (const id of sel) {
-      try { if ((await call(`/api/leads/${id}`, "PATCH", { action: "find_email" })).found) found++; } catch { /* keep going */ }
+      const r = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "find_email" }) }).catch(() => null);
+      const d = r ? await r.json().catch(() => ({})) : {};
+      // Out of credits: stop here instead of failing every remaining contact.
+      if (r?.status === 402) { setBusy(false); failToast(d, "Not enough credits"); void c.load(); return; }
+      if (r?.ok && d.found) found++;
     }
     setBusy(false);
     toast.success(`Found ${found} email${found === 1 ? "" : "s"} for ${sel.length} contact${sel.length === 1 ? "" : "s"}`);

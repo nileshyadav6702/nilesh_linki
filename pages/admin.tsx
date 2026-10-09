@@ -141,6 +141,17 @@ export default function AdminPage({ viewer }: { viewer: string }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Until payments are connected, credits are added here.
+  async function addCredits(workspaceId: string, name: string) {
+    const raw = window.prompt(`Credits to add to ${name}`);
+    const credits = Number.parseInt(raw ?? "", 10);
+    if (!raw || !Number.isFinite(credits)) return;
+    const r = await fetch("/api/admin/credits", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id: workspaceId, credits }) });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) { window.alert(body.error ?? "Could not add credits"); return; }
+    await load();
+  }
+
   const q = (overview?.email_queue ?? {}) as Row;
   const camp = (overview?.campaigns ?? {}) as Row;
   const ev = ((overview?.eventing ?? {}) as Row).domain_events as Row | undefined;
@@ -280,7 +291,7 @@ export default function AdminPage({ viewer }: { viewer: string }) {
         </Section>
 
         <Section title="Workspaces" hint="Per-tenant rollup.">
-          <ScrollTable headers={["Workspace", "Members", "Contacts", "Runs", "Active", "LinkedIn", "Email", "Failed", "Uncertain", "AI $", "Last event"]}>
+          <ScrollTable headers={["Workspace", "Members", "Contacts", "Runs", "Active", "LinkedIn", "Email", "Failed", "Uncertain", "AI $", "Credits", "Last event"]}>
             {(tenants?.workspaces ?? []).map((w, i) => (
               <tr key={i} className="border-b border-[var(--border-subtle)] last:border-0">
                 <td className="px-4 py-2.5">
@@ -296,6 +307,10 @@ export default function AdminPage({ viewer }: { viewer: string }) {
                 <td className="px-4 py-2.5 tabular-nums">{fmt(w.failed_jobs)}</td>
                 <td className="px-4 py-2.5 tabular-nums">{fmt(w.uncertain_jobs)}</td>
                 <td className="px-4 py-2.5 tabular-nums">${num(w.ai_cost_usd).toFixed(2)}</td>
+                <td className="whitespace-nowrap px-4 py-2.5 tabular-nums">
+                  {fmt(w.credits)}
+                  <button type="button" onClick={() => void addCredits(text(w.id), text(w.name))} className="ml-2 rounded-[6px] border border-[var(--border)] px-1.5 text-[12px] text-base-content/70 hover:bg-base-200">+ Add</button>
+                </td>
                 <td className="px-4 py-2.5 text-base-content/55">{when(w.last_event_at)}</td>
               </tr>
             ))}

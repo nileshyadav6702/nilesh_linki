@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { RiAtLine, RiFireFill, RiHeartPulseLine, RiLoader4Line, RiPhoneLine, RiSparkling2Line } from "react-icons/ri";
 import { signalLine } from "@/components/agents/signal-line";
 import type { ContactRow } from "@/components/contacts/useContacts";
+import { failToast } from "@/components/settings/billing/credits-toast";
 
 /** Cells for the Contacts table: AI score with an explanation card, copyable email / phone, approval. */
 
@@ -79,7 +80,7 @@ export function EmailCell({ row, onFound }: { row: ContactRow; onFound: () => vo
     try {
       const r = await fetch(`/api/leads/${row.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "find_email" }) });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.error ?? "Could not look up the email");
+      if (!r.ok) { failToast(d, "Could not look up the email"); return; }
       if (d.found) { toast.success("Email found"); onFound(); } else toast.message("No email found for this contact");
     } catch (err) { toast.error(err instanceof Error ? err.message : "Could not look up the email"); }
     finally { setBusy(false); }

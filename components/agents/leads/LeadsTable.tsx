@@ -7,6 +7,7 @@ import LeadRow, { pinnedEdge } from "./LeadRow";
 import LeadsToolbar from "./LeadsToolbar";
 import type { LeadRowData } from "./types";
 import { leadsParams, PAGE_SIZE, useLeadsQuery } from "./useLeadsQuery";
+import { failToast } from "@/components/settings/billing/credits-toast";
 
 const STATUS_TEXT: Record<string, string> = { new: "Scoring", qualified: "Qualified", drafted: "To review", approved: "Approved", enrolled: "In sequence", skipped: "Rejected", disqualified: "Not a fit", needs_data: "Needs profile data" };
 
@@ -46,6 +47,8 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
     let ok = 0;
     for (const id of ids) {
       const r = await fetch(`/api/leads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, reason: action === "skip" ? "Rejected in bulk" : undefined }) });
+      // Out of credits: stop here instead of failing every remaining lead.
+      if (r.status === 402) { setBusy(false); failToast(await r.json().catch(() => null), "Not enough credits"); load(); return; }
       if (r.ok && (action === "skip" || (await r.json()).found)) ok++;
     }
     setBusy(false);

@@ -1,6 +1,7 @@
 import type DatabaseType from "better-sqlite3";
 import { getDb } from "@/lib/db";
 import { randomUUID } from "crypto";
+import { chargeImport, leadsAffordable } from "@/lib/credits/charge";
 
 type DB = DatabaseType.Database;
 
@@ -228,7 +229,7 @@ export async function processScheduledImports(db: DB, opts: ImportPassOptions = 
 
     try {
       const claimed = db.prepare(
-        "UPDATE list_imports SET status = 'running', started_at = datetime('now'), heartbeat_at = datetime('now') WHERE id = ? AND status = 'scheduled'"
+        "UPDATE list_imports SET status = 'running', error = NULL, started_at = datetime('now'), heartbeat_at = datetime('now') WHERE id = ? AND status = 'scheduled'"
       ).run(due.id);
       if (!claimed.changes) return;
       await runBatch(due.id, Date.now() + (opts.budgetMs ?? IMPORT_PASS_BUDGET_MS), opts.shouldStop);
@@ -268,9 +269,19 @@ async function runBatch(importId: string, deadline: number, shouldStop?: () => b
     );
     return;
   }
+  // Imported leads cost credits: read no more pages than the balance pays for, and wait for
+  // the refill (checked daily) when it is empty.
+  const affordable = list.workspace_id ? leadsAffordable(db, list.workspace_id, "lead_import") : Infinity;
+  if (affordable < 1) {
+    db.prepare("UPDATE list_imports SET status = 'scheduled', scheduled_for = ?, heartbeat_at = NULL, error = 'Waiting for credits' WHERE id = ?").run(
+      addDaysStr(todayStr(), 1),
+      importId
+    );
+    return;
+  }
   // A capped import ("import 100 leads") never reads pages it cannot keep.
   const capPages = job.cap && job.cap > 0 ? Math.ceil(job.cap / PAGE_SIZE) : Infinity;
-  const maxPages = Math.min(quotaPages, IMPORT_PAGES_PER_PASS, capPages);
+  const maxPages = Math.min(quotaPages, IMPORT_PAGES_PER_PASS, capPages, Math.ceil(affordable / PAGE_SIZE));
 
   console.log(`[import] batch ${importId} (b${job.batch_index}) start_page=${job.start_page} maxPages=${maxPages} cap=${cap}`);
   const { getSessionContext } = await import("@/lib/linkedin/session");
@@ -308,9 +319,12 @@ async function runBatch(importId: string, deadline: number, shouldStop?: () => b
       return;
     }
 
-    const kept = job.cap && job.cap > 0 ? profiles.slice(0, job.cap) : profiles;
+    const capped = job.cap && job.cap > 0 ? profiles.slice(0, job.cap) : profiles;
+    const kept = Number.isFinite(affordable) ? capped.slice(0, affordable) : capped;
     const capLeft = job.cap && job.cap > 0 ? job.cap - kept.length : null;
     const { imported, skipped } = insertProfiles(db, job.list_id, kept);
+    // Only new contacts are charged; duplicates already in the list are free.
+    if (list.workspace_id) chargeImport(db, list.workspace_id, "lead_import", imported, job.list_id);
     console.log(`[import] batch ${importId} inserted ${imported} new, skipped ${skipped} (lastPage=${lastPage}, exhausted=${exhausted})`);
 
     // Close this batch and chain the remainder atomically: a crash between the two used to

@@ -2,7 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { enrollLead } from "@/lib/agents/enroll";
 import { getLeadDetail } from "@/lib/agents/copilot";
-import { enrichTargetEmail } from "@/lib/enrichment/waterfall";
+import { findEmailCharged } from "@/lib/credits/charge";
+import { InsufficientCreditsError } from "@/lib/credits/ledger";
 import type { Agent } from "@/lib/agents/store";
 import { recordAudit, requireWorkspace, requireWorkspaceEntity } from "@/lib/workspace";
 
@@ -53,8 +54,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.json({ ok: true });
   }
   if (action === "find_email") {
-    const r = await enrichTargetEmail(db, ctx.workspaceId, id);
-    return res.json({ found: !!r, ...r });
+    try {
+      const r = await findEmailCharged(db, ctx.workspaceId, id, ctx.userId);
+      return res.json({ found: !!r, ...r });
+    } catch (err) {
+      if (err instanceof InsufficientCreditsError) return res.status(402).json({ error: err.message, code: "insufficient_credits" });
+      throw err;
+    }
   }
   return res.status(400).json({ error: "Unknown action" });
 }

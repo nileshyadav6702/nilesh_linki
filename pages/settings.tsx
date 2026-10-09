@@ -12,7 +12,7 @@ import {
   RiLockPasswordLine, RiPlugLine,
   RiLinkedinBoxLine, RiMessage2Line, RiSettings3Line, RiFileCopyLine, RiBuilding2Line, RiTeamLine, RiAccountCircleLine,
   RiLockLine, RiLockUnlockLine, RiFlashlightLine, RiArrowDownSLine, RiCompassLine,
-  RiRobot2Line, RiPauseLine, RiPlayLine,
+  RiRobot2Line, RiPauseLine, RiPlayLine, RiBankCardLine,
 } from "react-icons/ri";
 import { ModelPicker, type OrModel } from "@/components/ui/ModelPicker";
 import DateField from "@/components/ui/DateField";
@@ -22,13 +22,14 @@ import AccountTab from "@/components/settings/AccountTab";
 import SendersTab from "@/components/settings/SendersTab";
 import SecurityTab from "@/components/settings/SecurityTab";
 import AiTemplatesTab from "@/components/settings/templates/AiTemplatesTab";
+import BillingTab from "@/components/settings/billing/BillingTab";
 import { Bar, BarChart, Cell, ResponsiveContainer } from "recharts";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ALL_TOUR_PAGES, TOUR_PAGE_LABELS, replayPageTour, type TourPage } from "@/lib/tour";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "workspace" | "members" | "account" | "senders" | "security" | "templates" | "integrations" | "ai" | "general";
+type Tab = "workspace" | "members" | "account" | "senders" | "security" | "templates" | "billing" | "integrations" | "ai" | "general";
 
 interface LiAccount {
   id: string; name: string; email: string;
@@ -70,7 +71,7 @@ export const getServerSideProps: GetServerSideProps = async ({ query, req, res }
   const emailAccounts = db
     .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at FROM email_accounts WHERE workspace_id=? ORDER BY created_at DESC")
     .all(workspaceId);
-  const validTabs: Tab[] = ["workspace", "members", "account", "senders", "security", "templates", "integrations", "ai", "general"];
+  const validTabs: Tab[] = ["workspace", "members", "account", "senders", "security", "templates", "billing", "integrations", "ai", "general"];
   // Old links to the LinkedIn / Email tabs open Sender accounts.
   const asked = query.tab === "linkedin" || query.tab === "email" ? "senders" : query.tab;
   const tab: Tab = validTabs.includes(asked as Tab) ? (asked as Tab) : "workspace";
@@ -86,6 +87,7 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "senders", label: "Sender accounts", icon: RiLinkedinBoxLine },
   { key: "security", label: "Security", icon: RiLockPasswordLine },
   { key: "templates", label: "AI Outreach Templates", icon: RiMessage2Line },
+  { key: "billing", label: "Billing", icon: RiBankCardLine },
   { key: "integrations", label: "Integrations", icon: RiPlugLine },
   { key: "ai", label: "AI", icon: RiRobot2Line },
   { key: "general", label: "General", icon: RiSettings3Line },
@@ -234,6 +236,7 @@ export default function SettingsPage({
           <EmailTab initialAccounts={initialEmail} hideList host={mailHost} onChanged={() => setSendersKey((k) => k + 1)} />
         </>}
         {tab === "templates" && <AiTemplatesTab />}
+        {tab === "billing" && <BillingTab />}
         {tab === "integrations" && <IntegrationsTab />}
         {tab === "ai" && <AiTab />}
         {tab === "general" && <GeneralTab hasMcp={hasMcp} />}

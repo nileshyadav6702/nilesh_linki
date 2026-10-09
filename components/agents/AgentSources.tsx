@@ -1,4 +1,6 @@
 import { useState, type ReactNode } from "react";
+import Confirm from "@/components/contacts/Confirm";
+import { failToast } from "@/components/settings/billing/credits-toast";
 import { toast } from "sonner";
 import {
   RiAddLine, RiArrowDownSLine, RiArrowRightSLine, RiBriefcase4Line, RiChat3Line, RiCodeSSlashLine, RiFileList3Line, RiFocus3Line,
@@ -65,6 +67,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
   openImport?: boolean;
 }) {
   const [editing, setEditing] = useState(openImport);
+  const [askLaunch, setAskLaunch] = useState<AgentSourceRow | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const chips = [...new Set([...roleTitles(icp), ...icp.industries, ...icp.company_types, ...icp.company_sizes.map(sizeLabel), ...icp.geographies])];
   const modeNote = icp.match_mode === "skip" ? "ICP filtering skipped" : icp.match_mode === "broader" ? "Broader matching" : null;
@@ -78,12 +81,15 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
   async function launch(s: AgentSourceRow) {
     const r = await fetch(`/api/agents/${agentId}/run?source_id=${s.id}`, { method: "POST" });
     const d = await r.json();
-    if (!r.ok) return toast.error(d.error ?? "Failed");
+    if (!r.ok) return failToast(d, "Failed");
     toast.success(d.linkedin_sources_queued ? "Queued for the next LinkedIn pass" : `${d.http_sources?.[0]?.ingested ?? 0} new signal(s)`);
     onChanged();
   }
   return (
     <div className="space-y-8">
+      {askLaunch && <Confirm title="Launch this source now?" action="Launch now (10 credits)" onCancel={() => setAskLaunch(null)}
+        onConfirm={async () => { const s = askLaunch; setAskLaunch(null); await launch(s); }}
+        text={<>Runs this lead source right away instead of waiting for its schedule. An instant launch uses <b>10 credits</b>; scheduled runs are free.</>} />}
       <section className="space-y-3">
         <SectionHeading title="Who this agent targets" subtitle="Every source below only keeps leads that match this audience." />
         <Panel className="flex flex-wrap items-center gap-2 px-5 py-4">
@@ -136,7 +142,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
                     <div className="ml-auto grid grid-cols-[72px_120px_150px_52px] items-center gap-3">
                       <span className="text-right font-display text-[20px] tabular-nums text-base-content">{s.leads}</span>
                       <span className="text-xs text-base-content/55">{s.enabled ? nextRunLabel(s.next_run_at, s.last_run_at) : "Off"}</span>
-                      <button type="button" className={`${ghostBtn} justify-self-start border border-[var(--border-subtle)] bg-base-100`} disabled={!s.enabled} onClick={() => launch(s)}><RiPlayLine size={13} /> Launch now</button>
+                      <button type="button" className={`${ghostBtn} justify-self-start border border-[var(--border-subtle)] bg-base-100`} disabled={!s.enabled} onClick={() => setAskLaunch(s)}><RiPlayLine size={13} /> Launch now</button>
                       <Toggle on={!!s.enabled} onChange={() => toggle(s)} label={`Toggle ${SIGNAL_LABEL[s.source_type] ?? s.source_type}`} />
                     </div>
                   </div>

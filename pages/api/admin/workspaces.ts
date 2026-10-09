@@ -35,7 +35,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       (SELECT COUNT(*) FROM email_jobs j      WHERE j.workspace_id  = w.id AND j.status = 'failed')    AS failed_jobs,
       (SELECT COUNT(*) FROM suppressions s    WHERE s.workspace_id  = w.id) AS suppressions,
       (SELECT ROUND(SUM(g.cost_usd), 4) FROM agent_sessions g WHERE g.workspace_id = w.id) AS ai_cost_usd,
-      (SELECT MAX(d.occurred_at) FROM domain_events d WHERE d.workspace_id = w.id) AS last_event_at
+      (SELECT MAX(d.occurred_at) FROM domain_events d WHERE d.workspace_id = w.id) AS last_event_at,
+      (SELECT COALESCE(SUM(cl.credits), 0) FROM credit_ledger cl WHERE cl.workspace_id = w.id) AS credits
     FROM workspaces w
     ORDER BY w.created_at DESC`).all();
 

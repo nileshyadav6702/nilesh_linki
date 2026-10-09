@@ -10,7 +10,8 @@ import { scoreNewLeads } from "@/lib/agents/fit";
 import { draftableSteps, queueDraft, strongestSignals, writeSequence } from "@/lib/agents/drafts";
 import { autoApproveDue } from "@/lib/agents/approvals";
 import { enrollLead, workflowChannels } from "@/lib/agents/enroll";
-import { enrichTargetEmail } from "@/lib/enrichment/waterfall";
+import { findEmailCharged } from "@/lib/credits/charge";
+import { balance, CREDIT_COSTS, ensureBilling, InsufficientCreditsError } from "@/lib/credits/ledger";
 import type { Agent } from "@/lib/agents/store";
 import { clearFailure, inBackoff, recordFailure } from "@/lib/agents/backoff";
 
@@ -60,11 +61,15 @@ async function enrichQualified(db: Database.Database, agent: Agent, limit = 5): 
     ORDER BY lead_score DESC LIMIT ?`).all(agent.id, limit) as Array<{ id: string }>;
   let n = 0;
   for (const r of rows) {
+    // Out of credits: stop before marking the attempt, so these leads are picked up after the refill.
+    ensureBilling(db, agent.workspace_id);
+    if (balance(db, agent.workspace_id) < CREDIT_COSTS.email_enrichment) break;
     db.prepare(`INSERT INTO enrichment_cache (identity_key, provider, fetched_at) VALUES (?, ?, datetime('now'))
       ON CONFLICT(identity_key, provider) DO UPDATE SET fetched_at = excluded.fetched_at`).run(`target:${r.id}`, EMAIL_ATTEMPT_PROVIDER);
     try {
-      if (await enrichTargetEmail(db, agent.workspace_id, r.id)) n++;
+      if (await findEmailCharged(db, agent.workspace_id, r.id)) n++;
     } catch (err) {
+      if (err instanceof InsufficientCreditsError) break;
       console.warn(`[agents] email enrichment failed for ${r.id}:`, err instanceof Error ? err.message : err);
     }
   }

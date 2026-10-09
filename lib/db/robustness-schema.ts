@@ -7,6 +7,19 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Credits (lib/credits/ledger.ts): every grant, debit and refund; the balance is their sum.
+  `CREATE TABLE IF NOT EXISTS credit_ledger (
+    id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    user_id TEXT, type TEXT NOT NULL, credits INTEGER NOT NULL, units INTEGER,
+    ref_id TEXT, provider TEXT, note TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_credit_ledger_ws ON credit_ledger(workspace_id, created_at)",
+  `CREATE TABLE IF NOT EXISTS workspace_billing (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    plan TEXT NOT NULL DEFAULT 'trial', credits_per_seat INTEGER NOT NULL DEFAULT 200,
+    cycle_start TEXT NOT NULL, next_refill_at TEXT NOT NULL, invoice_email TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
   // AI outreach templates (lib/ai-templates/store.ts): structure + instructions the AI writer follows.
   `CREATE TABLE IF NOT EXISTS ai_templates (
     id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

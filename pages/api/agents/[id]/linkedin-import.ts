@@ -5,6 +5,7 @@ import { getAgent } from "@/lib/agents/store";
 import { LeadSourceError } from "@/lib/agents/lead-sources";
 import { connectedAccount, countEngagers, importPostEngagers, importSingleProfile, postUrn, startSalesNavImport } from "@/lib/agents/lead-imports";
 import { fetchPostEngagersWithAccount } from "@/lib/agents/post-engagers";
+import { chargeImport, leadsAffordable } from "@/lib/credits/charge";
 import { AccountBusyError } from "@/lib/linkedin/account-session";
 import { discoveryPausedUntil, pauseDiscovery } from "@/lib/linkedin/budget";
 import { firstIssue } from "@/lib/validation";
@@ -57,11 +58,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const paused = discoveryPausedUntil(account.id);
     if (paused) return res.status(409).json({ error: `LinkedIn is limiting this account until ${paused.until}. Try again later.` });
+    // Engager imports cost credits (1 per 30 leads): refuse before reading LinkedIn when empty.
+    const affordable = leadsAffordable(db, ctx.workspaceId, "engager_import");
+    if (body.kind === "post" && affordable < 1) return res.status(402).json({ error: "Not enough credits to import post engagers. Credits refill monthly.", code: "insufficient_credits" });
     const engagers = await fetchPostEngagersWithAccount(account.id, urn);
     if (body.kind === "post_preview") return res.json({ activity_urn: urn, ...countEngagers(engagers) });
-    const r = importPostEngagers(db, agent, body.list_id, engagers.filter((e) => e.kind === "reaction"));
-    recordAudit(ctx, "agent.linkedin_import", "agent", agent.id, { kind: body.kind, list_id: r.list_id, imported: r.imported });
-    return res.json(r);
+    const r = importPostEngagers(db, agent, body.list_id, engagers.filter((e) => e.kind === "reaction").slice(0, affordable));
+    const credits = chargeImport(db, ctx.workspaceId, "engager_import", r.imported, r.list_id, ctx.userId);
+    recordAudit(ctx, "agent.linkedin_import", "agent", agent.id, { kind: body.kind, list_id: r.list_id, imported: r.imported, credits });
+    return res.json({ ...r, credits_used: credits });
   } catch (err) {
     if (err instanceof LeadSourceError) return res.status(err.status).json({ error: err.message });
     if (err instanceof AccountBusyError) return res.status(409).json({ error: err.message });
