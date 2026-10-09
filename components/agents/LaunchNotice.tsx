@@ -55,8 +55,8 @@ export function LeadsFinderTip({ onClose }: { onClose: () => void }) {
         </h2>
         <button type="button" onClick={onClose} aria-label="Close" autoFocus className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] border border-[var(--border-subtle)] text-base-content/60 hover:bg-base-200 hover:text-base-content"><RiCloseLine size={20} /></button>
       </div>
-      <p className="mt-4 text-[17px] leading-relaxed text-base-content/80">Your agent is searching for leads that match your ideal customer profile. Once found, they will be automatically added to the campaign workflow.</p>
-      <p className="mt-4 text-[17px] text-base-content/80">You can check your leads in a few minutes.</p>
+      <div className="mt-4 text-[17px] leading-relaxed text-base-content/80">Your agent is searching for leads that match your ideal customer profile. Once found, they will be automatically added to the campaign workflow.</div>
+      <div className="mt-4 text-[17px] text-base-content/80">You can check your leads in a few minutes.</div>
     </div>
   );
 }

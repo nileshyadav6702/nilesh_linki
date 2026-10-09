@@ -25,9 +25,10 @@ export function Stepper({ steps, current }: { steps: readonly string[]; current:
 /** Big centered question + muted subtitle that opens each step. */
 export function StepHeading({ title, subtitle, align = "center" }: { title: ReactNode; subtitle?: ReactNode; align?: "center" | "left" }) {
   return (
-    <div className={align === "center" ? "text-center" : ""}>
+    // Centred with flex, not mx-auto: the design system's unlayered `p { margin: 0 }` beats Tailwind margins.
+    <div className={`flex flex-col gap-3 ${align === "center" ? "items-center text-center" : ""}`}>
       <h2 className="text-[30px] font-semibold leading-[1.2] tracking-[-0.6px] text-base-content">{title}</h2>
-      {subtitle && <p className={`mt-3 text-[17px] leading-relaxed text-base-content/60 ${align === "center" ? "mx-auto max-w-2xl" : ""}`}>{subtitle}</p>}
+      {subtitle && <p className={`text-[17px] leading-relaxed text-base-content/60 ${align === "center" ? "max-w-2xl" : ""}`}>{subtitle}</p>}
     </div>
   );
 }
@@ -84,7 +85,7 @@ export function StepSheet({ children, className = "" }: { children: ReactNode; c
 export function Block({ title, subtitle, children, className = "" }: { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={`wizard-rise space-y-5 rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-5 py-6 sm:px-7 ${className}`}>
-      {(title || subtitle) && <div>{title && <Caps>{title}</Caps>}{subtitle && <p className="mt-1.5 text-[17px] text-base-content/60">{subtitle}</p>}</div>}
+      {(title || subtitle) && <div>{title && <Caps>{title}</Caps>}{subtitle && <div className="mt-1.5 text-[17px] text-base-content/60">{subtitle}</div>}</div>}
       {children}
     </section>
   );
