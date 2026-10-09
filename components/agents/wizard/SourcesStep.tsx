@@ -3,8 +3,10 @@ import { RiFocus3Line, RiFolderOpenLine, RiGroupLine, RiLinkedinBoxLine, RiPenci
 import { countSignals } from "@/components/agents/SourcePicker";
 import { Field, inputCls } from "@/components/agents/ui";
 import SignalsPicker from "@/components/agents/wizard/SignalsPicker";
+import LookalikePanel from "@/components/agents/wizard/LookalikePanel";
 import { OptionCard, RecommendedBadge, StepHeading, StepSheet } from "@/components/agents/wizard/kit";
-import type { WizardState } from "@/components/agents/wizard/types";
+import type { LookalikeState, WizardState } from "@/components/agents/wizard/types";
+import { publicIdFromUrl } from "@/lib/agents/lookalike-rules";
 import { SIGNAL_BUDGET } from "@/lib/agents/lead-source-rules";
 
 export const MIN_SIGNALS = 4;
@@ -22,6 +24,15 @@ export function sourcesReady(s: WizardState): string | null {
   const n = countSignals(s.sources);
   if (s.sourceKind === "signals" && n < MIN_SIGNALS) return `Add at least ${MIN_SIGNALS} signals to continue. Maximum ${SIGNAL_BUDGET}.`;
   if (s.sourceKind === "signals" && n > SIGNAL_BUDGET) return `Track at most ${SIGNAL_BUDGET} signals.`;
+  if (s.sourceKind === "lookalike") {
+    const lk = s.lookalike;
+    if (lk.phase === "input" && !publicIdFromUrl(lk.url)) return "Paste the LinkedIn profile URL of your best lead";
+    if (lk.phase === "analyzing" || lk.phase === "searching") return "Working on it…";
+    if (lk.phase === "profile" && !lk.scope?.title.trim()) return "Add the role to look for";
+    // The name is filled from the seed profile; it only has to be set before the agent is created.
+    if (lk.phase !== "leads") return null;
+    if (!lk.leads.length) return "No matches yet. Go back and widen the search scope";
+  }
   if (s.sourceKind === "existing" && !s.listIds.length) return "Pick at least one list";
   if (s.sourceKind === "linkedin_import" && !/linkedin\.com\/sales\//.test(s.importUrl)) return "Paste a Sales Navigator list or search URL";
   if (!s.name.trim()) return "Give your agent a name";
@@ -30,7 +41,9 @@ export function sourcesReady(s: WizardState): string | null {
 
 const tile = "flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary/10 text-base-content";
 
-export default function SourcesStep({ state, set, hasLinkedIn }: { state: WizardState; set: (p: Partial<WizardState>) => void; hasLinkedIn: boolean }) {
+export default function SourcesStep({ state, set, setLookalike, hasLinkedIn }: {
+  state: WizardState; set: (p: Partial<WizardState>) => void; setLookalike: (p: Partial<LookalikeState>) => void; hasLinkedIn: boolean;
+}) {
   const [lists, setLists] = useState<Array<{ id: string; name: string; target_count: number }>>([]);
   useEffect(() => { fetch("/api/lists").then((r) => r.json()).then((l) => setLists(Array.isArray(l) ? l : [])).catch(() => {}); }, []);
   const signals = countSignals(state.sources);
@@ -62,7 +75,9 @@ export default function SourcesStep({ state, set, hasLinkedIn }: { state: Wizard
           <div className="flex items-center gap-4 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 px-6 py-5">
             <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[12px] bg-primary text-primary-content"><chosen.icon size={28} /></span>
             <div className="min-w-0 flex-1"><div className="text-[17px] font-medium">{chosen.title}</div><div className="text-[17px] text-base-content/60">{chosen.why}</div></div>
-            <button type="button" className="rounded-[8px] px-3 py-2 text-[15px] font-medium text-base-content hover:bg-base-200" onClick={() => set({ sourceKind: null })}>Change source</button>
+            {state.lookalike.phase !== "analyzing" && state.lookalike.phase !== "searching" && (
+              <button type="button" className="rounded-[8px] px-3 py-2 text-[15px] font-medium text-base-content hover:bg-base-200" onClick={() => set({ sourceKind: null })}>Change source</button>
+            )}
           </div>
 
           {state.sourceKind === "signals" && (
@@ -85,10 +100,8 @@ export default function SourcesStep({ state, set, hasLinkedIn }: { state: Wizard
           )}
 
           {state.sourceKind === "lookalike" && (
-            <div className="space-y-3 rounded-[12px] border border-[var(--border-subtle)] p-5">
-              <p className="text-[15px] text-base-content/65">Your agent searches Sales Navigator for people matching your ICP and imports them at a safe pace. You&apos;ll refine the targeting in the next step.</p>
-              {!hasLinkedIn && <p className="text-[14px] text-[#8a5a1f]">Needs a LinkedIn account with Sales Navigator.</p>}
-            </div>
+            hasLinkedIn ? <LookalikePanel state={state.lookalike} set={setLookalike} />
+              : <p className="rounded-[12px] bg-[#e8a55a]/15 px-5 py-4 text-[15px] text-[#8a5a1f]">Warm Lookalike searches Sales Navigator, so it needs a connected LinkedIn account with Sales Navigator. Connect one in Settings first.</p>
           )}
 
           {state.sourceKind === "existing" && (

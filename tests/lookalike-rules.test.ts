@@ -1,0 +1,94 @@
+import { describe, expect, it } from "vitest";
+import {
+  lookalikeSearchUrl, matchScore, parseFlagshipProfile, publicIdFromUrl, rankLookalikes, type LookalikeCandidate, type LookalikeScope,
+} from "@/lib/agents/lookalike-rules";
+
+const scope: LookalikeScope = {
+  title: "VP of Sales", similarTitles: ["Chief Sales Officer"], includeSimilarRoles: true,
+  location: "South Delhi, Delhi, India", geoId: "105556991", industry: "IT Services and IT Consulting", industryId: "96",
+  relatedIndustries: false, sizes: ["201-500"],
+};
+
+const candidate = (over: Partial<LookalikeCandidate>): LookalikeCandidate => ({
+  salesNavUrn: "urn:li:fs_salesProfile:(A,NAME_SEARCH,x)", salesNavUrl: "https://www.linkedin.com/sales/lead/A", fullName: "Jane Doe",
+  title: "VP of Sales", company: "Acme", location: "South Delhi, Delhi, India", companyIndustry: "IT Services and IT Consulting",
+  profileImageUrl: null, linkedinUrl: null, ...over,
+});
+
+describe("publicIdFromUrl", () => {
+  it("accepts LinkedIn profile URLs and rejects anything else", () => {
+    expect(publicIdFromUrl("https://www.linkedin.com/in/shadab-khan-8445b4b/")).toBe("shadab-khan-8445b4b");
+    expect(publicIdFromUrl("linkedin.com/in/jane_doe?utm=1")).toBe("jane_doe");
+    expect(publicIdFromUrl("https://www.linkedin.com/company/acme")).toBeNull();
+    expect(publicIdFromUrl("https://example.com/in/jane")).toBeNull();
+    expect(publicIdFromUrl("not a url")).toBeNull();
+  });
+});
+
+describe("parseFlagshipProfile", () => {
+  const body = JSON.stringify({
+    included: [
+      { $type: "com.linkedin.voyager.dash.identity.profile.Profile", entityUrn: "urn:li:fsd_profile:1", publicIdentifier: "shadab-khan", firstName: "Shadab", lastName: "Khan",
+        headline: "VP of Sales at Intensity", geoLocation: { geoUrn: "urn:li:fsd_geo:105556991" }, industryUrn: "urn:li:fsd_industry:96" },
+      { entityUrn: "urn:li:fsd_geo:105556991", defaultLocalizedName: "South Delhi, Delhi, India" },
+      { entityUrn: "urn:li:fsd_industry:96", name: "IT Services and IT Consulting" },
+      { $type: "com.linkedin.voyager.dash.identity.profile.Position", title: "Sales Manager", companyName: "Old Co", dateRange: { end: { year: 2020 } } },
+      { $type: "com.linkedin.voyager.dash.identity.profile.Position", title: "VP of Sales", companyName: "Intensity Global Technologies Limited", dateRange: { start: { year: 2021 } } },
+    ],
+  });
+
+  it("reads name, current role, location and industry with their search ids", () => {
+    expect(parseFlagshipProfile(["not json", body], "Shadab-Khan")).toMatchObject({
+      name: "Shadab Khan", title: "VP of Sales", company: "Intensity Global Technologies Limited",
+      location: "South Delhi, Delhi, India", geoId: "105556991", industry: "IT Services and IT Consulting", industryId: "96",
+      linkedinUrl: "https://www.linkedin.com/in/Shadab-Khan/",
+    });
+  });
+
+  it("falls back to the headline when there are no positions, and returns null for someone else", () => {
+    const thin = JSON.stringify({ data: { publicIdentifier: "jane", firstName: "Jane", headline: "Head of Growth at Acme" } });
+    expect(parseFlagshipProfile([thin], "jane")).toMatchObject({ title: "Head of Growth", company: "Acme", geoId: null });
+    expect(parseFlagshipProfile([body], "someone-else")).toBeNull();
+  });
+});
+
+describe("lookalikeSearchUrl", () => {
+  it("builds a Sales Navigator search with title, region, industry and headcount filters", () => {
+    const url = lookalikeSearchUrl(scope);
+    expect(url).toMatch(/^https:\/\/www\.linkedin\.com\/sales\/search\/people\?query=/);
+    expect(url).toContain("type:CURRENT_TITLE");
+    expect(url).toContain("text:VP%20of%20Sales");
+    expect(url).toContain("text:Chief%20Sales%20Officer");
+    expect(url).toContain("(id:105556991,");
+    expect(url).toContain("type:INDUSTRY,values:List((id:96,");
+    expect(url).toContain("type:COMPANY_HEADCOUNT,values:List((id:E,");
+  });
+
+  it("drops the industry filter for related industries and similar titles when switched off", () => {
+    const url = lookalikeSearchUrl({ ...scope, relatedIndustries: true, includeSimilarRoles: false });
+    expect(url).not.toContain("INDUSTRY");
+    expect(url).not.toContain("Chief");
+  });
+
+  it("strips rest.li syntax characters from free text", () => {
+    expect(lookalikeSearchUrl({ ...scope, title: "VP, Sales (APAC): Lead" })).toContain("text:VP%20Sales%20APAC%20Lead");
+  });
+});
+
+describe("ranking", () => {
+  it("scores an exact match 100 and weaker matches lower", () => {
+    expect(matchScore(candidate({}), scope)).toBe(100);
+    expect(matchScore(candidate({ location: "London, UK" }), scope)).toBeLessThan(100);
+    expect(matchScore(candidate({ title: "Software Engineer", location: "London", companyIndustry: "Banking" }), scope)).toBeLessThan(50);
+  });
+
+  it("drops the seed person and duplicates, best match first", () => {
+    const leads = rankLookalikes([
+      candidate({ salesNavUrn: "a", fullName: "Weak", title: "Engineer" }),
+      candidate({ salesNavUrn: "b", fullName: "Shadab Khan" }),
+      candidate({ salesNavUrn: "c", fullName: "Strong" }),
+      candidate({ salesNavUrn: "c", fullName: "Strong again" }),
+    ], scope, "shadab khan");
+    expect(leads.map((l) => l.name)).toEqual(["Strong", "Weak"]);
+  });
+});

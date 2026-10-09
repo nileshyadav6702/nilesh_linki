@@ -9,9 +9,11 @@ import TargetStep from "@/components/agents/wizard/TargetStep";
 import PreviewStep from "@/components/agents/wizard/PreviewStep";
 import OutreachStep, { outreachReady } from "@/components/agents/wizard/OutreachStep";
 import ReviewStep from "@/components/agents/wizard/ReviewStep";
-import { sourcesFor, type WizardState } from "@/components/agents/wizard/types";
-import { Stepper } from "@/components/agents/wizard/kit";
-import { roleTitles } from "@/lib/icp/targeting";
+import { EMPTY_LOOKALIKE, sourcesFor, type LookalikeState, type WizardState } from "@/components/agents/wizard/types";
+import { ErrorDialog, Stepper } from "@/components/agents/wizard/kit";
+import { scopeTitles, type LookalikeProfile, type LookalikeScope } from "@/lib/agents/lookalike-rules";
+import type { Icp } from "@/lib/icp/schema";
+import { roleTitles, setRoles, sizePreset } from "@/lib/icp/targeting";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 
 export const getServerSideProps = requireSignedIn;
@@ -21,7 +23,23 @@ const STEPS = ["Sources", "Target", "Preview", "Outreach", "Review"] as const;
 const INITIAL: WizardState = {
   name: "", website: "", icp: EMPTY_ICP, icpId: null, sourceKind: null, sources: [], listIds: [], importUrl: "", minScore: 55, agentId: null,
   outreach: { build: null, channel: "multi", goal: "conversations", tone: "professional", workflow_id: "", linkedin_account_id: "", email_account_id: "", exclude_first_degree: true, mode: "autopilot", booking_url: "", daily_lead_cap: 25 },
+  lookalike: EMPTY_LOOKALIKE,
 };
+
+/** The ICP a Warm Lookalike agent scores against: the seed's role, place, industry and sizes. */
+function icpFromLookalike(base: Icp, scope: LookalikeScope): Icp {
+  return {
+    ...setRoles(base, scopeTitles(scope)),
+    industries: scope.industry && !scope.relatedIndustries ? [scope.industry] : [],
+    geographies: scope.location ? [scope.location] : [],
+    company_sizes: scope.sizes.map((v) => sizePreset(v)?.value ?? v),
+  };
+}
+
+const scopeFor = (p: LookalikeProfile): LookalikeScope => ({
+  title: p.title ?? "", similarTitles: [], includeSimilarRoles: true, location: p.location, geoId: p.geoId,
+  industry: p.industry, industryId: p.industryId, relatedIndustries: false, sizes: [],
+});
 
 async function api(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
@@ -42,7 +60,10 @@ export default function NewAgent() {
   const [previewing, setPreviewing] = useState(false);
   /** Channel the agent's current sequence was generated for ("manual" when the user built it). */
   const [campaignChannel, setCampaignChannel] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const set = (p: Partial<WizardState>) => setS((prev) => ({ ...prev, ...p }));
+  const setLookalike = (p: Partial<LookalikeState>) => setS((prev) => ({ ...prev, lookalike: { ...prev.lookalike, ...p } }));
+  const lookalike = s.sourceKind === "lookalike";
 
   useEffect(() => {
     let alive = true;
@@ -68,16 +89,16 @@ export default function NewAgent() {
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [step]);
 
-  async function saveIcp(): Promise<string> {
-    if (s.icpId) return s.icpId;
-    const id = (await api("/api/icp", "POST", { data: s.icp, website_url: s.website || null })).id as string;
+  async function saveIcp(icp: Icp = s.icp, known: string | null = s.icpId): Promise<string> {
+    if (known) return known;
+    const id = (await api("/api/icp", "POST", { data: icp, website_url: s.website || null })).id as string;
     set({ icpId: id });
     return id;
   }
 
-  async function saveTargetAndAgent() {
-    if (!roleTitles(s.icp).length && s.icp.match_mode !== "skip") throw new Error("Add at least one job role to target");
-    const icpId = await saveIcp();
+  async function saveTargetAndAgent(icp: Icp = s.icp, known: string | null = s.icpId) {
+    if (!roleTitles(icp).length && icp.match_mode !== "skip") throw new Error("Add at least one job role to target");
+    const icpId = await saveIcp(icp, known);
     const base = { name: s.name.trim(), icp_id: icpId, min_score: s.minScore, linkedin_account_id: s.outreach.linkedin_account_id || null };
     let agentId = s.agentId;
     if (!agentId) {
@@ -127,8 +148,62 @@ export default function NewAgent() {
 
   const blocker = step === 0 ? sourcesReady(s) : step === 2 ? (previewing ? "Finding your first leads…" : null) : step === 3 ? outreachReady(s.outreach) : null;
 
+  /**
+   * Warm Lookalike walks its own phases inside Sources: read the seed profile, search for
+   * people like them, then create the agent and jump straight to Outreach (the scope is the
+   * targeting and the matches are the preview).
+   */
+  async function lookalikeNext() {
+    const lk = s.lookalike;
+    if (lk.phase === "input") {
+      setLookalike({ phase: "analyzing" });
+      try {
+        const { profile } = await api("/api/agents/lookalike", "POST", { action: "profile", url: lk.url, account_id: s.outreach.linkedin_account_id || null }) as { profile: LookalikeProfile };
+        setLookalike({ phase: "profile", profile, scope: scopeFor(profile), leads: [], searchUrl: "" });
+        if (!s.name.trim()) set({ name: `Lookalike · ${profile.name}` });
+      } catch (err) {
+        setLookalike({ phase: "input" });
+        setError(err instanceof Error ? err.message : "An error occurred while searching for the profile. Please try again.");
+      }
+      return;
+    }
+    if (lk.phase === "profile" && lk.scope) {
+      setLookalike({ phase: "searching" });
+      try {
+        const r = await api("/api/agents/lookalike", "POST", { action: "search", scope: lk.scope, seed_name: lk.profile?.name ?? null, account_id: s.outreach.linkedin_account_id || null }) as { leads: LookalikeState["leads"]; search_url: string };
+        setLookalike({ phase: "leads", leads: r.leads, searchUrl: r.search_url });
+      } catch (err) {
+        setLookalike({ phase: "profile" });
+        setError(err instanceof Error ? err.message : "The search failed. Please try again.");
+      }
+      return;
+    }
+    if (lk.phase === "leads" && lk.scope) {
+      setBusy(true);
+      try {
+        const icp = icpFromLookalike(s.icp, lk.scope);
+        set({ icp, icpId: null });
+        await saveTargetAndAgent(icp, null);
+        setStep(3);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not create the agent");
+      } finally { setBusy(false); }
+    }
+  }
+
+  function previous() {
+    if (step === 0 && lookalike) {
+      const phase = s.lookalike.phase;
+      if (phase === "leads") setLookalike({ phase: "profile" });
+      else if (phase === "profile") setLookalike({ phase: "input", profile: null, scope: null });
+      return;
+    }
+    setStep(step === 3 && lookalike ? 0 : step - 1);
+  }
+
   async function next() {
     if (blocker) return toast.error(blocker);
+    if (step === 0 && lookalike) return lookalikeNext();
     setBusy(true);
     try {
       if (step === 1) await saveTargetAndAgent();
@@ -165,7 +240,7 @@ export default function NewAgent() {
         <Stepper steps={STEPS} current={step} />
 
         <div key={step}>
-          {step === 0 && <SourcesStep state={s} set={set} hasLinkedIn={hasLinkedIn} />}
+          {step === 0 && <SourcesStep state={s} set={set} setLookalike={setLookalike} hasLinkedIn={hasLinkedIn} />}
           {step === 1 && <TargetStep state={s} set={set} />}
           {step === 2 && s.agentId && <PreviewStep agentId={s.agentId} onBusy={setPreviewing} />}
           {step === 3 && <OutreachStep state={s} set={set} onManual={createManualSequence} onEditSources={() => setStep(0)} />}
@@ -173,11 +248,13 @@ export default function NewAgent() {
         </div>
       </div>
 
+      {error && <ErrorDialog message={error} onClose={() => setError(null)} />}
+
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--border-subtle)] bg-base-100/95 shadow-[0_-8px_24px_rgba(20,20,19,0.04)] backdrop-blur md:left-[264px]">
         <div className="flex items-center justify-between gap-4 px-6 py-4 sm:px-10">
           <div className="flex min-w-0 items-center gap-4">
-            {step > 0 && (
-              <button type="button" className={`${btn} -ml-3 text-base-content hover:bg-base-200 disabled:opacity-40`} disabled={busy} onClick={() => setStep(step - 1)}>
+            {(step > 0 || (lookalike && s.lookalike.phase !== "input")) && (
+              <button type="button" className={`${btn} -ml-3 text-base-content hover:bg-base-200 disabled:opacity-40`} disabled={busy || s.lookalike.phase === "analyzing" || s.lookalike.phase === "searching"} onClick={previous}>
                 <RiArrowLeftSLine size={22} /> Previous
               </button>
             )}

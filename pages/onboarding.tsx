@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
 import { EMPTY_ICP } from "@/components/agents/IcpEditor";
-import { sourcesFor, type WizardState } from "@/components/agents/wizard/types";
+import { EMPTY_LOOKALIKE, sourcesFor, type WizardState } from "@/components/agents/wizard/types";
 import { Field, inputCls, textareaCls } from "@/components/agents/ui";
 import { filled, normalizeDraft, PEOPLE_EXCLUDES } from "@/components/onboarding/fields";
 import { OnboardShell, StepFooter } from "@/components/onboarding/frame";
@@ -45,6 +45,7 @@ const PHASE_TOTAL = [4, 3, 4, 0];
 const INITIAL: WizardState = {
   name: "", website: "", icp: EMPTY_ICP, icpId: null, sourceKind: "signals", sources: [], listIds: [], importUrl: "", minScore: 55, agentId: null,
   outreach: { build: "ai", channel: "linkedin", goal: "conversations", tone: "professional", workflow_id: "", linkedin_account_id: "", email_account_id: "", exclude_first_degree: true, mode: "copilot", booking_url: "", daily_lead_cap: 25 },
+  lookalike: EMPTY_LOOKALIKE,
 };
 
 async function api(url: string, method: string, body?: unknown) {

@@ -23,7 +23,8 @@ export interface AgentSource {
 }
 
 export const sourceConfigSchema = z.object({
-  urls: z.array(z.string().trim().url().max(400)).max(25).default([]),
+  // 2000: a Warm Lookalike Sales Navigator search URL carries its filters.
+  urls: z.array(z.string().trim().url().max(2000)).max(25).default([]),
   keywords: z.array(z.string().trim().min(2).max(80)).max(15).default([]),
   boards: z.array(z.object({ ats: z.enum(["greenhouse", "lever", "ashby"]), slug: z.string().trim().min(1).max(120), company: z.string().trim().max(160).optional() })).max(40).default([]),
   role_keywords: z.array(z.string().trim().min(2).max(80)).max(20).default([]),

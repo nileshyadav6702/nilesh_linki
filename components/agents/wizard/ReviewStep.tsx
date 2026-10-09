@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { RiArrowRightLine, RiShieldLine } from "react-icons/ri";
 import { SIGNAL_LABEL } from "@/components/agents/ui";
 import { roleTitles, sizeLabel } from "@/lib/icp/targeting";
+import { scopeTitles } from "@/lib/agents/lookalike-rules";
 import { StepHeading, StepSheet } from "@/components/agents/wizard/kit";
 import type { WizardState } from "@/components/agents/wizard/types";
 
@@ -47,7 +48,14 @@ export default function ReviewStep({ state }: { state: WizardState }) {
             {of("lookalike") && <p><span className="text-base-content">Smart lead finder:</span> on</p>}
           </>
         ) : (
-          <p>{state.sourceKind === "lookalike" ? "Warm lookalikes from Sales Navigator" : state.sourceKind === "existing" ? `${state.listIds.length} existing list${state.listIds.length === 1 ? "" : "s"}` : `LinkedIn import: ${state.importUrl}`}</p>
+          state.sourceKind === "lookalike" && state.lookalike.scope ? (
+            <>
+              <p><span className="text-base-content">Warm lookalike of:</span> {state.lookalike.profile?.name ?? "your best lead"}</p>
+              <Line label="Roles" values={scopeTitles(state.lookalike.scope)} />
+              <Line label="Location" values={state.lookalike.scope.location ? [state.lookalike.scope.location] : []} />
+              <Line label="Industry" values={state.lookalike.scope.industry ? [state.lookalike.scope.industry + (state.lookalike.scope.relatedIndustries ? " and related" : "")] : []} />
+            </>
+          ) : <p>{state.sourceKind === "lookalike" ? "Warm lookalikes from Sales Navigator" : state.sourceKind === "existing" ? `${state.listIds.length} existing list${state.listIds.length === 1 ? "" : "s"}` : `LinkedIn import: ${state.importUrl}`}</p>
         )}
       </Section>
 

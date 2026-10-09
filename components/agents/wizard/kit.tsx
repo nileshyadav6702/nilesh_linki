@@ -99,3 +99,25 @@ export function Collapse({ open, children }: { open: boolean; children: ReactNod
     </div>
   );
 }
+
+/** Blocking error dialog with a single OK (Warm Lookalike profile / search failures). */
+export function ErrorDialog({ title = "Error", message, onClose }: { title?: string; message: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
+      <button type="button" tabIndex={-1} aria-label="Close" onClick={onClose} className="absolute inset-0 bg-[#141413]/45" />
+      <div role="alertdialog" aria-modal="true" aria-labelledby="wizard-error-title" aria-describedby="wizard-error-text"
+        className="wizard-rise relative w-full max-w-[660px] overflow-hidden rounded-[10px] bg-base-100 shadow-[var(--shadow-overlay)]">
+        <div className="flex items-start gap-5 px-8 py-8">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-error/15 text-[26px] font-semibold text-error" aria-hidden="true">!</span>
+          <div className="min-w-0">
+            <div id="wizard-error-title" className="text-[20px] font-medium text-base-content">{title}</div>
+            <div id="wizard-error-text" className="mt-3 text-[17px] leading-relaxed text-base-content/75">{message}</div>
+          </div>
+        </div>
+        <div className="flex justify-end bg-primary/[0.06] px-8 py-4">
+          <button type="button" autoFocus onClick={onClose} className="h-11 rounded-[6px] bg-primary px-5 text-[15px] font-semibold text-primary-content hover:bg-[var(--primary-hover)]">OK</button>
+        </div>
+      </div>
+    </div>
+  );
+}
