@@ -20,13 +20,14 @@ import WorkspaceTab from "@/components/settings/WorkspaceTab";
 import MembersTab from "@/components/settings/MembersTab";
 import AccountTab from "@/components/settings/AccountTab";
 import SendersTab from "@/components/settings/SendersTab";
+import SecurityTab from "@/components/settings/SecurityTab";
 import { Bar, BarChart, Cell, ResponsiveContainer } from "recharts";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ALL_TOUR_PAGES, TOUR_PAGE_LABELS, replayPageTour, type TourPage } from "@/lib/tour";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "workspace" | "members" | "account" | "senders" | "templates" | "integrations" | "ai" | "general";
+type Tab = "workspace" | "members" | "account" | "senders" | "security" | "templates" | "integrations" | "ai" | "general";
 
 interface LiAccount {
   id: string; name: string; email: string;
@@ -72,7 +73,7 @@ export const getServerSideProps: GetServerSideProps = async ({ query, req, res }
     .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at FROM email_accounts WHERE workspace_id=? ORDER BY created_at DESC")
     .all(workspaceId);
   const templates = db.prepare("SELECT * FROM templates WHERE workspace_id=? ORDER BY created_at DESC").all(workspaceId);
-  const validTabs: Tab[] = ["workspace", "members", "account", "senders", "templates", "integrations", "ai", "general"];
+  const validTabs: Tab[] = ["workspace", "members", "account", "senders", "security", "templates", "integrations", "ai", "general"];
   // Old links to the LinkedIn / Email tabs open Sender accounts.
   const asked = query.tab === "linkedin" || query.tab === "email" ? "senders" : query.tab;
   const tab: Tab = validTabs.includes(asked as Tab) ? (asked as Tab) : "workspace";
@@ -86,6 +87,7 @@ const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "members", label: "Members", icon: RiTeamLine },
   { key: "account", label: "Account", icon: RiAccountCircleLine },
   { key: "senders", label: "Sender accounts", icon: RiLinkedinBoxLine },
+  { key: "security", label: "Security", icon: RiLockPasswordLine },
   { key: "templates", label: "AI Outreach Templates", icon: RiMessage2Line },
   { key: "integrations", label: "Integrations", icon: RiPlugLine },
   { key: "ai", label: "AI", icon: RiRobot2Line },
@@ -239,6 +241,7 @@ export default function SettingsPage({
         {tab === "members" && <MembersTab />}
         {tab === "account" && <AccountTab />}
         <div>
+        {tab === "security" && <SecurityTab />}
         {tab === "senders" && <>
           <SendersTab reloadKey={sendersKey} onAddLinkedIn={() => liHost.current?.openAdd()} onAuthLinkedIn={(a) => liHost.current?.openAuth(a as unknown as LiAccount)}
             onGmail={() => mailHost.current?.openGmail()} onSmtp={() => mailHost.current?.openSmtp()} onEditCredentials={(m) => mailHost.current?.openEdit(m as unknown as EmailAccount)} />
@@ -264,7 +267,6 @@ export interface LinkedInHost { openAdd(): void; openAuth(a: LiAccount): void }
 
 function LinkedInTab({ initialAccounts, hideList = false, host, onChanged }: { initialAccounts: LiAccount[]; hideList?: boolean; host?: Ref<LinkedInHost>; onChanged?: () => void }) {
   const [accounts, setAccounts] = useState<LiAccount[]>(initialAccounts);
-  useImperativeHandle(host, () => ({ openAdd: () => setShowModal(true), openAuth: (a: LiAccount) => openAuthModal(a) }));
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", daily_connection_limit: 20, daily_message_limit: 50, daily_inmail_limit: 15, daily_visit_limit: 150 });
   const [loading, setLoading] = useState(false);
@@ -398,6 +400,8 @@ function LinkedInTab({ initialAccounts, hideList = false, host, onChanged }: { i
     toast.success(`${a.name} deleted`);
     refresh();
   }
+
+  useImperativeHandle(host, () => ({ openAdd: () => setShowModal(true), openAuth: (a: LiAccount) => openAuthModal(a) }));
 
   return (
     <div>
@@ -1920,8 +1924,6 @@ function McpCard() {
 function GeneralTab({ hasMcp }: { hasMcp: boolean }) {
   const router = useRouter();
   const { data: session } = useSession();
-  const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
-  const [loading, setLoading] = useState(false);
   const [importCap, setImportCap] = useState<number | "">("");
   const [capSaving, setCapSaving] = useState(false);
 
@@ -1940,21 +1942,6 @@ function GeneralTab({ hasMcp }: { hasMcp: boolean }) {
     setCapSaving(false);
     if (!res.ok) { toast.error((await res.json()).error ?? "Failed"); return; }
     toast.success("Daily import limit saved");
-  }
-
-  async function handleChangePassword(e: React.FormEvent) {
-    e.preventDefault();
-    if (form.newPassword !== form.confirmPassword) { toast.error("Passwords don't match"); return; }
-    setLoading(true);
-    const res = await fetch("/api/auth/change-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPassword: form.currentPassword, newPassword: form.newPassword }),
-    });
-    setLoading(false);
-    if (!res.ok) { toast.error((await res.json()).error ?? "Failed"); return; }
-    toast.success("Password changed");
-    setForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
   }
 
   return (
@@ -2018,32 +2005,6 @@ function GeneralTab({ hasMcp }: { hasMcp: boolean }) {
         </select>
       </div>
 
-      {/* Change password */}
-      <div className="bg-base-100 border border-[var(--border-subtle)] rounded-2xl shadow-[var(--shadow-raised)] p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <RiLockPasswordLine size={13} className="text-base-content/40" />
-          <p className="text-xs font-medium text-base-content/40 uppercase tracking-wide">Change password</p>
-        </div>
-        <form onSubmit={handleChangePassword} className="flex flex-col gap-3">
-          <div>
-            <label className="label text-xs text-base-content/50 pb-1">Current password</label>
-            <input type="password" className="input input-bordered input-sm w-full" placeholder="Current password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} required />
-          </div>
-          <div>
-            <label className="label text-xs text-base-content/50 pb-1">New password</label>
-            <input type="password" className="input input-bordered input-sm w-full" placeholder="Min. 8 characters" value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} minLength={8} required />
-          </div>
-          <div>
-            <label className="label text-xs text-base-content/50 pb-1">Confirm new password</label>
-            <input type="password" className="input input-bordered input-sm w-full" placeholder="Repeat new password" value={form.confirmPassword} onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })} required />
-          </div>
-          <div className="flex justify-end pt-1">
-            <button type="submit" disabled={loading} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium bg-primary text-primary-content hover:bg-primary/90 transition-colors disabled:opacity-50">
-              {loading ? <span className="loading loading-spinner loading-xs" /> : "Update password"}
-            </button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
