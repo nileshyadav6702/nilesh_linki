@@ -13,7 +13,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "POST") {
     const { name, scopes, expires_at } = req.body as { name?: string; scopes?: string[]; expires_at?: string };
     const clean = Array.isArray(scopes) ? scopes.filter((x) => ALLOWED.has(x)) : [];
-    if (!name?.trim() || clean.length === 0) return res.status(400).json({ error: "name and at least one valid scope are required" });
+    if (typeof name !== "string" || !name.trim() || clean.length === 0) return res.status(400).json({ error: "name and at least one valid scope are required" });
+    if (name.trim().length > 80) return res.status(400).json({ error: "Keep the name under 80 characters" });
+    if (expires_at !== undefined && (typeof expires_at !== "string" || Number.isNaN(Date.parse(expires_at.replace(" ", "T"))))) return res.status(400).json({ error: "expires_at must be a date" });
     const created = createApiKey({ workspaceId: ctx.workspaceId, name: name.trim(), scopes: clean, createdBy: ctx.userId ?? undefined, expiresAt: expires_at });
     recordAudit(ctx, "api_key.created", "api_key", created.id, { name, scopes: clean });
     return res.status(201).json(created);
