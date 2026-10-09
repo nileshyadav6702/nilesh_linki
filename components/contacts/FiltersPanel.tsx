@@ -1,6 +1,8 @@
 import { useRef, useState, type ReactNode } from "react";
 import { RiCalendarLine, RiCloseLine, RiFilter3Line } from "react-icons/ri";
+import { format, parseISO, startOfMonth, subDays } from "date-fns";
 import { useDismiss } from "@/components/agents/leads/Listbox";
+import { DateRangeCalendar } from "@/components/ui/DateRangePicker";
 import { SearchSelect } from "@/components/agents/sources/kit";
 import { SIGNAL_LABEL } from "@/components/agents/ui";
 import { EMPTY_FILTERS, type ContactFilters } from "@/components/contacts/useContacts";
@@ -26,9 +28,9 @@ const SORT = [{ value: "newest", label: "Newest first" }, { value: "score_desc",
 
 const Label = ({ children }: { children: ReactNode }) => <div className="mb-1.5 text-[15px] text-base-content/80">{children}</div>;
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-const daysAgo = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return iso(d); };
-const fmt = (s: string) => new Date(`${s}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+const iso = (d: Date) => format(d, "yyyy-MM-dd");
+const daysAgo = (n: number) => iso(subDays(new Date(), n));
+const fmt = (s: string) => format(parseISO(s), "MMM d, yyyy");
 
 function DateRange({ from, to, onChange }: { from: string; to: string; onChange: (from: string, to: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -38,7 +40,7 @@ function DateRange({ from, to, onChange }: { from: string; to: string; onChange:
   useDismiss(open, [wrap], () => setOpen(false));
   const presets: Array<[string, () => [string, string]]> = [
     ["Last 7 days", () => [daysAgo(7), iso(new Date())]], ["Last 30 days", () => [daysAgo(30), iso(new Date())]],
-    ["Last 90 days", () => [daysAgo(90), iso(new Date())]], ["This month", () => { const d = new Date(); return [iso(new Date(d.getFullYear(), d.getMonth(), 1)), iso(d)]; }],
+    ["Last 90 days", () => [daysAgo(90), iso(new Date())]], ["This month", () => [iso(startOfMonth(new Date())), iso(new Date())]],
   ];
   const label = from || to ? `${from ? fmt(from) : "…"} – ${to ? fmt(to) : "today"}` : null;
   return (
@@ -50,7 +52,7 @@ function DateRange({ from, to, onChange }: { from: string; to: string; onChange:
         {label && <span role="button" tabIndex={0} aria-label="Clear date range" onClick={(e) => { e.stopPropagation(); onChange("", ""); }} className="ml-auto rounded p-0.5 text-base-content/45 hover:bg-base-200"><RiCloseLine size={16} /></span>}
       </button>
       {open && (
-        <div className="wizard-rise absolute left-0 top-full z-50 mt-2 w-[400px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-5 shadow-[var(--shadow-overlay)]">
+        <div ref={(el) => el?.scrollIntoView({ block: "nearest", behavior: "smooth" })} className="wizard-rise mt-2 w-full max-w-[420px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-5 shadow-[var(--shadow-overlay)]">
           <div className="flex items-center justify-between"><div className="text-[17px] font-medium">Select Date Range</div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="text-base-content/50 hover:text-base-content"><RiCloseLine size={20} /></button></div>
           <div className="mt-4 text-[14px] text-base-content/65">Quick Presets</div>
@@ -62,9 +64,9 @@ function DateRange({ from, to, onChange }: { from: string; to: string; onChange:
             })}
           </div>
           <div className="mt-4 text-[14px] text-base-content/65">Custom Range</div>
-          <div className="mt-2 grid grid-cols-2 gap-3">
-            <label className="text-[13px] text-base-content/60">From<input type="date" value={a} max={b || undefined} onChange={(e) => setA(e.target.value)} className="mt-1 h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-2 text-[14px] text-base-content" /></label>
-            <label className="text-[13px] text-base-content/60">To<input type="date" value={b} min={a || undefined} onChange={(e) => setB(e.target.value)} className="mt-1 h-10 w-full rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-2 text-[14px] text-base-content" /></label>
+          <div className="mt-2 rounded-[10px] border border-[var(--border-subtle)]">
+            {/* Remounts when a preset or Clear changes the range, so the calendar shows it. */}
+            <DateRangeCalendar key={`${a}|${b}`} value={a && b ? { from: a, to: b } : null} title="" className="w-full p-3" onChange={(r) => { setA(r.from); setB(r.to); }} />
           </div>
           <div className="mt-5 flex items-center justify-between">
             <button type="button" onClick={() => { setA(""); setB(""); }} className="text-[15px] underline underline-offset-2">Clear</button>

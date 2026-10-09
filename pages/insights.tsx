@@ -7,7 +7,7 @@ import { LuChartBarDecreasing } from "react-icons/lu";
 import { RiArrowDownSLine, RiCalendarLine, RiLineChartLine, RiUploadLine } from "react-icons/ri";
 import Listbox, { useDismiss } from "@/components/agents/leads/Listbox";
 import { DateRangeCalendar, toDay } from "@/components/ui/DateRangePicker";
-import MetricChart, { type ChartSeries } from "@/components/insights/MetricChart";
+import TrendChart, { type ChartSeries } from "@/components/ui/TrendChart";
 import { AgentTable, ChannelTable, SourceTable } from "@/components/insights/Tables";
 import { Card, HELP, InfoTip, LoadingPill, categoryLabel, rate } from "@/components/insights/kit";
 import { requireSignedIn } from "@/lib/agents/page-auth";
@@ -164,7 +164,7 @@ export default function Insights() {
                   <div className="text-[20px] font-medium">No activity in this period</div>
                   <div className="text-[16px] text-base-content/60">Once your agents find and contact leads, their performance will show up here.</div>
                 </div>
-              ) : data ? <MetricChart key={`${metric}:${data.period.from}:${data.period.to}:${agent}`} data={data.series} series={SERIES[metric]} /> : <div className="h-[340px]" />}
+              ) : data ? <TrendChart key={`${metric}:${data.period.from}:${data.period.to}:${agent}`} data={data.series} series={[SERIES[metric]]} /> : <div className="h-[340px]" />}
             </div>
           </Card>
 

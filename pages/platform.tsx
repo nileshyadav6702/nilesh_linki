@@ -3,6 +3,8 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import SignalDataSettings from "@/components/agents/SignalDataSettings";
+import { addDays, format } from "date-fns";
+import DateField from "@/components/ui/DateField";
 
 type Tab = "overview" | "deliverability" | "automation" | "ai_data" | "integrations" | "admin";
 type Data = Record<string, unknown>;
@@ -151,7 +153,7 @@ export default function PlatformPage() {
             <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 rounded-[10px] border border-[var(--border-subtle)] bg-base-200 p-3">
               {API_KEY_SCOPES.map(s=><label key={s} className="flex items-center gap-1.5 text-xs text-base-content/70"><input type="checkbox" name={`scope_${s}`} defaultChecked={DEFAULT_API_KEY_SCOPES.has(s)} className="checkbox checkbox-xs"/>{s}</label>)}
             </div>
-            <label className="grid gap-1 text-xs text-base-content/55">Expires (optional — never expires if left blank)<Input name="expires_at" type="date"/></label>
+            <div className="grid gap-1 text-xs text-base-content/55">Expires (optional — never expires if left blank)<ExpiryField/></div>
             <Submit>Create key</Submit>
           </Form>
           {revealedKey && <div className="mt-3 mb-4 rounded-lg bg-warning/10 border border-warning/30 p-3">
@@ -173,6 +175,8 @@ export default function PlatformPage() {
 
 function Section({title,subtitle,children}:{title:string;subtitle?:string;children:React.ReactNode}) { return <section className="overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-base-100 p-6 shadow-[var(--shadow-raised)]"><h2 className="text-[15px] font-semibold text-base-content">{title}</h2>{subtitle&&<p className="mb-4 mt-1 text-xs text-base-content/45">{subtitle}</p>}<div className={subtitle?"":"mt-4"}>{children}</div></section>; }
 function Form({children,onSubmit}:{children:React.ReactNode;onSubmit:(e:FormEvent<HTMLFormElement>)=>void}) { return <form onSubmit={onSubmit} className="mb-4 grid gap-2">{children}</form>; }
+/** Posts expires_at (YYYY-MM-DD) with the form; only future days can be picked. */
+function ExpiryField() { const [v,setV]=useState(""); return <DateField name="expires_at" value={v} onChange={setV} min={format(addDays(new Date(),1),"yyyy-MM-dd")} placeholder="Never expires" label="Expires"/>; }
 function Input(props:React.InputHTMLAttributes<HTMLInputElement>) { return <input {...props} className="input input-bordered input-sm w-full text-sm"/>; }
 function Select({name,options}:{name:string;options:string[]}) { return <select name={name} className="select select-bordered select-sm w-full">{options.map(x=><option key={x} value={x}>{x.replaceAll("_"," ")}</option>)}</select>; }
 function Submit({children}:{children:React.ReactNode}) { return <button className="btn btn-primary btn-sm justify-self-start" type="submit">{children}</button>; }

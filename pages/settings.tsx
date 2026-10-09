@@ -15,6 +15,9 @@ import {
   RiRobot2Line, RiPauseLine, RiPlayLine,
 } from "react-icons/ri";
 import { ModelPicker, type OrModel } from "@/components/ui/ModelPicker";
+import DateField from "@/components/ui/DateField";
+import { Bar, BarChart, Cell, ResponsiveContainer } from "recharts";
+import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ALL_TOUR_PAGES, TOUR_PAGE_LABELS, replayPageTour, type TourPage } from "@/lib/tour";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -581,10 +584,10 @@ function LinkedInTab({ initialAccounts }: { initialAccounts: LiAccount[] }) {
 function RampDiagram({ startDate, target }: { startDate: string; target: number }) {
   const daysToFull = Math.ceil(target / 2);
   const today = new Date();
-  const start = startDate ? new Date(startDate) : today;
-  const daysActive = Math.max(0, Math.floor((today.getTime() - start.getTime()) / 86_400_000));
+  const start = startDate ? parseISO(startDate) : today;
+  const daysActive = Math.max(0, differenceInCalendarDays(today, start));
   const currentLimit = Math.min(target, Math.max(2, (daysActive + 1) * 2));
-  const fullDate = new Date(start.getTime() + (daysToFull - 1) * 86_400_000);
+  const fullDate = addDays(start, daysToFull - 1);
 
   // 7 sample points for the bar chart (day 1, day 4, day 7, ... up to full)
   const points: { day: number; val: number }[] = [];
@@ -596,23 +599,18 @@ function RampDiagram({ startDate, target }: { startDate: string; target: number 
     points.push({ day: daysToFull, val: target });
   }
 
-  const BAR_MAX_PX = 56; // 14 * 4 = h-14
+  const BAR_MAX_PX = 56;
 
   return (
     <div className="rounded-[10px] bg-base-200 border border-[var(--border-subtle)] p-3">
-      <div className="flex items-end gap-1 mb-2" style={{ height: BAR_MAX_PX }}>
-        {points.map(({ day, val }) => {
-          const heightPx = Math.max(3, Math.round((val / target) * BAR_MAX_PX));
-          const isPast = daysActive + 1 >= day;
-          return (
-            <div key={day} className="flex-1 flex items-end">
-              <div
-                className={`w-full rounded-sm ${isPast ? "bg-primary" : "bg-base-200"}`}
-                style={{ height: heightPx }}
-              />
-            </div>
-          );
-        })}
+      <div className="mb-2" style={{ height: BAR_MAX_PX }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={points} margin={{ top: 0, right: 0, bottom: 0, left: 0 }} barCategoryGap={4}>
+            <Bar dataKey="val" radius={[2, 2, 0, 0]} minPointSize={3} animationDuration={500}>
+              {points.map(({ day }) => <Cell key={day} fill={daysActive + 1 >= day ? "var(--color-primary)" : "color-mix(in oklab, var(--color-base-content) 12%, transparent)"} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       </div>
       <div className="flex items-center justify-between text-[10px] text-base-content/40">
         <span>Day 1 — 2/day</span>
@@ -623,7 +621,7 @@ function RampDiagram({ startDate, target }: { startDate: string; target: number 
           Today: <span className="text-base-content font-medium">{currentLimit}/day</span>
         </span>
         <span className="text-base-content/40">
-          Full volume: {fullDate.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+          Full volume: {format(fullDate, "d MMM")}
         </span>
       </div>
     </div>
@@ -1364,12 +1362,7 @@ function EmailTab({ initialAccounts }: { initialAccounts: EmailAccount[] }) {
                   <>
                     <div>
                       <label className="label text-xs text-base-content/50 pb-1">Ramp start date</label>
-                      <input
-                        type="date"
-                        className="input input-bordered input-sm w-full"
-                        value={form.ramp_start_date}
-                        onChange={(e) => setForm(f => ({ ...f, ramp_start_date: e.target.value }))}
-                      />
+                      <DateField value={form.ramp_start_date} onChange={(v) => setForm(f => ({ ...f, ramp_start_date: v }))} label="Ramp start date" clearable={false} />
                     </div>
                     <RampDiagram startDate={form.ramp_start_date} target={form.daily_email_limit} />
                   </>

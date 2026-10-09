@@ -4,6 +4,7 @@ import {
   RiPauseCircleLine, RiPlayCircleLine, RiRadarLine, RiSearchEyeLine, RiSettings3Line, RiSparkling2Line, RiUserAddLine, RiUserFollowLine,
   RiUserSearchLine, RiInformationLine, RiFireLine,
 } from "react-icons/ri";
+import TrendChart from "@/components/ui/TrendChart";
 import { Avatar, IconTile, Panel, SectionHeading, Segmented, StatTile, timeAgo, type Tone } from "@/components/agents/ui";
 
 export interface FunnelRow { signal_type: string; label: string; detected: number; qualified: number; contacted: number; accepted: number; replied: number; positive: number; meetings: number }
@@ -108,44 +109,10 @@ function ActionRow({ icon, tone, title, subtitle, action }: { icon: ReactNode; t
   );
 }
 
-/** Smooth multi-series line chart with a soft area under "leads found". */
+/** Daily leads found and sends (Recharts), with the shared dated tooltip. */
 function Chart({ days }: { days: DayPoint[] }) {
-  const W = 720, H = 220, PL = 36, PB = 26, PT = 10;
-  const max = Math.max(4, ...days.flatMap((d) => SERIES.map((s) => d[s.key])));
-  const top = Math.ceil(max / 4) * 4;
-  const x = (i: number) => PL + (days.length <= 1 ? (W - PL) / 2 : (i / (days.length - 1)) * (W - PL - 8));
-  const y = (v: number) => PT + (1 - v / top) * (H - PT - PB);
-  const path = (key: (typeof SERIES)[number]["key"]) =>
-    days.map((d, i) => {
-      if (i === 0) return `M${x(0)},${y(d[key])}`;
-      const cx = (x(i - 1) + x(i)) / 2;
-      return `C${cx},${y(days[i - 1][key])} ${cx},${y(d[key])} ${x(i)},${y(d[key])}`;
-    }).join(" ");
   if (!days.length) return <p className="py-14 text-center text-sm text-base-content/45">No activity in this period yet.</p>;
-  const ticks = [0, 1, 2, 3, 4].map((k) => (top / 4) * k);
-  const every = Math.ceil(days.length / 8);
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="mt-4 h-[220px] w-full" role="img" aria-label="Daily leads found and messages sent">
-      <defs>
-        <linearGradient id="found-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#5db8a6" stopOpacity="0.28" /><stop offset="100%" stopColor="#5db8a6" stopOpacity="0" /></linearGradient>
-      </defs>
-      {ticks.map((t) => (
-        <g key={t}>
-          <line x1={PL} x2={W} y1={y(t)} y2={y(t)} stroke="var(--border-subtle)" strokeDasharray={t ? "3 4" : undefined} />
-          <text x={PL - 8} y={y(t) + 4} textAnchor="end" fontSize="11" fill="#8e8b82">{Math.round(t)}</text>
-        </g>
-      ))}
-      <path d={`${path("found")} L${x(days.length - 1)},${y(0)} L${x(0)},${y(0)} Z`} fill="url(#found-area)" />
-      {SERIES.map((s) => <path key={s.key} d={path(s.key)} fill="none" stroke={s.color} strokeWidth={s.key === "found" ? 2.25 : 1.75} strokeLinecap="round" />)}
-      {days.map((d, i) => (
-        <g key={d.day}>
-          <title>{`${d.day}: ${d.found} leads found, ${d.invitations} invitations, ${d.messages} messages, ${d.emails} emails`}</title>
-          <rect x={x(i) - 10} y={PT} width={20} height={H - PT - PB} fill="transparent" />
-          {i % every === 0 && <text x={x(i)} y={H - 6} textAnchor="middle" fontSize="11" fill="#8e8b82">{d.day.slice(5)}</text>}
-        </g>
-      ))}
-    </svg>
-  );
+  return <div className="mt-4"><TrendChart data={days} series={SERIES} height={240} compact /></div>;
 }
 
 interface Described { event: string; who?: string; sub?: string; avatar: boolean; icon: ReactNode; tone: Tone; label: string; labelIcon: ReactNode; labelTone: "ok" | "muted" | "error" | "plain" }

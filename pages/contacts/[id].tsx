@@ -7,6 +7,7 @@ import { getServerWorkspace, loginRedirect } from "@/lib/server-workspace";
 import { emailStatusBadge } from "@/lib/email-status";
 import { toast } from "sonner";
 import ContactSignals from "@/components/agents/ContactSignals";
+import DateField from "@/components/ui/DateField";
 import {
   RiArrowLeftLine, RiExternalLinkLine, RiMailLine, RiBuilding2Line,
   RiUserFollowLine, RiUserAddLine, RiMapPinLine, RiBriefcaseLine,
@@ -235,15 +236,7 @@ function TodoDetailModal({ todo, onClose, onSave }: {
           />
           <div>
             <label className="block text-[11px] text-base-content/40 uppercase tracking-wide mb-1.5">Due date</label>
-            <div className="relative w-48">
-              <RiCalendarLine size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30 pointer-events-none" />
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-base-200 border border-[var(--border)] rounded-xl text-sm text-base-content/80 focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-              />
-            </div>
+            <DateField value={dueDate} onChange={setDueDate} label="Due date" placeholder="No due date" className="w-56" />
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[var(--border-subtle)]">
@@ -414,15 +407,7 @@ function TodoModal({ targetId, onClose, onSave }: {
           />
           <div>
             <label className="block text-[11px] text-base-content/40 uppercase tracking-wide mb-1.5">Due date</label>
-            <div className="relative w-48">
-              <RiCalendarLine size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/30 pointer-events-none" />
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-base-200 border border-[var(--border)] rounded-xl text-sm text-base-content/80 focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-              />
-            </div>
+            <DateField value={dueDate} onChange={setDueDate} label="Due date" placeholder="No due date" className="w-56" />
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-[var(--border-subtle)]">

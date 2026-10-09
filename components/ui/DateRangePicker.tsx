@@ -52,14 +52,14 @@ function Header({ month, setMonth, max }: { month: Date; setMonth: (d: Date) => 
 }
 
 /** Range calendar: `onChange` fires once both ends are picked. Future days are off by default. */
-export function DateRangeCalendar({ value, onChange, allowFuture = false, title = "Pick a start and an end date" }: {
-  value: { from: string; to: string } | null; onChange: (r: { from: string; to: string }) => void; allowFuture?: boolean; title?: string;
+export function DateRangeCalendar({ value, onChange, allowFuture = false, title = "Pick a start and an end date", className = "w-[340px] max-w-[calc(100vw-32px)] p-4" }: {
+  value: { from: string; to: string } | null; onChange: (r: { from: string; to: string }) => void; allowFuture?: boolean; title?: string; className?: string;
 }) {
   const today = startOfDay(new Date());
   const [draft, setDraft] = useState<DateRange | undefined>(value ? { from: fromDay(value.from), to: fromDay(value.to) } : undefined);
   const [month, setMonth] = useState(startOfMonth(fromDay(value?.to) ?? today));
   return (
-    <div className="w-[340px] max-w-[calc(100vw-32px)] p-4">
+    <div className={className}>
       {title && <div className="mb-3 text-[14px] text-base-content/65">{title}</div>}
       <Header month={month} setMonth={setMonth} max={allowFuture ? undefined : today} />
       <DayPicker mode="range" weekStartsOn={1} month={month} onMonthChange={setMonth} hideNavigation
