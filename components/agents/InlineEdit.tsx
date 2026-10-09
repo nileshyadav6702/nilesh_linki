@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { RiCheckLine, RiCloseLine, RiLoader4Line, RiPencilLine } from "react-icons/ri";
+import { RiCheckLine, RiCloseLine, RiLoader4Line, RiEditBoxLine } from "react-icons/ri";
 
 /** Inline editing for the lead drawer header: a pencil button, then side-by-side inputs with ✓ / ✕. */
 
@@ -8,8 +8,8 @@ export interface EditField { key: string; label: string; value: string; placehol
 export function PencilButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} aria-label={label} title={label}
-      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-base-content/40 transition-colors hover:bg-base-200 hover:text-base-content">
-      <RiPencilLine size={15} />
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] text-base-content/45 transition-colors hover:bg-base-200 hover:text-base-content">
+      <RiEditBoxLine size={19} />
     </button>
   );
 }
