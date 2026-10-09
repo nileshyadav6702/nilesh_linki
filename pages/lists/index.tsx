@@ -2,6 +2,7 @@ import Head from "next/head";
 import { useState, useEffect, useRef } from "react";
 import { GetServerSideProps } from "next";
 import { useRouter } from "next/router";
+import ContactsHeader from "@/components/contacts/ContactsHeader";
 import { getDb } from "@/lib/db";
 import { getServerWorkspace, loginRedirect } from "@/lib/server-workspace";
 import { toast } from "sonner";
@@ -79,7 +80,8 @@ export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
 export default function ListsPage({ initialLists }: { initialLists: List[] }) {
   const router = useRouter();
   const [lists, setLists] = useState<List[]>(initialLists);
-  const [showModal, setShowModal] = useState(false);
+  // "Add leads → Import into a list" on the Contacts page lands here with ?new=1.
+  const [showModal, setShowModal] = useState(() => router.query.new === "1");
   const [form, setForm] = useState({ name: "", description: "" });
   const [loading, setLoading] = useState(false);
   const [jobs, setJobs] = useState<ImportJob[]>([]);
@@ -156,20 +158,15 @@ export default function ListsPage({ initialLists }: { initialLists: List[] }) {
       <meta name="robots" content="noindex, nofollow" />
     </Head>
     <div className="space-y-6">
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-        <div>
-          <p className="mb-2 text-[13px] font-medium text-base-content/45">Lead management</p>
-          <h1 className="text-[30px] font-semibold leading-[1.1] tracking-[-.03em] text-base-content">Lists</h1>
-          <p className="mt-2 text-[15px] text-base-content/50">Lead lists imported from Sales Navigator.</p>
-        </div>
+      <ContactsHeader tab="lists" action={
         <button
           data-tour="lists-new"
-          className="inline-flex items-center gap-1.5 h-10 px-4 rounded-[10px] text-sm font-semibold bg-primary text-primary-content hover:bg-[var(--primary-hover)] transition-colors shrink-0"
+          className="inline-flex items-center gap-1.5 h-11 px-4 rounded-[10px] text-[15px] font-medium bg-primary text-primary-content hover:bg-[var(--primary-hover)] transition-colors shrink-0 shadow-[0_4px_12px_-4px_rgba(204,120,92,0.6)]"
           onClick={() => setShowModal(true)}
         >
           <RiAddLine size={16} /> New List
         </button>
-      </div>
+      } />
 
       {/* Import jobs panel */}
       {activeJobs.length > 0 && (

@@ -1,601 +1,303 @@
 import Head from "next/head";
-import { useState, useEffect, useCallback, useRef } from "react";
-import { GetServerSideProps } from "next";
-import { getDb } from "@/lib/db";
-import { getServerWorkspace, loginRedirect } from "@/lib/server-workspace";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
-  RiExternalLinkLine, RiArrowLeftSLine, RiArrowRightSLine,
-  RiUserFollowLine, RiUserAddLine, RiUserLine,
-  RiMessage2Line, RiReplyLine, RiMailLine,
-  RiSearchLine, RiAddLine, RiListCheck2, RiDeleteBinLine,
+  RiAddCircleLine, RiAlertLine, RiArrowDownSLine, RiDeleteBin6Line, RiDownload2Line, RiFilter3Line, RiListUnordered, RiLoader4Line,
+  RiMailLine, RiPhoneLine, RiPlugLine, RiSearchLine, RiUpload2Line,
 } from "react-icons/ri";
-import FilterBar, { ActiveFilter, filtersToParams } from "@/components/ui/FilterBar";
-import { emailStatusBadge } from "@/lib/email-status";
 import LeadDrawer from "@/components/agents/LeadDrawer";
-import { Flames } from "@/components/agents/ui";
+import { useDismiss } from "@/components/agents/leads/Listbox";
+import { Modal } from "@/components/agents/sources/kit";
+import ContactsHeader from "@/components/contacts/ContactsHeader";
+import ContactsTable from "@/components/contacts/ContactsTable";
+import FiltersPanel from "@/components/contacts/FiltersPanel";
+import Pagination from "@/components/contacts/Pagination";
+import { activeCount, contactParams, useContacts, type ContactRow } from "@/components/contacts/useContacts";
+import { requireSignedIn } from "@/lib/agents/page-auth";
 
-const PAGE_SIZE = 50;
+export const getServerSideProps = requireSignedIn;
 
-interface Contact {
-  id: string;
-  linkedin_url: string | null;
-  full_name: string | null;
-  title: string | null;
-  company: string | null;
-  location: string | null;
-  email: string | null;
-  email_status: string | null;
-  phone: string | null;
-  degree: number | null;
-  connection_requested_at: string | null;
-  connected_at: string | null;
-  message_sent_at: string | null;
-  last_replied_at: string | null;
-  apollo_enriched_at: string | null;
-  seniority: string | null;
-  created_at: string;
-  lead_score: number | null;
-  intent_score: number | null;
-  top_signal: string | null;
-  signal_count: number;
+interface ListRow { id: string; name: string; target_count: number }
+
+async function call(url: string, method: string, body?: unknown) {
+  const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error ?? `Request failed (${r.status})`);
+  return d;
 }
 
-interface ListOption {
-  id: string;
-  name: string;
-  target_count: number;
+function csv(rows: ContactRow[], name: string) {
+  const cols: Array<[string, (r: ContactRow) => unknown]> = [
+    ["name", (r) => r.full_name], ["title", (r) => r.title ?? r.headline], ["company", (r) => r.company], ["email", (r) => r.email], ["phone", (r) => r.phone],
+    ["linkedin", (r) => r.linkedin_url], ["score", (r) => r.lead_score ?? r.intent_score], ["list", (r) => r.list_name], ["agent", (r) => r.agent_name], ["status", (r) => r.agent_status], ["imported", (r) => r.created_at],
+  ];
+  const cell = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const text = [cols.map(([c]) => c).join(","), ...rows.map((r) => cols.map(([, f]) => cell(f(r))).join(","))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+  a.download = name; a.click();
+  URL.revokeObjectURL(a.href);
 }
 
-export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
-  const db = getDb();
-  const workspace = await getServerWorkspace(req, res);
-  if (!workspace) return loginRedirect(req);
-  const { workspaceId } = workspace;
-  const lists = db
-    .prepare(
-      `SELECT l.id, l.name, COUNT(lt.target_id) as target_count
-       FROM lists l
-       LEFT JOIN list_targets lt ON lt.list_id = l.id
-       WHERE l.workspace_id = ?
-       GROUP BY l.id
-       ORDER BY l.name ASC`
-    )
-    .all(workspaceId) as ListOption[];
-  const total = (
-    db
-      .prepare("SELECT COUNT(*) as c FROM targets t WHERE t.workspace_id=? AND EXISTS (SELECT 1 FROM list_targets lt WHERE lt.target_id = t.id)")
-      .get(workspaceId) as { c: number }
-  ).c;
-  return { props: { lists, total } };
-};
-
-function ConnectionIcon({ t }: { t: Contact }) {
-  if (t.degree === 1) {
-    return <span title="Connected" className="text-success"><RiUserFollowLine size={14} /></span>;
-  }
-  if (t.connection_requested_at) {
-    return <span title="Request sent" className="text-warning"><RiUserAddLine size={14} /></span>;
-  }
+/** Toolbar dropdown: a button and a floating panel of items. */
+function Dropdown({ label, icon, disabled, children, width = 280 }: { label: ReactNode; icon: ReactNode; disabled?: boolean; children: (close: () => void) => ReactNode; width?: number }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useDismiss(open, [wrap], () => setOpen(false));
   return (
-    <span title={t.degree === 2 ? "2nd degree" : t.degree === 3 ? "3rd degree" : "Not connected"} className="text-base-content/20">
-      <RiUserLine size={14} />
-    </span>
+    <div ref={wrap} className="relative">
+      <button type="button" disabled={disabled} onClick={() => setOpen(!open)} aria-expanded={open}
+        className={`inline-flex h-11 items-center gap-2 rounded-[8px] border bg-base-100 px-4 text-[15px] transition-colors disabled:cursor-not-allowed disabled:text-base-content/40 ${open ? "border-base-content/70" : "border-[var(--border-subtle)] enabled:hover:bg-base-200"}`}>
+        {icon}{label}<RiArrowDownSLine size={18} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && <div style={{ width }} className="wizard-rise absolute right-0 top-full z-40 mt-2 max-h-[420px] overflow-y-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">{children(() => setOpen(false))}</div>}
+    </div>
   );
 }
 
-export default function ContactsPage({ lists, total: initialTotal }: { lists: ListOption[]; total: number }) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [total, setTotal] = useState(initialTotal);
-  const [page, setPage] = useState(0);
-  const [listId, setListId] = useState("");
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filters, setFilters] = useState<ActiveFilter[]>([]);
-  const [loading, setLoading] = useState(true);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const Item = ({ icon, children, onClick, danger, disabled }: { icon?: ReactNode; children: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean }) => (
+  <button type="button" onClick={onClick} disabled={disabled}
+    className={`flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-[15px] disabled:cursor-not-allowed disabled:opacity-45 ${danger ? "text-error hover:bg-error/10" : "hover:bg-base-200"}`}>
+    {icon}<span className="min-w-0 flex-1">{children}</span>
+  </button>
+);
 
-  const [showNewContact, setShowNewContact] = useState(false);
-  const [newContactForm, setNewContactForm] = useState({ full_name: "", linkedin_url: "", title: "", company: "", location: "", email: "", phone: "", list_id: "" });
-  const [newContactLoading, setNewContactLoading] = useState(false);
+function Confirm({ title, text, action, onCancel, onConfirm }: { title: string; text: string; action: string; onCancel: () => void; onConfirm: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <button type="button" tabIndex={-1} aria-label="Cancel" onClick={() => !busy && onCancel()} className="absolute inset-0 bg-[#141413]/45" />
+      <div role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" className="wizard-rise relative w-full max-w-[640px] overflow-hidden rounded-[12px] bg-base-100 shadow-[var(--shadow-overlay)]">
+        <div className="flex items-start gap-5 px-8 py-7">
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#fdf3c4] text-[#b45309]"><RiAlertLine size={26} /></span>
+          <div><div id="confirm-title" className="text-[20px] font-medium">{title}</div><p className="mt-2 text-[16px] leading-relaxed text-base-content/75">{text}</p></div>
+        </div>
+        <div className="flex justify-end gap-3 bg-primary/[0.06] px-8 py-4">
+          <button type="button" autoFocus disabled={busy} onClick={onCancel} className="h-11 rounded-[6px] px-4 text-[15px] font-medium hover:bg-base-200">Cancel</button>
+          <button type="button" disabled={busy} onClick={async () => { setBusy(true); try { await onConfirm(); } finally { setBusy(false); } }}
+            className="inline-flex h-11 items-center gap-2 rounded-[6px] bg-primary px-5 text-[15px] font-semibold text-primary-content hover:bg-[var(--primary-hover)] disabled:opacity-70">
+            {busy && <RiLoader4Line size={16} className="animate-spin" />}{action}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
+/** Contacts: every contact in the workspace (agents, lists and imports) in one filterable table. */
+export default function Contacts() {
+  const c = useContacts();
+  const [qText, setQText] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [showAddToList, setShowAddToList] = useState(false);
-  const [addToListId, setAddToListId] = useState("");
-  const [addToListLoading, setAddToListLoading] = useState(false);
-
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [drawer, setDrawer] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [agents, setAgents] = useState<Array<{ id: string; name: string }>>([]);
+  const [lists, setLists] = useState<ListRow[]>([]);
+  const [confirm, setConfirm] = useState<{ ids: string[] } | null>(null);
+  const [newList, setNewList] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const rows = useMemo(() => c.rows ?? [], [c.rows]);
+  const sel = [...selected];
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-
+  const loadLists = useCallback(() => { fetch("/api/lists").then((r) => r.json()).then((l) => setLists(Array.isArray(l) ? l : [])).catch(() => {}); }, []);
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [search]);
+    loadLists();
+    fetch("/api/agents").then((r) => r.json()).then((a) => setAgents((Array.isArray(a) ? a : []).map((x: { id: string; name: string }) => ({ id: x.id, name: x.name })))).catch(() => {});
+  }, [loadLists]);
+  useEffect(() => { const t = setTimeout(() => c.search(qText), 250); return () => clearTimeout(t); }, [qText, c.search]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetch_ = useCallback(async (p: number, lid: string, q: string, activeFilters: ActiveFilter[]) => {
-    setLoading(true);
-    const params = new URLSearchParams({ page: String(p), limit: String(PAGE_SIZE) });
-    if (lid) params.set("list_id", lid);
-    if (q) params.set("search", q);
-    const filterParams = filtersToParams(activeFilters);
-    filterParams.forEach((v, k) => params.set(k, v));
-    const res = await fetch(`/api/targets?${params}`);
-    if (res.ok) {
-      const data = await res.json();
-      setContacts(data.contacts);
-      setTotal(data.total);
+  const { load } = c;
+  const refresh = useCallback(() => { void load(); loadLists(); }, [load, loadLists]);
+  const toggle = useCallback((id: string) => setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; }), []);
+  const toggleAll = useCallback((on: boolean) => setSelected(on ? new Set(rows.map((r) => r.id)) : new Set()), [rows]);
+
+  const decide = useCallback(async (id: string, d: "approve" | "reject") => {
+    const row = rows.find((r) => r.id === id);
+    try {
+      if (d === "approve" && row?.agent_status === "qualified") await call(`/api/leads/${id}`, "PATCH", { action: "enroll" });
+      else if (row?.agent_status === "drafted") await call(`/api/copilot/${id}`, "POST", { decision: d, reason: d === "reject" ? "Rejected in Contacts" : undefined });
+      else await call(`/api/leads/${id}`, "PATCH", { action: "skip", reason: "Rejected in Contacts" });
+      toast.success(d === "approve" ? "Approved" : "Rejected");
+      void load();
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Could not update the contact"); }
+  }, [rows, load]);
+
+  const remove = useCallback(async (id: string) => {
+    const row = rows.find((r) => r.id === id);
+    try {
+      if (row?.agent_id) await call(`/api/leads/${id}`, "PATCH", { action: "remove" });
+      else if (c.filters.list && c.filters.list !== "none") await call(`/api/lists/${c.filters.list}/remove-members`, "POST", { contact_ids: [id], dry_run: false });
+      else throw new Error("Filter by a list first to remove this contact from it");
+      toast.success("Removed from list and campaign");
+      refresh();
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Could not remove the contact"); }
+  }, [rows, c.filters.list, refresh]);
+
+  async function addToList(listId: string, name: string) {
+    setBusy(true);
+    try {
+      await call(`/api/lists/${listId}/add-members`, "POST", { contact_ids: sel });
+      toast.success(`Added ${sel.length} contact${sel.length === 1 ? "" : "s"} to "${name}"`);
+      refresh();
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Could not add to the list"); }
+    finally { setBusy(false); }
+  }
+
+  async function removeFromList() {
+    const listId = c.filters.list;
+    if (!listId || listId === "none") return toast.error("Filter by a list first, then remove the selected contacts from it");
+    setBusy(true);
+    try {
+      await call(`/api/lists/${listId}/remove-members`, "POST", { contact_ids: sel, dry_run: false });
+      toast.success(`Removed ${sel.length} from the list`);
+      setSelected(new Set()); refresh();
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Could not remove from the list"); }
+    finally { setBusy(false); }
+  }
+
+  async function exportAll() {
+    setBusy(true);
+    try {
+      const all: ContactRow[] = [];
+      for (let off = 0; off < Math.min(c.total, 10_000); off += 100) {
+        const d = await call(`/api/leads?${contactParams(c.filters, c.q, { limit: "100", offset: String(off) })}`, "GET");
+        all.push(...(d.leads as ContactRow[]));
+      }
+      csv(all, "contacts.csv");
+      toast.success(`Exported ${all.length} contacts`);
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Export failed"); }
+    finally { setBusy(false); }
+  }
+
+  async function enrichEmails() {
+    setBusy(true);
+    let found = 0;
+    for (const id of sel) {
+      try { if ((await call(`/api/leads/${id}`, "PATCH", { action: "find_email" })).found) found++; } catch { /* keep going */ }
     }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    fetch_(page, listId, debouncedSearch, filters);
-    setSelected(new Set());
-  }, [page, listId, debouncedSearch, filters, fetch_]);
-
-  function changeList(lid: string) { setListId(lid); setPage(0); }
-  function changeSearch(q: string) { setSearch(q); setPage(0); }
-  function changeFilters(f: ActiveFilter[]) { setFilters(f); setPage(0); }
-
-  const allPageSelected = contacts.length > 0 && contacts.every((c) => selected.has(c.id));
-
-  function toggleAll() {
-    if (allPageSelected) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(contacts.map((c) => c.id)));
-    }
+    setBusy(false);
+    toast.success(`Found ${found} email${found === 1 ? "" : "s"} for ${sel.length} contact${sel.length === 1 ? "" : "s"}`);
+    void c.load();
   }
 
-  function toggleOne(id: string) {
-    setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  }
-
-  async function addSelectedToList() {
-    if (!addToListId || selected.size === 0) return;
-    setAddToListLoading(true);
-    const res = await fetch(`/api/lists/${addToListId}/add-members`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contact_ids: [...selected] }),
-    });
-    setAddToListLoading(false);
-    const data = await res.json();
-    if (!res.ok) { toast.error(data.error ?? "Failed to add to list"); return; }
-    const listName = lists.find((l) => l.id === addToListId)?.name ?? "list";
-    toast.success(
-      data.already_members > 0
-        ? `Added ${data.added} to ${listName} (${data.already_members} already there)`
-        : `Added ${data.added} to ${listName}`
-    );
-    setShowAddToList(false);
-    setAddToListId("");
-    setSelected(new Set());
-  }
-
-  async function deleteSelected() {
-    if (selected.size === 0) return;
-    setDeleteLoading(true);
-    const res = await fetch("/api/targets", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target_ids: [...selected] }),
-    });
-    setDeleteLoading(false);
-    const data = await res.json();
-    if (!res.ok) { toast.error(data.error ?? "Failed to delete contacts"); return; }
-    toast.success(`Deleted ${data.deleted} contact${data.deleted !== 1 ? "s" : ""}`);
-    setShowDeleteConfirm(false);
-    setSelected(new Set());
-    fetch_(page, listId, debouncedSearch, filters);
-  }
-
-  async function createContact(e: React.FormEvent) {
-    e.preventDefault();
-    setNewContactLoading(true);
-    const res = await fetch("/api/targets", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newContactForm),
-    });
-    setNewContactLoading(false);
-    if (!res.ok) {
-      const data = await res.json();
-      toast.error(data.error ?? "Failed to create contact");
-      return;
-    }
-    toast.success("Contact created");
-    setShowNewContact(false);
-    setNewContactForm({ full_name: "", linkedin_url: "", title: "", company: "", location: "", email: "", phone: "", list_id: "" });
-    fetch_(0, listId, debouncedSearch, filters);
-    setPage(0);
-  }
-
-  const hasActiveFilters = filters.length > 0 || listId || search;
+  const filterCount = activeCount(c.filters);
 
   return (
     <>
-      <Head>
-        <title>Contacts — Linki</title>
-        <meta name="robots" content="noindex, nofollow" />
-      </Head>
-      <div>
-        {/* Header */}
-        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end mb-6">
-          <div>
-            <p className="mb-2 text-[13px] font-medium text-base-content/45">Directory</p>
-            <h1 className="text-[30px] font-semibold leading-[1.1] tracking-[-.03em] text-base-content">Contacts</h1>
-            <p className="mt-2 text-[15px] text-base-content/50">
-              {total.toLocaleString()} contact{total !== 1 ? "s" : ""}
-              {hasActiveFilters ? " matching filters" : " total"}
-            </p>
+      <Head><title>Contacts — Linki</title></Head>
+      <ContactsHeader tab="contacts" />
+      <div className="flex flex-col gap-4 lg:-mb-10 lg:h-[calc(100vh-200px)] lg:min-h-[520px]">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative w-full sm:w-[340px]">
+            <RiSearchLine size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base-content/45" />
+            <input value={qText} onChange={(e) => setQText(e.target.value)} placeholder="Search by name, email, company, location" aria-label="Search contacts"
+              className="h-11 w-full rounded-[8px] border border-[var(--border-subtle)] bg-base-100 pl-10 pr-3 text-[15px] outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]" />
           </div>
-          <button
-            className="inline-flex items-center gap-1.5 h-10 px-4 rounded-[10px] text-sm font-semibold bg-primary text-primary-content hover:bg-[var(--primary-hover)] transition-colors"
-            onClick={() => setShowNewContact(true)}
-          >
-            <RiAddLine size={16} /> New Contact
-          </button>
+          <div className="relative">
+            <button type="button" onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen}
+              className={`inline-flex h-11 items-center gap-2 rounded-[8px] border px-4 text-[15px] font-medium transition-colors ${filterCount ? "border-primary/60 bg-primary/5 text-primary" : filtersOpen ? "border-base-content/70 bg-base-100" : "border-[var(--border-subtle)] bg-base-100 hover:bg-base-200"}`}>
+              <RiFilter3Line size={18} /> Add more filters
+              {filterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[12px] text-primary-content">{filterCount}</span>}
+              <RiArrowDownSLine size={18} className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+            </button>
+            {filtersOpen && <FiltersPanel filters={c.filters} patch={c.patch} clear={c.clear} onClose={() => setFiltersOpen(false)} agents={agents} lists={lists} signals={c.signals} />}
+          </div>
+          {filterCount > 0 && <button type="button" onClick={c.clear} className="text-[15px] text-base-content/75 hover:text-base-content hover:underline">Clear all</button>}
+
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            <Dropdown label="Add to list" icon={<RiListUnordered size={18} />} disabled={!sel.length || busy} width={300}>
+              {(close) => (
+                <>
+                  {lists.map((l) => <Item key={l.id} icon={<RiListUnordered size={18} className="text-base-content/60" />} onClick={() => { close(); void addToList(l.id, l.name); }}>{l.name}</Item>)}
+                  <div className="my-1 border-t border-[var(--border-subtle)]" />
+                  <Item icon={<RiAddCircleLine size={18} />} onClick={() => { close(); setNewList(true); }}>Create new list</Item>
+                  <Item icon={<RiDeleteBin6Line size={18} />} danger onClick={() => { close(); void removeFromList(); }}>Remove from list</Item>
+                </>
+              )}
+            </Dropdown>
+            <Dropdown label="Export to..." icon={<RiUpload2Line size={18} />} disabled={busy}>
+              {(close) => (
+                <>
+                  <Item icon={<RiDownload2Line size={18} />} disabled={!sel.length} onClick={() => { close(); csv(rows.filter((r) => selected.has(r.id)), "contacts-selected.csv"); }}>Export Selected ({sel.length})</Item>
+                  <Item icon={<RiDownload2Line size={18} />} onClick={() => { close(); void exportAll(); }}>Export all ({c.total.toLocaleString()})</Item>
+                  <Link href="/settings?tab=integrations" className="flex items-center gap-3 rounded-[8px] px-3 py-2.5 text-[15px] hover:bg-base-200"><RiPlugLine size={18} /> Add an integration</Link>
+                </>
+              )}
+            </Dropdown>
+            <Dropdown label="Enrich" icon={<RiSearchLine size={18} />} disabled={!sel.length || busy} width={240}>
+              {(close) => (
+                <>
+                  <Item icon={<RiMailLine size={18} />} onClick={() => { close(); void enrichEmails(); }}>Enrich Email</Item>
+                  <Item icon={<RiPhoneLine size={18} />} onClick={() => { close(); toast.message("Phone enrichment is coming soon"); }}>Enrich Phone <span className="ml-1 rounded-full bg-base-200 px-2 py-0.5 text-[12px] text-base-content/55">Soon</span></Item>
+                </>
+              )}
+            </Dropdown>
+            {sel.length > 0 && (
+              <button type="button" disabled={busy} onClick={() => setConfirm({ ids: sel })}
+                className="wizard-rise inline-flex h-11 items-center gap-2 rounded-[8px] border border-error/40 bg-error/5 px-4 text-[15px] text-error hover:bg-error/10">
+                <RiDeleteBin6Line size={18} /> Delete ({sel.length})
+              </button>
+            )}
+            {busy && <RiLoader4Line size={20} className="animate-spin text-primary" aria-label="Working" />}
+          </div>
         </div>
 
-        {/* Filter row */}
-        <div className="flex items-center gap-3 mb-5 flex-wrap" data-tour="contacts-filters">
-          {/* Search */}
-          <div className="relative w-full sm:w-auto">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-base-content/35 pointer-events-none">
-              <RiSearchLine size={14} />
-            </span>
-            <input
-              type="text"
-              className="w-full sm:w-56 h-9 bg-base-100 border border-[var(--border)] rounded-[10px] pl-9 pr-3 text-sm text-base-content placeholder:text-base-content/35 focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-              placeholder="Search name, company…"
-              value={search}
-              onChange={(e) => changeSearch(e.target.value)}
-            />
-          </div>
-
-          {/* List selector */}
-          <select
-            className="w-full sm:w-auto bg-base-100 border border-[var(--border)] rounded-[10px] px-3 text-sm text-base-content focus:outline-none focus:border-[var(--border-focus)] h-9 transition-colors cursor-pointer"
-            value={listId}
-            onChange={(e) => changeList(e.target.value)}
-          >
-            <option value="">All lists</option>
-            {lists.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name} ({l.target_count})
-              </option>
-            ))}
-          </select>
-
-          {/* Divider */}
-          <div className="hidden sm:block w-px h-5 bg-[var(--border)]" />
-
-          {/* FilterBar */}
-          <FilterBar filters={filters} onChange={changeFilters} />
-        </div>
-
-        {selected.size > 0 && (
-          <div className="flex flex-wrap items-center gap-3 mb-3 px-3 py-2 rounded-[10px] bg-base-200 border border-[var(--border)]">
-            <span className="text-xs font-medium text-base-content/70 flex-1 min-w-full sm:min-w-0">{selected.size} selected</span>
-            <button
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--border)] bg-base-100 text-base-content/70 hover:bg-base-200 hover:text-base-content transition-colors"
-              onClick={() => setShowAddToList(true)}
-            >
-              <RiListCheck2 size={13} /> Add to list
-            </button>
-            <button
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-error bg-error/10 hover:bg-error/20 transition-colors"
-              onClick={() => setShowDeleteConfirm(true)}
-            >
-              <RiDeleteBinLine size={13} /> Delete
-            </button>
-            <button
-              className="text-xs text-base-content/45 hover:text-base-content transition-colors"
-              onClick={() => setSelected(new Set())}
-            >
-              Clear
-            </button>
-          </div>
-        )}
-
-        {/* Table */}
-        {loading && contacts.length === 0 ? (
-          <div className="flex items-center justify-center py-20 text-base-content/40 text-sm gap-2">
-            <span className="loading loading-spinner loading-sm" /> Loading...
-          </div>
-        ) : contacts.length === 0 ? (
-          <div className="rounded-2xl border border-[var(--border-subtle)] bg-base-100 py-20 text-center text-base-content/45 text-sm">
-            {hasActiveFilters ? "No contacts match these filters." : listId ? "No contacts in this list." : "No contacts yet. Import from a list."}
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto rounded-2xl border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-raised)]">
-              <table className="table w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border-subtle)] text-base-content/45 text-xs uppercase tracking-wide">
-                    <th className="w-8" data-tour="contacts-select">
-                      <input type="checkbox" className="w-3.5 h-3.5 rounded border border-[var(--border-strong)] bg-base-100 accent-primary cursor-pointer" checked={allPageSelected} onChange={toggleAll} />
-                    </th>
-                    <th>Name</th>
-                    <th>Title</th>
-                    <th>Company</th>
-                    <th>Signal</th>
-                    <th className="w-20">Score</th>
-                    <th>Email</th>
-                    <th className="w-24">Status</th>
-                    <th className="w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {contacts.map((c) => (
-                    <tr
-                      key={c.id}
-                      className={`border-b border-[var(--border-subtle)] last:border-0 cursor-pointer transition-colors ${selected.has(c.id) ? "bg-base-200" : "hover:bg-base-200"}`}
-                      onClick={() => setDrawer(c.id)}
-                    >
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          className="w-3.5 h-3.5 rounded border border-[var(--border-strong)] bg-base-100 accent-primary cursor-pointer"
-                          checked={selected.has(c.id)}
-                          onChange={() => toggleOne(c.id)}
-                        />
-                      </td>
-                      <td>
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-base-200 flex items-center justify-center text-xs font-semibold text-base-content/70 shrink-0">
-                            {(c.full_name ?? "?").charAt(0).toUpperCase()}
-                          </div>
-                          <span className="font-medium text-base-content truncate max-w-36">{c.full_name ?? "—"}</span>
-                        </div>
-                      </td>
-                      <td className="text-base-content/60 max-w-44 truncate">{c.title ?? "—"}</td>
-                      <td className="text-base-content/60 truncate max-w-36">{c.company ?? "—"}</td>
-                      <td className="max-w-56 text-xs">
-                        {c.top_signal ? <div className="flex items-center gap-1.5"><span className="truncate text-base-content/70">{c.top_signal}</span>{c.signal_count > 1 && <span className="shrink-0 rounded bg-base-200 px-1.5 text-[11px] text-base-content/50">+{c.signal_count - 1}</span>}</div> : <span className="text-base-content/30">—</span>}
-                      </td>
-                      <td>{c.lead_score !== null || (c.intent_score ?? 0) > 0 ? <Flames score={c.lead_score ?? c.intent_score} /> : <span className="text-base-content/30">—</span>}</td>
-                      <td className="text-base-content/60 text-xs font-mono truncate max-w-40">{c.email ?? <span className="text-base-content/30">—</span>}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center gap-1.5">
-                          <ConnectionIcon t={c} />
-                          {c.message_sent_at && (
-                            <span title="LinkedIn message sent" className="text-[var(--viz-1)]"><RiMessage2Line size={13} /></span>
-                          )}
-                          {c.last_replied_at && (
-                            <span title="Replied" className="text-success"><RiReplyLine size={13} /></span>
-                          )}
-                          {c.email && (() => {
-                            const badge = emailStatusBadge(c.email_status);
-                            const Icon = badge.icon;
-                            return <span title={badge.title} className={badge.className}><Icon size={13} /></span>;
-                          })()}
-                          {c.apollo_enriched_at && !c.email && (
-                            <span title="Apollo enriched — no email" className="text-base-content/20"><RiMailLine size={13} /></span>
-                          )}
-                        </div>
-                      </td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {c.linkedin_url && (
-                          <a
-                            href={c.linkedin_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center p-1 rounded text-base-content/35 hover:text-base-content transition-colors"
-                          >
-                            <RiExternalLinkLine size={13} />
-                          </a>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4 text-sm text-base-content/55">
-                <span className="tabular-nums">
-                  {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total.toLocaleString()}
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-[var(--border)] bg-base-100 text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    onClick={() => setPage((p) => p - 1)}
-                    disabled={page === 0 || loading}
-                  >
-                    <RiArrowLeftSLine size={15} />
-                  </button>
-                  <span className="px-2 tabular-nums">{page + 1} / {totalPages}</span>
-                  <button
-                    className="inline-flex items-center justify-center w-7 h-7 rounded-lg border border-[var(--border)] bg-base-100 text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={page >= totalPages - 1 || loading}
-                  >
-                    <RiArrowRightSLine size={15} />
-                  </button>
-                </div>
+        <section className="flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-base-100">
+          {c.rows === null ? <div className="flex flex-1 items-center justify-center"><RiLoader4Line size={28} className="animate-spin text-primary" /></div>
+            : rows.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+                <div className="text-[18px]">{c.error ?? (filterCount || c.q ? "No contacts match these filters" : "No contacts yet")}</div>
+                <div className="text-[15px] text-base-content/55">{filterCount || c.q ? "Try clearing a filter or the search." : "Import a list or create an agent to find leads."}</div>
+                {(filterCount > 0 || c.q) && <button type="button" onClick={() => { c.clear(); setQText(""); }} className="mt-2 text-[15px] text-[#4f46e5] hover:underline">Clear all filters</button>}
               </div>
+            ) : (
+              <ContactsTable rows={rows} selected={selected} toggle={toggle} toggleAll={toggleAll} onOpen={setDrawer} onDecide={decide}
+                onRemove={(id) => void remove(id)} onDelete={(id) => setConfirm({ ids: [id] })} onChanged={() => void c.load()} />
             )}
-
-            {loading && contacts.length > 0 && (
-              <div className="flex items-center gap-1.5 mt-3 text-xs text-base-content/40">
-                <span className="loading loading-spinner loading-xs" /> Loading...
-              </div>
-            )}
-          </>
-        )}
+          <Pagination page={c.page} pageSize={c.pageSize} total={c.total} setPage={(p) => { c.setPage(p); setSelected(new Set()); }} setPageSize={c.setPageSize} />
+        </section>
       </div>
-      {showNewContact && (
-        <div className="modal modal-open">
-          <div className="modal-box bg-base-100 border border-[var(--border-subtle)] rounded-2xl shadow-[var(--shadow-modal)] max-w-md">
-            <h3 className="text-lg font-semibold mb-4">New Contact</h3>
-            <form onSubmit={createContact} className="flex flex-col gap-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-base-content/50 pb-1.5">Full name *</label>
-                  <input
-                    className="w-full h-10 px-3 rounded-[10px] bg-base-100 border border-[var(--border)] text-sm focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-                    placeholder="Jane Smith"
-                    value={newContactForm.full_name}
-                    onChange={(e) => setNewContactForm({ ...newContactForm, full_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-xs font-medium text-base-content/50 pb-1.5">LinkedIn URL *</label>
-                  <input
-                    className="w-full h-10 px-3 rounded-[10px] bg-base-100 border border-[var(--border)] text-xs font-mono focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-                    placeholder="https://linkedin.com/in/..."
-                    value={newContactForm.linkedin_url}
-                    onChange={(e) => setNewContactForm({ ...newContactForm, linkedin_url: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-base-content/50 pb-1.5">Title</label>
-                  <input
-                    className="w-full h-10 px-3 rounded-[10px] bg-base-100 border border-[var(--border)] text-sm focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-                    placeholder="CEO"
-                    value={newContactForm.title}
-                    onChange={(e) => setNewContactForm({ ...newContactForm, title: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-base-content/50 pb-1.5">Company</label>
-                  <input
-                    className="w-full h-10 px-3 rounded-[10px] bg-base-100 border border-[var(--border)] text-sm focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-                    placeholder="Acme Inc."
-                    value={newContactForm.company}
-                    onChange={(e) => setNewContactForm({ ...newContactForm, company: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-base-content/50 pb-1.5">Location</label>
-                  <input
-                    className="w-full h-10 px-3 rounded-[10px] bg-base-100 border border-[var(--border)] text-sm focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-                    placeholder="Berlin, Germany"
-                    value={newContactForm.location}
-                    onChange={(e) => setNewContactForm({ ...newContactForm, location: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-base-content/50 pb-1.5">Email</label>
-                  <input
-                    type="email"
-                    className="w-full h-10 px-3 rounded-[10px] bg-base-100 border border-[var(--border)] text-sm focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-                    placeholder="jane@acme.com"
-                    value={newContactForm.email}
-                    onChange={(e) => setNewContactForm({ ...newContactForm, email: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-base-content/50 pb-1.5">Phone</label>
-                  <input
-                    type="tel"
-                    className="w-full h-10 px-3 rounded-[10px] bg-base-100 border border-[var(--border)] text-sm focus:outline-none focus:border-[var(--border-focus)] transition-colors"
-                    placeholder="+49 30 1234567"
-                    value={newContactForm.phone}
-                    onChange={(e) => setNewContactForm({ ...newContactForm, phone: e.target.value })}
-                  />
-                </div>
-                {lists.length > 0 && (
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-base-content/50 pb-1.5">Add to list (optional)</label>
-                    <select
-                      className="w-full h-10 px-3 rounded-[10px] text-sm bg-base-100 border border-[var(--border)] text-base-content focus:outline-none focus:border-[var(--border-focus)] cursor-pointer transition-colors"
-                      value={newContactForm.list_id}
-                      onChange={(e) => setNewContactForm({ ...newContactForm, list_id: e.target.value })}
-                    >
-                      <option value="">No list</option>
-                      {lists.map((l) => (
-                        <option key={l.id} value={l.id}>{l.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
-              <div className="modal-action mt-2">
-                <button type="button" className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-sm font-medium text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors" onClick={() => setShowNewContact(false)}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1.5 h-9 px-4 rounded-[10px] text-sm font-semibold bg-primary text-primary-content hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50"
-                  disabled={newContactLoading}
-                >
-                  {newContactLoading ? <span className="loading loading-spinner loading-xs" /> : "Create"}
-                </button>
-              </div>
-            </form>
-          </div>
-          <div className="modal-backdrop" onClick={() => setShowNewContact(false)} />
-        </div>
+
+      <LeadDrawer targetId={drawer} onClose={() => setDrawer(null)} onChanged={() => void c.load()} siblings={rows.map((r) => r.id)} onOpen={setDrawer} />
+
+      {confirm && (
+        <Confirm title="Delete Contacts" action="Delete"
+          text={`Are you sure you want to delete ${confirm.ids.length === 1 ? "this contact" : `${confirm.ids.length} selected contacts`}? This action cannot be undone!`}
+          onCancel={() => setConfirm(null)}
+          onConfirm={async () => {
+            try {
+              const d = await call("/api/targets", "DELETE", { target_ids: confirm.ids });
+              toast.success(`Deleted ${d.deleted ?? confirm.ids.length} contact${(d.deleted ?? confirm.ids.length) === 1 ? "" : "s"}`);
+              setSelected(new Set()); setConfirm(null); refresh();
+            } catch (err) { toast.error(err instanceof Error ? err.message : "Could not delete"); }
+          }} />
       )}
-      {showAddToList && (
-        <div className="modal modal-open">
-          <div className="modal-box bg-base-100 border border-[var(--border-subtle)] rounded-2xl shadow-[var(--shadow-modal)] max-w-sm">
-            <h3 className="text-lg font-semibold mb-1">Add to list</h3>
-            <p className="text-xs text-base-content/55 mb-4">
-              {selected.size} contact{selected.size !== 1 ? "s" : ""} will be added. Contacts already in the list are skipped.
-            </p>
-            <select
-              className="w-full h-10 px-3 rounded-[10px] text-sm bg-base-100 border border-[var(--border)] text-base-content focus:outline-none focus:border-[var(--border-focus)] cursor-pointer transition-colors"
-              value={addToListId}
-              onChange={(e) => setAddToListId(e.target.value)}
-            >
-              <option value="">Select a list…</option>
-              {lists.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
-            <div className="modal-action mt-4">
-              <button type="button" className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-sm font-medium text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors" onClick={() => { setShowAddToList(false); setAddToListId(""); }}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-[10px] text-sm font-semibold bg-primary text-primary-content hover:bg-[var(--primary-hover)] transition-colors disabled:opacity-50"
-                disabled={!addToListId || addToListLoading}
-                onClick={addSelectedToList}
-              >
-                {addToListLoading ? <span className="loading loading-spinner loading-xs" /> : "Add"}
-              </button>
-            </div>
-          </div>
-          <div className="modal-backdrop" onClick={() => { setShowAddToList(false); setAddToListId(""); }} />
-        </div>
-      )}
-      {showDeleteConfirm && (
-        <div className="modal modal-open">
-          <div className="modal-box bg-base-100 border border-[var(--border-subtle)] rounded-2xl shadow-[var(--shadow-modal)] max-w-sm">
-            <h3 className="text-lg font-semibold mb-1">Delete {selected.size} contact{selected.size !== 1 ? "s" : ""}?</h3>
-            <p className="text-xs text-base-content/55 mb-4 leading-relaxed">
-              This permanently deletes {selected.size === 1 ? "this contact" : "these contacts"} and their run history — not just from this list, but from Linki entirely. This can&apos;t be undone.
-            </p>
-            <div className="modal-action mt-2">
-              <button type="button" className="inline-flex items-center h-9 px-3.5 rounded-[10px] text-sm font-medium text-base-content/60 hover:text-base-content hover:bg-base-200 transition-colors" onClick={() => setShowDeleteConfirm(false)} disabled={deleteLoading}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-[10px] text-sm font-semibold bg-error text-white hover:bg-error/90 transition-colors disabled:opacity-50"
-                disabled={deleteLoading}
-                onClick={deleteSelected}
-              >
-                {deleteLoading ? <span className="loading loading-spinner loading-xs" /> : "Delete permanently"}
-              </button>
-            </div>
-          </div>
-          <div className="modal-backdrop" onClick={() => !deleteLoading && setShowDeleteConfirm(false)} />
-        </div>
-      )}
-      <LeadDrawer targetId={drawer} onClose={() => setDrawer(null)} onChanged={() => fetch_(page, listId, debouncedSearch, filters)} siblings={contacts.map((c) => c.id)} onOpen={setDrawer} />
+
+      {newList && <NewListDialog onClose={() => setNewList(false)} onCreated={(l) => { setNewList(false); void addToList(l.id, l.name); }} />}
     </>
+  );
+}
+
+function NewListDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (l: { id: string; name: string }) => void }) {
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  async function create() {
+    setSaving(true);
+    try { const d = await call("/api/lists", "POST", { name: name.trim() }); onCreated({ id: d.id, name: d.name }); }
+    catch (err) { toast.error(err instanceof Error ? err.message : "Could not create the list"); setSaving(false); }
+  }
+  return (
+    <Modal labelId="contacts-new-list" title="Create a new List" subtitle="The selected contacts are added to it." wide={false} onClose={() => !saving && onClose()}
+      footer={<>
+        <button type="button" onClick={onClose} disabled={saving} className="h-10 rounded-[8px] px-4 text-sm font-medium text-base-content/75 hover:bg-base-200">Cancel</button>
+        <button type="button" onClick={() => void create()} disabled={saving || !name.trim()} className="h-10 rounded-[8px] bg-primary px-4 text-sm font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-base-200 disabled:text-base-content/35">{saving ? "Creating…" : "Create list"}</button>
+      </>}>
+      <form className="space-y-2 px-6 py-6" onSubmit={(e) => { e.preventDefault(); if (name.trim()) void create(); }}>
+        <label htmlFor="contacts-new-list-name" className="text-[15px] font-medium">List Name <span className="text-error">*</span></label>
+        <input id="contacts-new-list-name" autoFocus maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter a name for your list"
+          className="h-12 w-full rounded-[8px] border border-[var(--border-strong)] bg-base-100 px-4 text-[15px] outline-none focus:border-primary/60 focus:ring-2 focus:ring-[var(--ring)]" />
+      </form>
+    </Modal>
   );
 }

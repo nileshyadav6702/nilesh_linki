@@ -9,7 +9,6 @@ import {
   RiCheckboxCircleLine,
   RiCompassLine,
   RiContactsLine,
-  RiFileList3Line,
   RiInboxLine,
   RiLogoutBoxLine,
   RiMailCheckLine,
@@ -30,12 +29,12 @@ const LEARNING_PLAYLIST_URL = "https://www.youtube.com/playlist?list=PLBf6xNJOms
 const dailyNav = [
   { href: "/copilot", label: "Copilot", icon: RiBrainLine, tour: "nav-copilot" },
   { href: "/agents", label: "Agents", icon: RiRobot2Line, tour: "nav-agents" },
+  // Contacts covers both "All contacts" and "Lists" (tabs on the page).
+  { href: "/contacts", label: "Contacts", icon: RiContactsLine, tour: "nav-contacts" },
   { href: "/inbox", label: "Inbox", icon: RiInboxLine, tour: "nav-inbox" },
 ];
 
 const recordsNav = [
-  { href: "/lists", label: "Lists", icon: RiFileList3Line, tour: "nav-lists" },
-  { href: "/contacts", label: "People", icon: RiContactsLine, tour: "nav-contacts" },
   { href: "/companies", label: "Companies", icon: RiBuildingLine, tour: "nav-companies" },
 ];
 
@@ -103,6 +102,7 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
   function isActive(href: string) {
     if (href === "/") return router.pathname === "/";
     if (href === "/settings") return ["/settings", "/accounts"].some((path) => router.pathname.startsWith(path));
+    if (href === "/contacts") return ["/contacts", "/lists"].some((path) => router.pathname.startsWith(path));
     return router.pathname.startsWith(href);
   }
 

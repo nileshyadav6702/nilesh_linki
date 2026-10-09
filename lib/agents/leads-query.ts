@@ -10,11 +10,13 @@ import { isSignalType } from "@/lib/signals/types";
 export const LEAD_STATUSES = ["all", "drafted", "scheduled", "in_sequence", "replied", "qualified", "needs_data", "disqualified", "skipped"] as const;
 /** Older values still accepted (MCP leads_list, old links). "active" = everything not rejected. */
 const LEGACY_STATUSES = ["active", "new", "approved", "enrolled"] as const;
-export const LEAD_STEPS = ["not_contacted", "invitation_sent", "invitation_accepted", "message_sent", "inmail_sent", "email_sent", "replied"] as const;
+export const LEAD_STEPS = ["not_contacted", "invitation_sent", "invitation_accepted", "invitation_withdrawn", "message_sent", "inmail_sent", "email_sent", "replied"] as const;
 export const LEAD_APPROVALS = ["pending", "approved", "rejected"] as const;
 export const EMAIL_ENRICH = ["found", "not_found", "not_enriched", "unsubscribed"] as const;
 export const PHONE_ENRICH = ["found", "not_found", "not_enriched"] as const;
 export const LEAD_SORTS = ["newest", "score_desc", "score_asc", "signal_desc", "signal_asc"] as const;
+/** AI score bands, as the flames show them: 1 = first signs of interest (<50), 2 = actively exploring (50-69), 3 = ready to engage (70+). */
+export const SCORE_BANDS = ["1", "2", "3"] as const;
 const VERDICTS = ["strong", "possible", "poor"] as const;
 
 export type LeadStatus = (typeof LEAD_STATUSES)[number] | (typeof LEGACY_STATUSES)[number];
@@ -25,7 +27,17 @@ export type PhoneEnrich = (typeof PHONE_ENRICH)[number];
 export type LeadSort = (typeof LEAD_SORTS)[number];
 
 export interface LeadsQuery {
+  /** "agents" (default): agent-sourced leads only. "all": every contact in the workspace (Contacts page). */
+  scope: "agents" | "all";
   agentId: string | null;
+  /** A list id, or "none" for contacts in no list. */
+  listId: string | null;
+  scoreBand: (typeof SCORE_BANDS)[number] | null;
+  replied: boolean;
+  interested: boolean;
+  /** created_at range, YYYY-MM-DD, inclusive. */
+  from: string | null;
+  to: string | null;
   status: LeadStatus;
   step: LeadStep | null;
   approval: LeadApproval | null;
@@ -66,6 +78,10 @@ export function parseLeadsQuery(raw: Raw): ParseResult {
   const verdict = pick(raw, "verdict", VERDICTS);
   const err = [status, step, approval, email, phone, sort, verdict].find((p) => p.error)?.error;
   if (err) return { ok: false, error: err };
+  const band = pick(raw, "score_band", SCORE_BANDS);
+  if (band.error) return { ok: false, error: band.error };
+  const date = (k: string) => { const v = one(raw, k); return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null; };
+  const listId = one(raw, "list_id").slice(0, 100);
   const signalType = one(raw, "signal_type");
   if (signalType && !isSignalType(signalType)) return { ok: false, error: `Unknown signal_type: ${signalType.slice(0, 40)}` };
   const limitRaw = Number(one(raw, "limit") || 50);
@@ -74,7 +90,14 @@ export function parseLeadsQuery(raw: Raw): ParseResult {
   return {
     ok: true,
     query: {
+      scope: one(raw, "scope") === "all" ? "all" : "agents",
       agentId: one(raw, "agent_id") || null,
+      listId: listId || null,
+      scoreBand: band.value,
+      replied: ["1", "true"].includes(one(raw, "replied")),
+      interested: ["1", "true"].includes(one(raw, "interested")),
+      from: date("from"),
+      to: date("to"),
       status: status.value ?? "active",
       step: step.value, approval: approval.value, emailEnrich: email.value, phoneEnrich: phone.value,
       signalType: signalType || null, verdict: verdict.value, q: q || null,
@@ -115,6 +138,7 @@ export const STEP_SQL: Record<LeadStep, string> = {
   not_contacted: `t.connection_requested_at IS NULL AND t.connected_at IS NULL AND t.message_sent_at IS NULL AND t.inmail_sent_at IS NULL AND NOT ${EMAIL_SENT}`,
   invitation_sent: "t.connection_requested_at IS NOT NULL AND t.connected_at IS NULL",
   invitation_accepted: "t.connected_at IS NOT NULL",
+  invitation_withdrawn: "t.connection_requested_at IS NOT NULL AND t.connected_at IS NULL AND EXISTS (SELECT 1 FROM run_profile_tracks rt JOIN run_profiles rp ON rp.id = rt.run_profile_id WHERE rp.target_id = t.id AND rt.error_message LIKE '%withdraw%')",
   message_sent: "t.message_sent_at IS NOT NULL",
   inmail_sent: "t.inmail_sent_at IS NOT NULL",
   email_sent: EMAIL_SENT,
@@ -141,6 +165,12 @@ const PHONE_SQL: Record<PhoneEnrich, string> = {
 };
 
 const SCORE = "COALESCE(t.lead_score, t.intent_score)";
+const SCORE_BAND_SQL: Record<(typeof SCORE_BANDS)[number], string> = {
+  // Unscored contacts carry intent_score 0, not NULL: they have no band.
+  "1": `((t.lead_score IS NOT NULL OR t.intent_score > 0) AND ${SCORE} < 50)`,
+  "2": `(${SCORE} >= 50 AND ${SCORE} < 70)`,
+  "3": `(${SCORE} >= 70)`,
+};
 const SORT_SQL: Record<LeadSort, string> = {
   newest: "t.created_at DESC, t.id",
   score_desc: `${SCORE} IS NULL, ${SCORE} DESC, t.created_at DESC`,
@@ -153,9 +183,17 @@ type Dimension = "status" | "step" | "signal";
 
 /** WHERE clause for the query, optionally leaving one dimension out (for its facet counts). */
 export function buildWhere(workspaceId: string, q: LeadsQuery, omit?: Dimension): { sql: string; params: unknown[] } {
-  const where = ["t.workspace_id = ?", "t.agent_id IS NOT NULL"];
+  const where = ["t.workspace_id = ?"];
+  if (q.scope !== "all") where.push("t.agent_id IS NOT NULL");
   const params: unknown[] = [workspaceId];
   if (q.agentId) { where.push("t.agent_id = ?"); params.push(q.agentId); }
+  if (q.listId === "none") where.push("NOT EXISTS (SELECT 1 FROM list_targets lt WHERE lt.target_id = t.id)");
+  else if (q.listId) { where.push("EXISTS (SELECT 1 FROM list_targets lt WHERE lt.target_id = t.id AND lt.list_id = ?)"); params.push(q.listId); }
+  if (q.scoreBand) where.push(SCORE_BAND_SQL[q.scoreBand]);
+  if (q.replied) where.push(REPLIED);
+  if (q.interested) where.push("t.reply_kind = 'positive'");
+  if (q.from) { where.push("date(t.created_at) >= ?"); params.push(q.from); }
+  if (q.to) { where.push("date(t.created_at) <= ?"); params.push(q.to); }
   if (omit !== "status" && q.status !== "all") where.push(`(${STATUS_SQL[q.status]})`);
   if (omit !== "step" && q.step) where.push(`(${STEP_SQL[q.step]})`);
   if (q.approval) where.push(`(${APPROVAL_SQL[q.approval]})`);
@@ -271,7 +309,9 @@ export function listLeads(db: Database.Database, workspaceId: string, q: LeadsQu
         t.agent_status, t.agent_status_at, t.skip_reason, t.lead_source, t.created_at, t.connected_at, a.name agent_name,
         CASE WHEN ${REPLIED} THEN 1 ELSE 0 END replied,
         CASE WHEN NOT ${NO_EMAIL} AND ${UNSUBSCRIBED} THEN 1 ELSE 0 END email_unsubscribed,
-        (SELECT MAX(s.occurred_at) FROM signals s WHERE s.target_id = t.id) last_signal_at
+        (SELECT MAX(s.occurred_at) FROM signals s WHERE s.target_id = t.id) last_signal_at,
+        (SELECT l.name FROM list_targets lt JOIN lists l ON l.id = lt.list_id WHERE lt.target_id = t.id ORDER BY l.created_at DESC LIMIT 1) list_name,
+        (SELECT COUNT(*) FROM list_targets lt WHERE lt.target_id = t.id) list_count
       FROM targets t LEFT JOIN agents a ON a.id = t.agent_id
      WHERE ${where.sql}
      ORDER BY ${SORT_SQL[q.sort]} LIMIT ? OFFSET ?`).all(...where.params, q.limit, q.offset) as Array<Record<string, unknown> & { id: string; connected_at: string | null }>;
