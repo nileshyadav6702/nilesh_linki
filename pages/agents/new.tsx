@@ -109,6 +109,7 @@ export default function NewAgent() {
       for (const src of sourcesFor(s)) await api(`/api/agents/${agentId}/sources`, "POST", src);
     }
     set({ agentId });
+    return agentId;
   }
 
   /** Manual setup starts from the default sequence, which the user then edits in place. */
@@ -183,7 +184,9 @@ export default function NewAgent() {
       try {
         const icp = icpFromLookalike(s.icp, lk.scope);
         set({ icp, icpId: null });
-        await saveTargetAndAgent(icp, null);
+        const agentId = await saveTargetAndAgent(icp, null);
+        // Keep the matches shown here as the agent's first leads (the source keeps adding more).
+        if (lk.leads.length) await api("/api/agents/lookalike", "POST", { action: "adopt", agent_id: agentId, leads: lk.leads });
         setStep(3);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Could not create the agent");

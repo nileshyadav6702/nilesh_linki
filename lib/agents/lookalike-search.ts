@@ -202,7 +202,12 @@ export async function searchLookalikes(workspaceId: string, scope: LookalikeScop
       searchUrl = flagshipSearchUrl(scope);
       found = await scrapePeopleSearch(ctx, account, searchUrl);
     }
-    // Still no one: drop the place from the query (ranking still prefers it), then keep only the main title.
+    // Still no one: a profile's geo id is often a district LinkedIn search won't filter on, so try the city as a keyword,
+    // then drop the place (ranking still prefers it), then keep only the main title.
+    if (!found.length && scope.geoId && scope.location) {
+      searchUrl = flagshipSearchUrl({ ...scope, geoId: null });
+      found = await scrapePeopleSearch(ctx, account, searchUrl);
+    }
     if (!found.length && scope.location) {
       searchUrl = flagshipSearchUrl({ ...scope, location: null, geoId: null });
       found = await scrapePeopleSearch(ctx, account, searchUrl);

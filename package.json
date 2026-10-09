@@ -10,7 +10,7 @@
     "build:worker": "node scripts/build-worker.mjs",
     "start": "next start",
     "worker": "node --enable-source-maps .worker-dist/worker.js",
-    "worker:dev": "tsx lib/worker/entry.ts",
+    "worker:dev": "tsx --env-file-if-exists=.env.local lib/worker/entry.ts",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
