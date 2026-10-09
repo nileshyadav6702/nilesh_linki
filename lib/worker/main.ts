@@ -111,6 +111,8 @@ export async function runWorker(): Promise<void> {
   ensureGlobalRunnerStarted();
   const { startRetentionSchedule } = await import("@/lib/maintenance/retention");
   startRetentionSchedule();
+  const { startInboxSyncSchedule } = await import("@/lib/inbox/sync");
+  startInboxSyncSchedule();
 
   let stopping = false;
   const onSignal = (signal: NodeJS.Signals) => {

@@ -71,6 +71,8 @@ async function persistLogin(accountId: string, ctx: BrowserContext, page?: Page)
     encryptSecret(JSON.stringify(state)),
     accountId
   );
+  // Pull the account's LinkedIn conversations into the inbox right away.
+  void import("@/lib/inbox/sync").then((m) => m.queueInboxSync("linkedin", accountId)).catch(() => {});
   // Drop any stale runtime context so the runner reloads the fresh cookies.
   await closeSession(accountId);
 }

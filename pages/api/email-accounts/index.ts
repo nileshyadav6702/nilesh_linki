@@ -73,6 +73,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     try { enableWarmup(ctx.workspaceId, id); } catch { /* non-fatal */ }
 
     recordAudit(ctx, "email_account.created", "email_account", id);
+    // Pull the mailbox's recent mail into the inbox right away.
+    if (imap_host) void import("@/lib/inbox/sync").then((m) => m.queueInboxSync("email", id)).catch(() => {});
     return res.status(201).json({ id });
   }
 

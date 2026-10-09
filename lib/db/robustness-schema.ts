@@ -7,6 +7,54 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Unified inbox: every LinkedIn conversation and mailbox thread of the workspace's
+  // connected accounts, synced in (not only campaign replies), with local triage state.
+  `CREATE TABLE IF NOT EXISTS inbox_threads (
+    id TEXT PRIMARY KEY,
+    workspace_id TEXT NOT NULL,
+    channel TEXT NOT NULL CHECK(channel IN ('linkedin','email')),
+    account_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    url TEXT,
+    subject TEXT,
+    participant_name TEXT,
+    participant_headline TEXT,
+    participant_email TEXT,
+    participant_url TEXT,
+    participant_photo TEXT,
+    target_id TEXT,
+    snippet TEXT,
+    last_message_at TEXT,
+    has_inbound INTEGER NOT NULL DEFAULT 0,
+    unread INTEGER NOT NULL DEFAULT 0,
+    interested INTEGER NOT NULL DEFAULT 0,
+    archived INTEGER NOT NULL DEFAULT 0,
+    deleted INTEGER NOT NULL DEFAULT 0,
+    messages_synced_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(channel, account_id, external_id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_inbox_threads_list ON inbox_threads(workspace_id, deleted, last_message_at)",
+  `CREATE TABLE IF NOT EXISTS inbox_messages (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL REFERENCES inbox_threads(id) ON DELETE CASCADE,
+    external_id TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK(direction IN ('in','out')),
+    sender_name TEXT,
+    sender_email TEXT,
+    body_text TEXT,
+    body_html TEXT,
+    sent_at TEXT NOT NULL,
+    UNIQUE(thread_id, external_id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_inbox_messages_thread ON inbox_messages(thread_id, sent_at)",
+  `CREATE TABLE IF NOT EXISTS inbox_sync_state (
+    account_kind TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    synced_at TEXT,
+    error TEXT,
+    PRIMARY KEY (account_kind, account_id)
+  )`,
   // Deep research of a list: one run per request (criteria, progress), one result per contact.
   `CREATE TABLE IF NOT EXISTS list_research (
     id TEXT PRIMARY KEY,

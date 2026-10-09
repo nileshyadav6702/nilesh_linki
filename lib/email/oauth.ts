@@ -41,6 +41,7 @@ export async function completeMailOAuth(input:{provider:MailOAuthProvider;state:
   if(existing)db.prepare("UPDATE email_accounts SET oauth_connection_id=?,is_verified=1,paused_at=NULL,paused_reason=NULL WHERE id=?").run(connection.id,accountId);
   else db.prepare(`INSERT INTO email_accounts(id,workspace_id,name,from_email,smtp_host,username,password,provider,oauth_connection_id,is_verified)
     VALUES(?,?,?,?,?,?,?,?,?,1)`).run(accountId,row.workspace_id,`${input.provider==="gmail"?"Gmail":"Microsoft"} — ${email}`,email,"oauth.provider.invalid",email,encryptSecret("oauth-managed"),input.provider,connection.id);
+  void import("@/lib/inbox/sync").then((m)=>m.queueInboxSync("email",accountId)).catch(()=>{});
   await provisionMailboxWatch(connection.id,input.origin).catch(error=>db.prepare("UPDATE mail_provider_connections SET last_error=? WHERE id=?").run(message(error),connection.id));
   return {workspaceId:row.workspace_id,connectionId:connection.id,emailAccountId:accountId,email,redirectAfter:row.redirect_after};
 }
@@ -90,3 +91,9 @@ function client(p:MailOAuthProvider){const prefix=p==="gmail"?"GOOGLE_MAIL":"MIC
 function hash(v:string){return require("crypto").createHash("sha256").update(v).digest("hex");}
 async function jsonFetch(url:string,init?:RequestInit):Promise<Record<string,unknown>>{const r=await fetch(url,init);const text=await r.text();let body:Record<string,unknown>={};try{body=JSON.parse(text);}catch{}if(!r.ok)throw new Error(`${url} failed (${r.status}): ${text.slice(0,500)}`);return body;}
 function message(e:unknown){return e instanceof Error?e.message:String(e);}
+
+/** A fresh access token for a mailbox connection (refreshed when expired). */
+export async function oauthAccessToken(connectionId: string): Promise<{ provider: MailOAuthProvider; token: string }> {
+  const c = getConnection(connectionId);
+  return { provider: c.provider, token: await validAccessToken(c) };
+}

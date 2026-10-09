@@ -17,7 +17,8 @@ export class VoyagerBlockedError extends Error {
   constructor(status: number) { super(`LinkedIn refused the request (HTTP ${status})`); this.name = "VoyagerBlockedError"; this.status = status; }
 }
 
-export interface VoyagerGetOptions { normalized?: boolean; kind?: BudgetKind }
+/** `accept` overrides the response format (messaging GraphQL needs "application/graphql"). */
+export interface VoyagerGetOptions { normalized?: boolean; kind?: BudgetKind; accept?: string }
 
 const MIN_GAP_MS = 4000;
 const MAX_GAP_MS = 11000;
@@ -68,33 +69,36 @@ export class VoyagerClient {
 
   /** Read a same-origin Voyager path from the open LinkedIn page. A thrown fetch becomes status 0. */
   private async read(page: Page, path: string, accept: string): Promise<{ status: number; body: string }> {
-    return page.evaluate(async ({ path, csrf, accept }: { path: string; csrf: string; accept: string }) => {
-      const regs = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+    // A plain script string, not a function: tsx (worker:dev) wraps named functions in a
+    // __name() helper that doesn't exist inside the page, which made every read fail there.
+    const args = JSON.stringify({ path, csrf: this.csrf, accept });
+    return page.evaluate(`(async () => {
+      const a = ${args};
+      const regs = (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) ? await navigator.serviceWorker.getRegistrations() : [];
       await Promise.all(regs.map((r) => r.unregister()));
-      const headers: Record<string, string> = { accept, "csrf-token": csrf, "x-restli-protocol-version": "2.0.0" };
-      const viaXhr = () => new Promise<{ status: number; body: string }>((resolve) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("GET", path, true);
-        xhr.withCredentials = true;
-        for (const [key, value] of Object.entries(headers)) xhr.setRequestHeader(key, value);
-        xhr.onload = () => resolve({ status: xhr.status, body: xhr.status === 200 ? xhr.responseText : "" });
-        xhr.onerror = () => resolve({ status: 0, body: "" });
-        xhr.send();
-      });
+      const headers = { accept: a.accept, "csrf-token": a.csrf, "x-restli-protocol-version": "2.0.0" };
       try {
-        const r = await fetch(path, { headers, credentials: "include" });
+        const r = await fetch(a.path, { headers, credentials: "include" });
         return { status: r.status, body: r.status === 200 ? await r.text() : "" };
-      } catch {
-        return viaXhr();
+      } catch (e) {
+        return await new Promise((resolve) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("GET", a.path, true);
+          xhr.withCredentials = true;
+          Object.keys(headers).forEach((k) => xhr.setRequestHeader(k, headers[k]));
+          xhr.onload = () => resolve({ status: xhr.status, body: xhr.status === 200 ? xhr.responseText : "" });
+          xhr.onerror = () => resolve({ status: 0, body: "" });
+          xhr.send();
+        });
       }
-    }, { path, csrf: this.csrf, accept });
+    })()`) as Promise<{ status: number; body: string }>;
   }
 
   /** GET a Voyager path (starting with /voyager/api/). Returns parsed JSON, or null on 404/400. */
   async get(path: string, opts: VoyagerGetOptions = {}): Promise<unknown | null> {
     const kind = opts.kind ?? "voyager_read";
     if (!consume(this.accountId, kind)) throw new VoyagerBudgetExceeded(kind);
-    const accept = opts.normalized ? "application/vnd.linkedin.normalized+json+2.1" : "application/json";
+    const accept = opts.accept ?? (opts.normalized ? "application/vnd.linkedin.normalized+json+2.1" : "application/json");
     let result = { status: 0, body: "" };
     for (let attempt = 0; attempt < 2; attempt++) {
       const page = await this.ensurePage();

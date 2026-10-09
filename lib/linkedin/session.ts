@@ -343,6 +343,7 @@ export async function authenticateAccount(accountId: string): Promise<void> {
     );
 
     await ctx.close();
+    void import("@/lib/inbox/sync").then((m) => m.queueInboxSync("linkedin", accountId)).catch(() => {});
   } finally {
     await visibleBrowser.close();
   }

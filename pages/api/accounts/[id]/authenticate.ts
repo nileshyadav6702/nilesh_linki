@@ -44,6 +44,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     encryptSecret(JSON.stringify(storageState)),
     id
   );
+  // Pull the account's LinkedIn conversations into the inbox right away.
+  void import("@/lib/inbox/sync").then((m) => m.queueInboxSync("linkedin", id)).catch(() => {});
 
   // Evict the cached browser context so next import uses the new cookies
   const { closeSession } = await import("@/lib/linkedin/session");

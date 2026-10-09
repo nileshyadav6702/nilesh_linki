@@ -120,5 +120,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try { enableWarmup(ctx.workspaceId, id); } catch { /* non-fatal */ }
 
   recordAudit(ctx, "email_account.gmail_app_password_connected", "email_account", id, { email });
+  // Pull the mailbox's recent mail into the inbox right away.
+  void import("@/lib/inbox/sync").then((m) => m.queueInboxSync("email", id)).catch(() => {});
   return res.status(201).json({ id, email, verified: true });
 }
