@@ -5,17 +5,16 @@ import { signOut, useSession } from "next-auth/react";
 import { useEffect, useRef, useState } from "react";
 import {
   RiArrowUpCircleLine,
-  RiBuildingLine,
-  RiCheckboxCircleLine,
   RiCompassLine,
   RiContactsLine,
   RiInboxLine,
   RiLogoutBoxLine,
-  RiMailCheckLine,
   RiPlayCircleLine,
   RiQuestionLine,
   RiSettings4Line,
-  RiStackLine,
+  RiAccountCircleLine,
+  RiPlugLine,
+  RiArrowDownSLine,
   RiMenuLine,
   RiCloseLine,
   RiShieldUserLine,
@@ -36,16 +35,6 @@ const dailyNav = [
   { href: "/insights", label: "Insights", icon: LuChartBarDecreasing, tour: "nav-insights" },
 ];
 
-const recordsNav = [
-  { href: "/companies", label: "Companies", icon: RiBuildingLine, tour: "nav-companies" },
-];
-
-const operatorNav = [
-  { href: "/todos", label: "Tasks", icon: RiCheckboxCircleLine, tour: "nav-todos", premium: true },
-  { href: "/email-health", label: "Deliverability", icon: RiMailCheckLine, tour: "nav-email-health" },
-  { href: "/platform", label: "Platform", icon: RiStackLine, tour: "nav-platform" },
-];
-
 // Only rendered for instance administrators (SUPERADMIN_EMAILS). The flag is a UI
 // affordance only - /admin and /api/admin/* re-check the allowlist server-side.
 const adminNav = [
@@ -58,7 +47,13 @@ const mobilePrimary = [dailyNav[0], dailyNav[1]];
 export const SIDEBAR_WIDTH_EXPANDED = 264;
 export const SIDEBAR_WIDTH_COLLAPSED = 264;
 
-type NavItem = (typeof dailyNav)[number] | (typeof recordsNav)[number] | (typeof operatorNav)[number] | (typeof adminNav)[number];
+type NavItem = (typeof dailyNav)[number] | (typeof adminNav)[number];
+
+/** Settings sub-pages in the sidebar group. */
+const settingsNav = [
+  { href: "/settings", label: "Account settings", icon: RiAccountCircleLine, tab: null },
+  { href: "/settings?tab=integrations", label: "Integrations", icon: RiPlugLine, tab: "integrations" },
+] as const;
 
 function initials(value?: string | null) {
   if (!value) return "LK";
@@ -75,6 +70,8 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
   const [helpOpen, setHelpOpen] = useState(false);
   const [hasCrm, setHasCrm] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const onSettings = ["/settings", "/accounts"].some((p) => router.pathname.startsWith(p));
+  const [settingsOpen, setSettingsOpen] = useState(onSettings);
   const helpRef = useRef<HTMLDivElement>(null);
   const tourPage = pathToTourPage(router.pathname);
 
@@ -108,6 +105,37 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
     return router.pathname.startsWith(href);
   }
 
+  /** Settings: expands to Account settings and Integrations (tabs of /settings). */
+  function SettingsGroup({ mobile = false }: { mobile?: boolean }) {
+    const tab = typeof router.query.tab === "string" ? router.query.tab : null;
+    const row = mobile ? "h-11 text-[15px]" : "h-10 text-[14px]";
+    return (
+      <div>
+        <button type="button" aria-expanded={settingsOpen} onClick={() => setSettingsOpen((v) => !v)} data-tour="nav-settings"
+          className={`group flex w-full items-center gap-3 rounded-[8px] px-3 font-medium transition-colors ${row} ${onSettings ? "bg-base-300 text-base-content" : "text-base-content/65 hover:bg-base-300 hover:text-base-content"}`}>
+          <RiSettings4Line size={18} className={onSettings ? "text-base-content" : "text-base-content/45 group-hover:text-base-content/75"} />
+          <span className="flex-1 text-left">Settings</span>
+          <RiArrowDownSLine size={18} className={`text-base-content/55 transition-transform duration-200 ${settingsOpen ? "rotate-180" : ""}`} />
+        </button>
+        <div className={`grid transition-[grid-template-rows] duration-200 ${settingsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+          <div className="overflow-hidden">
+            <div className="ml-[21px] mt-1 space-y-1 border-l border-[var(--border-subtle)] pl-3">
+              {settingsNav.map((s) => {
+                const active = router.pathname === "/settings" && (s.tab ? tab === s.tab : tab !== "integrations");
+                return (
+                  <Link key={s.href} href={s.href} onClick={() => setMenuOpen(false)} tabIndex={settingsOpen ? undefined : -1} aria-current={active ? "page" : undefined}
+                    className={`group flex items-center gap-3 rounded-[8px] px-3 font-medium transition-colors ${row} ${active ? "text-base-content" : "text-base-content/65 hover:bg-base-300 hover:text-base-content"}`}>
+                    <s.icon size={18} className={active ? "text-base-content" : "text-base-content/45 group-hover:text-base-content/75"} />{s.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function NavLink({ item }: { item: NavItem }) {
     const active = isActive(item.href);
     if ("premium" in item && item.premium && !hasCrm) return null;
@@ -139,9 +167,7 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
         </Link>
 
         <div className="flex-1 overflow-y-auto px-3 py-3">
-          <NavSection label="" items={dailyNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
-          <NavSection label="Records" items={recordsNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
-          <NavSection label="Workspace" items={operatorNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
+          <NavSection label="" items={dailyNav} renderItem={(item) => <NavLink key={item.href} item={item} />} after={<SettingsGroup />} />
           {isSuperadmin && (
             <NavSection label="Instance" items={adminNav} renderItem={(item) => <NavLink key={item.href} item={item} />} />
           )}
@@ -182,10 +208,6 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
               </div>
             )}
           </div>
-
-          <Link href="/settings" className={`flex h-10 items-center gap-3 rounded-[8px] px-3 text-[14px] transition-colors ${isActive("/settings") ? "bg-base-300 font-medium text-base-content" : "font-medium text-base-content/65 hover:bg-base-300 hover:text-base-content"}`}>
-            <RiSettings4Line size={18} className={isActive("/settings") ? "text-base-content" : "text-base-content/45"} /> Settings
-          </Link>
 
           <div className="mt-3 flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-2.5">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-neutral text-[11px] font-semibold text-neutral-content">
@@ -229,17 +251,8 @@ export default function Sidebar({ onCollapse }: { onCollapse?: (collapsed: boole
             </div>
             <div className="space-y-4">
               <MobileSection label="" items={dailyNav} render={(item) => <MobileLink key={item.href} item={item} />} />
-              <MobileSection label="Records" items={recordsNav} render={(item) => <MobileLink key={item.href} item={item} />} />
-              <div>
-                <h3 className="mb-1 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">Workspace</h3>
-                <div className="space-y-1">
-                  {operatorNav.map((item) => <MobileLink key={item.href} item={item} />)}
-                  {isSuperadmin && adminNav.map((item) => <MobileLink key={item.href} item={item} />)}
-                  <Link href="/settings" onClick={() => setMenuOpen(false)} className={`flex h-11 items-center gap-3 rounded-[8px] px-3 text-[15px] ${isActive("/settings") ? "bg-base-300 font-medium text-base-content" : "font-medium text-base-content/70 hover:bg-base-200"}`}>
-                    <RiSettings4Line size={19} className={isActive("/settings") ? "text-base-content" : "text-base-content/45"} /> Settings
-                  </Link>
-                </div>
-              </div>
+              <SettingsGroup mobile />
+              {isSuperadmin && <MobileSection label="Instance" items={adminNav} render={(item) => <MobileLink key={item.href} item={item} />} />}
               <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-200 p-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-neutral text-[11px] font-semibold text-neutral-content">{initials(accountName)}</div>
                 <p className="min-w-0 flex-1 truncate text-[12px] font-semibold text-base-content/85">{accountName}</p>
@@ -274,11 +287,11 @@ function MobileSection({ label, items, render }: { label: string; items: readonl
   );
 }
 
-function NavSection<T>({ label, items, renderItem }: { label: string; items: readonly T[]; renderItem: (item: T) => React.ReactNode }) {
+function NavSection<T>({ label, items, renderItem, after }: { label: string; items: readonly T[]; renderItem: (item: T) => React.ReactNode; after?: React.ReactNode }) {
   return (
     <section className="mb-6">
       {label ? <h2 className="mb-2 px-3 text-[11px] font-semibold tracking-[0.04em] text-base-content/40">{label}</h2> : null}
-      <nav className="space-y-1">{items.map(renderItem)}</nav>
+      <nav className="space-y-1">{items.map(renderItem)}{after}</nav>
     </section>
   );
 }
