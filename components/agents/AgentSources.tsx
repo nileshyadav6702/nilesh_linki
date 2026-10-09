@@ -59,10 +59,12 @@ function tracked(s: AgentSourceRow): string {
 }
 
 /** "Who this agent targets" + "How this agent finds leads", with per-source counts, Launch now and toggles. */
-export default function AgentSources({ agentId, agentName, ownListId, autoEnrichEmails, icp, rows, hasLinkedIn, onChanged, onEditTargeting }: {
+export default function AgentSources({ agentId, agentName, ownListId, autoEnrichEmails, icp, rows, hasLinkedIn, onChanged, onEditTargeting, openImport = false }: {
   agentId: string; agentName: string; ownListId: string | null; autoEnrichEmails: boolean; icp: Icp; rows: AgentSourceRow[]; hasLinkedIn: boolean; onChanged: () => void; onEditTargeting?: () => void;
+  /** Open the Lead sources drawer on its import options right away (Contacts → Add leads). */
+  openImport?: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(openImport);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const chips = [...new Set([...roleTitles(icp), ...icp.industries, ...icp.company_types, ...icp.company_sizes.map(sizeLabel), ...icp.geographies])];
   const modeNote = icp.match_mode === "skip" ? "ICP filtering skipped" : icp.match_mode === "broader" ? "Broader matching" : null;
@@ -100,7 +102,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
           actions={<button type="button" className={`${primaryBtn} !bg-neutral !text-neutral-content hover:!bg-[#252320]`} onClick={() => setEditing(true)}><RiAddLine size={16} /> Lead sources</button>}
         />
         {editing && (
-          <LeadSourcesDrawer agentId={agentId} agentName={agentName} ownListId={ownListId} rows={rows} icp={icp} hasLinkedIn={hasLinkedIn}
+          <LeadSourcesDrawer initialItem={openImport ? "saved_list" : undefined} agentId={agentId} agentName={agentName} ownListId={ownListId} rows={rows} icp={icp} hasLinkedIn={hasLinkedIn}
             autoEnrichEmails={autoEnrichEmails} onClose={() => setEditing(false)} onChanged={onChanged} />
         )}
         <Panel className="overflow-hidden">

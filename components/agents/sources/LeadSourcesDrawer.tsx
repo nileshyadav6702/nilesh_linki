@@ -33,17 +33,19 @@ const listIdsOf = (rows: DrawerSourceRow[]): string[] => {
  * ("N pending changes") and saved together; CSV and LinkedIn imports run immediately in their modals.
  * Mount only while open.
  */
-export default function LeadSourcesDrawer({ agentId, agentName, ownListId, rows, icp, hasLinkedIn, autoEnrichEmails, onClose, onChanged }: {
+export default function LeadSourcesDrawer({ agentId, agentName, ownListId, rows, icp, hasLinkedIn, autoEnrichEmails, onClose, onChanged, initialItem }: {
   agentId: string; agentName: string; ownListId: string | null; rows: DrawerSourceRow[]; icp: Icp; hasLinkedIn: boolean; autoEnrichEmails: boolean;
   onClose: () => void; onChanged: () => void;
+  /** Item to open first ("saved_list" when arriving from Contacts → Add leads). */
+  initialItem?: ItemId;
 }) {
   const [initial, setInitial] = useState<Drafts>(() => draftsFromRows(rows));
   const [draft, setDraft] = useState<Drafts>(initial);
   const [attach, setAttach] = useState<string[]>([]);
   const [detach, setDetach] = useState<string[]>([]);
-  const [selected, setSelected] = useState<ItemId>("competitor");
-  const [liveOpen, setLiveOpen] = useState(true);
-  const [importOpen, setImportOpen] = useState(false);
+  const [selected, setSelected] = useState<ItemId>(initialItem ?? "competitor");
+  const [liveOpen, setLiveOpen] = useState(!initialItem || LIVE_ITEMS.some((i) => i.id === initialItem));
+  const [importOpen, setImportOpen] = useState(() => IMPORT_ITEMS.some((i) => i.id === initialItem));
   const [modal, setModal] = useState<"csv" | "linkedin" | null>(null);
   const [lists, setLists] = useState<ListRow[]>([]);
   const [listsLoading, setListsLoading] = useState(true);

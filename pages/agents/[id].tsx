@@ -168,7 +168,7 @@ export default function AgentDetail() {
         {tab === "Sources" && (
           <div className="space-y-4">
             {editingIcp && <TargetingDrawer icp={icp} websiteUrl={icpWebsite} onClose={() => setEditingIcp(false)} onSave={saveIcp} />}
-            <AgentSources agentId={a.id} agentName={a.name} ownListId={a.list_id} autoEnrichEmails={!!a.enrich_emails && a.channel !== "linkedin"} icp={icp} rows={d.sources}
+            <AgentSources openImport={router.query.add === "1"} agentId={a.id} agentName={a.name} ownListId={a.list_id} autoEnrichEmails={!!a.enrich_emails && a.channel !== "linkedin"} icp={icp} rows={d.sources}
               hasLinkedIn={!!a.linkedin_account_id} onChanged={load} onEditTargeting={() => setEditingIcp(true)} />
           </div>
         )}
