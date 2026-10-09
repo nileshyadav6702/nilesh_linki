@@ -11,6 +11,7 @@ import OutreachStep, { outreachReady } from "@/components/agents/wizard/Outreach
 import ReviewStep from "@/components/agents/wizard/ReviewStep";
 import { EMPTY_EXISTING, EMPTY_LOOKALIKE, sourcesFor, type LookalikeState, type WizardState } from "@/components/agents/wizard/types";
 import { ErrorDialog, Stepper } from "@/components/agents/wizard/kit";
+import { useLeaveGuard } from "@/components/agents/wizard/LeaveGuard";
 import { scopeTitles, type LookalikeProfile, type LookalikeScope } from "@/lib/agents/lookalike-rules";
 import type { Icp } from "@/lib/icp/schema";
 import { roleTitles, setRoles, sizePreset } from "@/lib/icp/targeting";
@@ -92,6 +93,12 @@ export default function NewAgent() {
   }, []);
 
   useEffect(() => { window.scrollTo({ top: 0, behavior: "smooth" }); }, [step]);
+
+  // Started but not launched: warn before leaving, and drop the draft agent if one was created.
+  const started = step > 0 || !!s.sourceKind || !!s.name.trim() || !!s.agentId;
+  const guard = useLeaveGuard(started, async () => {
+    if (s.agentId) await fetch(`/api/agents/${s.agentId}`, { method: "DELETE" }).catch(() => {});
+  });
 
   async function saveIcp(icp: Icp = s.icp, known: string | null = s.icpId): Promise<string> {
     if (known) return known;
@@ -268,6 +275,7 @@ export default function NewAgent() {
     setBusy(true);
     try {
       await api(`/api/agents/${s.agentId}`, "PATCH", { status: "active", outreach_enabled: false });
+      guard.allow();
       router.push(`/agents/${s.agentId}?launched=1`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not launch");
@@ -299,6 +307,7 @@ export default function NewAgent() {
       </div>
 
       {error && <ErrorDialog message={error} onClose={() => setError(null)} />}
+      {guard.dialog}
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--border-subtle)] bg-base-100/95 shadow-[0_-8px_24px_rgba(20,20,19,0.04)] backdrop-blur md:left-[264px]">
         <div className="flex items-center justify-between gap-4 px-6 py-4 sm:px-10">
