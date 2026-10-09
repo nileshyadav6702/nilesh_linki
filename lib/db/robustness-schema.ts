@@ -7,6 +7,15 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // AI outreach templates (lib/ai-templates/store.ts): structure + instructions the AI writer follows.
+  `CREATE TABLE IF NOT EXISTS ai_templates (
+    id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, channel TEXT NOT NULL CHECK(channel IN ('linkedin','email')),
+    kind TEXT NOT NULL CHECK(kind IN ('icebreaker','followup','closing')),
+    subject TEXT, body TEXT NOT NULL DEFAULT '', ai_instructions TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_ai_templates_ws ON ai_templates(workspace_id, channel, kind, updated_at)",
   // Personal account settings (lib/user-profile.ts).
   "ALTER TABLE users ADD COLUMN first_name TEXT",
   "ALTER TABLE users ADD COLUMN last_name TEXT",

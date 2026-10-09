@@ -5,6 +5,8 @@ import { aiJson } from "@/lib/ai/client";
 import type { Icp } from "@/lib/icp/schema";
 import type { Agent } from "@/lib/agents/store";
 import { workflowChannels, type Channel } from "@/lib/agents/enroll";
+import { getDb } from "@/lib/db";
+import { kindForStep, templateFor, tokensForPrompt } from "@/lib/ai-templates/store";
 
 export interface StrongSignal { id: string; type: string; title: string; snippet: string | null; source_url: string | null; occurred_at: string }
 
@@ -108,6 +110,26 @@ function contextData(agent: Agent, icp: Icp | null, lead: LeadContext) {
 /** Messages are written in the ICP's language (callers swap in the user's own when they generate). */
 const writeIn = (icp: Icp | null) => `Write every message in ${icp?.language?.trim() || "English"}.`;
 
+/**
+ * The workspace's AI outreach template for a step (Settings → AI Outreach Templates), as the model
+ * reads it: tokens become [FirstName], [AI block: …], [CTA]. Null in default mode or with no match.
+ */
+function stepTemplate(agent: Agent, step: SequenceStep, totalOnTrack: number) {
+  const t = templateFor(getDb(), agent.workspace_id, step.channel === "email" ? "email" : "linkedin", kindForStep(step.position, totalOnTrack));
+  return t ? { subject: tokensForPrompt(t.subject), body: tokensForPrompt(t.body), instructions: tokensForPrompt(t.ai_instructions) } : null;
+}
+
+/** Sender details for [Sender…] placeholders. */
+function senderData(agent: Agent, icp: Icp | null) {
+  const db = getDb();
+  const li = agent.linkedin_account_id ? db.prepare("SELECT name FROM accounts WHERE id = ?").get(agent.linkedin_account_id) as { name: string | null } | undefined : undefined;
+  const em = agent.email_account_id ? db.prepare("SELECT from_name FROM email_accounts WHERE id = ?").get(agent.email_account_id) as { from_name: string | null } | undefined : undefined;
+  const full = em?.from_name || li?.name || null;
+  return { full_name: full, first_name: full ? full.split(" ")[0] : null, company: icp?.company_name || null };
+}
+
+const TEMPLATE_RULE = "When a step has a template, follow its structure, order and fixed wording closely: replace each [Variable] with the matching value from data (sender = data.sender), expand each [AI block: …] into one specific sentence from data, turn [CTA] into one low-friction call to action for the campaign goal, follow template.instructions, and keep the template's subject pattern for email. Never print the brackets.";
+
 const RULES = [
   "Use only facts present in data; never invent numbers, customers, events or relationships. No flattery, hype, emojis or links (except data.booking_url in a closing or meetings-goal message).",
   "Never say you were tracking or monitoring the person. Address them by first name. Plain text.",
@@ -125,9 +147,10 @@ export async function writeSequence(agent: Agent, icp: Icp | null, steps: Sequen
       "Write the outreach sequence for this lead: one message for each entry in data.steps, in order, as one coherent arc.",
       `Tone: ${TONE[agent.tone] ?? TONE.professional}`,
       writeIn(icp),
+      TEMPLATE_RULE,
       ...RULES,
     ],
-    data: { ...contextData(agent, icp, lead), steps: steps.map((s) => ({ key: s.id, channel: s.channel, send_day: s.day, role: roleOf(s, perTrack(s.track)) })) },
+    data: { ...contextData(agent, icp, lead), sender: senderData(agent, icp), steps: steps.map((s) => ({ key: s.id, channel: s.channel, send_day: s.day, role: roleOf(s, perTrack(s.track)), template: stepTemplate(agent, s, perTrack(s.track)) })) },
     outputShape: `{"steps":[{"key":"<step key>","subject":"only for email channel, else null","body":""}]}`,
     schema: sequenceSchema,
   });
@@ -157,9 +180,10 @@ export async function rewriteStep(agent: Agent, icp: Icp | null, step: SequenceS
       `This step's role: ${roleOf(step, totalOnTrack)}. Do not repeat the other messages in data.other_steps.`,
       `Tone: ${TONE[agent.tone] ?? TONE.professional}`,
       writeIn(icp),
+      TEMPLATE_RULE,
       ...RULES,
     ],
-    data: { ...contextData(agent, icp, lead), channel: step.channel, current_draft: current, user_instruction: instruction, other_steps: otherSteps },
+    data: { ...contextData(agent, icp, lead), sender: senderData(agent, icp), channel: step.channel, template: stepTemplate(agent, step, totalOnTrack), current_draft: current, user_instruction: instruction, other_steps: otherSteps },
     outputShape: step.channel === "email" ? `{"subject":"","body":""}` : `{"body":""}`,
     schema: z.object({ subject: z.string().max(140).nullable().optional(), body: z.string().min(5).max(2000) }),
   });
