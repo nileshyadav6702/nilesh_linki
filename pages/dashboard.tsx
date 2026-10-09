@@ -10,6 +10,7 @@ import {
 } from "react-icons/ri";
 import TrendChart, { type ChartSeries } from "@/components/ui/TrendChart";
 import { Flames } from "@/components/contacts/cells";
+import LeadDrawer from "@/components/agents/LeadDrawer";
 import { ago, PersonAvatar } from "@/components/inbox/kit";
 import { Card, CountUp, DealSizeDialog, Tile, money } from "@/components/dashboard/kit";
 import { requireSignedIn } from "@/lib/agents/page-auth";
@@ -74,6 +75,8 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [editDeal, setEditDeal] = useState(false);
+  const [drawer, setDrawer] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const loading = loadedFor !== want;
 
@@ -84,7 +87,7 @@ export default function Dashboard() {
       .then((d: DashboardSummary) => { setData(d); setLoadedFor(want); })
       .catch((err) => { if (!ctl.signal.aborted) { setLoadedFor(want); toast.error(err instanceof Error ? err.message : "Could not load the dashboard"); } });
     return () => ctl.abort();
-  }, [period, want]);
+  }, [period, want, reload]);
 
   async function saveDeal(v: number | null) {
     const r = await fetch("/api/dashboard/home", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deal_size: v }) });
@@ -201,14 +204,14 @@ export default function Dashboard() {
               <ul>
                 {d.hotLeads.map((l) => (
                   <li key={l.id} className="border-t border-[var(--border-subtle)]">
-                    <Link href={`/contacts/${l.id}`} className="flex items-center gap-4 px-6 py-4 transition-colors hover:bg-base-200/50">
+                    <button type="button" onClick={() => setDrawer(l.id)} aria-label={`Open ${l.full_name ?? "lead"}`} className="flex w-full items-center gap-4 px-6 py-4 text-left transition-colors hover:bg-base-200/50">
                       <PersonAvatar name={l.full_name} photo={l.profile_image_url} size={48} />
                       <span className="min-w-0 flex-1">
                         <span style={{ color: LINK }} className="block truncate text-[17px] font-medium">{l.full_name ?? "Unknown"}</span>
                         <span className="block truncate text-[15px] text-base-content/70">{l.title ?? l.headline ?? ""}{l.company && <><span className="mx-1 text-base-content/35">@</span>{l.company}</>}</span>
                       </span>
                       <Flames score={l.score} size={22} />
-                    </Link>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -241,6 +244,7 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <LeadDrawer targetId={drawer} onClose={() => setDrawer(null)} onChanged={() => setReload((k) => k + 1)} siblings={d?.hotLeads.map((l) => l.id)} onOpen={setDrawer} />
       {editDeal && <DealSizeDialog value={d?.dealSize ?? null} onCancel={() => setEditDeal(false)} onSave={saveDeal} />}
     </>
   );
