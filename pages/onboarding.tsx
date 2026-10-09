@@ -47,6 +47,7 @@ const INITIAL: WizardState = {
   outreach: { build: "ai", channel: "linkedin", goal: "conversations", tone: "professional", workflow_id: "", linkedin_account_id: "", email_account_id: "", exclude_first_degree: true, mode: "copilot", booking_url: "", daily_lead_cap: 25 },
   lookalike: EMPTY_LOOKALIKE,
   existing: EMPTY_EXISTING,
+  linkedinImport: null,
 };
 
 async function api(url: string, method: string, body?: unknown) {

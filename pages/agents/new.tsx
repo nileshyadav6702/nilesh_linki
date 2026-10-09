@@ -25,6 +25,7 @@ const INITIAL: WizardState = {
   outreach: { build: null, channel: "multi", goal: "conversations", tone: "professional", workflow_id: "", linkedin_account_id: "", email_account_id: "", exclude_first_degree: true, mode: "autopilot", booking_url: "", daily_lead_cap: 25 },
   lookalike: EMPTY_LOOKALIKE,
   existing: EMPTY_EXISTING,
+  linkedinImport: null,
 };
 
 /** The ICP a Warm Lookalike agent scores against: the seed's role, place, industry and sizes. */
@@ -66,7 +67,7 @@ export default function NewAgent() {
   const setLookalike = (p: Partial<LookalikeState>) => setS((prev) => ({ ...prev, lookalike: { ...prev.lookalike, ...p } }));
   const lookalike = s.sourceKind === "lookalike";
   /** Sources that carry their own targeting skip Target and Preview and go straight to Outreach. */
-  const skipsTarget = lookalike || s.sourceKind === "existing";
+  const skipsTarget = lookalike || s.sourceKind === "existing" || s.sourceKind === "linkedin_import";
 
   useEffect(() => {
     let alive = true;
@@ -99,10 +100,10 @@ export default function NewAgent() {
     return id;
   }
 
-  async function saveTargetAndAgent(icp: Icp = s.icp, known: string | null = s.icpId) {
+  async function saveTargetAndAgent(icp: Icp = s.icp, known: string | null = s.icpId, name = s.name.trim()) {
     if (!roleTitles(icp).length && icp.match_mode !== "skip") throw new Error("Add at least one job role to target");
     const icpId = await saveIcp(icp, known);
-    const base = { name: s.name.trim(), icp_id: icpId, min_score: s.minScore, linkedin_account_id: s.outreach.linkedin_account_id || null };
+    const base = { name, icp_id: icpId, min_score: s.minScore, linkedin_account_id: s.outreach.linkedin_account_id || null };
     let agentId = s.agentId;
     if (!agentId) {
       agentId = (await api("/api/agents", "POST", { ...base, mode: s.outreach.mode, sources: sourcesFor(s) })).id as string;
@@ -197,14 +198,31 @@ export default function NewAgent() {
     }
   }
 
-  /** Existing leads: the agent works the chosen list; with no target roles yet, keep every lead (no ICP filtering). */
+  /** Saves the agent for a list-fed source: with no target roles yet it keeps every lead (no ICP filtering). */
+  async function saveListAgent(name = s.name.trim()): Promise<string> {
+    const noRoles = !roleTitles(s.icp).length;
+    const icp = noRoles ? { ...s.icp, match_mode: "skip" as const } : s.icp;
+    const agentId = await saveTargetAndAgent(icp, noRoles ? null : s.icpId, name);
+    if (noRoles) set({ icp });
+    return agentId;
+  }
+
+  /**
+   * Import from LinkedIn: the import modal attaches its list to an agent, so the agent is
+   * created (draft) when the modal opens. Once something was imported, keep its sources as they are.
+   */
+  async function ensureAgent(): Promise<string> {
+    if (s.agentId && s.linkedinImport) return s.agentId;
+    const name = s.name.trim() || "LinkedIn import";
+    if (!s.name.trim()) set({ name });
+    return saveListAgent(name);
+  }
+
+  /** Existing leads: the agent works the chosen list. */
   async function existingNext() {
     setBusy(true);
     try {
-      const noRoles = !roleTitles(s.icp).length;
-      const icp = noRoles ? { ...s.icp, match_mode: "skip" as const } : s.icp;
-      await saveTargetAndAgent(icp, noRoles ? null : s.icpId);
-      if (noRoles) set({ icp });
+      await saveListAgent();
       setStep(3);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create the agent");
@@ -225,6 +243,17 @@ export default function NewAgent() {
     if (blocker) return toast.error(blocker);
     if (step === 0 && lookalike) return lookalikeNext();
     if (step === 0 && s.sourceKind === "existing") return existingNext();
+    if (step === 0 && s.sourceKind === "linkedin_import") {
+      // Only the name can have changed; re-saving sources would detach the imported list.
+      setBusy(true);
+      try {
+        if (s.agentId) await api(`/api/agents/${s.agentId}`, "PATCH", { name: s.name.trim() || "LinkedIn import" });
+        setStep(3);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not save the agent");
+      } finally { setBusy(false); }
+      return;
+    }
     setBusy(true);
     try {
       if (step === 1) await saveTargetAndAgent();
@@ -261,7 +290,7 @@ export default function NewAgent() {
         <Stepper steps={STEPS} current={step} />
 
         <div key={step}>
-          {step === 0 && <SourcesStep state={s} set={set} setLookalike={setLookalike} hasLinkedIn={hasLinkedIn} />}
+          {step === 0 && <SourcesStep state={s} set={set} setLookalike={setLookalike} hasLinkedIn={hasLinkedIn} ensureAgent={ensureAgent} />}
           {step === 1 && <TargetStep state={s} set={set} />}
           {step === 2 && s.agentId && <PreviewStep agentId={s.agentId} onBusy={setPreviewing} />}
           {step === 3 && <OutreachStep state={s} set={set} onManual={createManualSequence} onEditSources={() => setStep(0)} />}

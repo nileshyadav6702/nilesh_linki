@@ -1,9 +1,9 @@
 import { RiFocus3Line, RiFolderOpenLine, RiGroupLine, RiLinkedinBoxLine, RiPencilLine, RiSparkling2Line } from "react-icons/ri";
 import { countSignals } from "@/components/agents/SourcePicker";
-import { Field, inputCls } from "@/components/agents/ui";
 import SignalsPicker from "@/components/agents/wizard/SignalsPicker";
 import LookalikePanel from "@/components/agents/wizard/LookalikePanel";
 import ExistingLeadsPanel from "@/components/agents/wizard/ExistingLeadsPanel";
+import LinkedInImportPanel from "@/components/agents/wizard/LinkedInImportPanel";
 import { OptionCard, RecommendedBadge, StepHeading, StepSheet } from "@/components/agents/wizard/kit";
 import type { LookalikeState, WizardState } from "@/components/agents/wizard/types";
 import { publicIdFromUrl } from "@/lib/agents/lookalike-rules";
@@ -38,15 +38,17 @@ export function sourcesReady(s: WizardState): string | null {
     if (s.existing.mode === "csv" && !s.existing.csvImported) return "Import your CSV to continue";
     if (!s.listIds.length) return "Pick a lead list";
   }
-  if (s.sourceKind === "linkedin_import" && !/linkedin\.com\/sales\//.test(s.importUrl)) return "Paste a Sales Navigator list or search URL";
+  if (s.sourceKind === "linkedin_import" && !s.linkedinImport) return "Import leads from LinkedIn to continue";
   if (!s.name.trim()) return "Give your agent a name";
   return null;
 }
 
 const tile = "flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary/10 text-base-content";
 
-export default function SourcesStep({ state, set, setLookalike, hasLinkedIn }: {
+export default function SourcesStep({ state, set, setLookalike, hasLinkedIn, ensureAgent }: {
   state: WizardState; set: (p: Partial<WizardState>) => void; setLookalike: (p: Partial<LookalikeState>) => void; hasLinkedIn: boolean;
+  /** Creates the agent now (draft) when a source needs one before Next, e.g. the LinkedIn import modal. */
+  ensureAgent: () => Promise<string>;
 }) {
   const signals = countSignals(state.sources);
   const chosen = KINDS.find((x) => x.kind === state.sourceKind);
@@ -108,13 +110,7 @@ export default function SourcesStep({ state, set, setLookalike, hasLinkedIn }: {
 
           {state.sourceKind === "existing" && <ExistingLeadsPanel state={state} set={set} />}
 
-          {state.sourceKind === "linkedin_import" && (
-            <div className="rounded-[12px] border border-[var(--border-subtle)] p-5">
-              <Field label="Sales Navigator list or search URL" hint="Imported in daily batches with human-like pacing">
-                <input className={inputCls} placeholder="https://www.linkedin.com/sales/lists/people/…" value={state.importUrl} onChange={(e) => set({ importUrl: e.target.value.trim() })} />
-              </Field>
-            </div>
-          )}
+          {state.sourceKind === "linkedin_import" && <LinkedInImportPanel state={state} set={set} ensureAgent={ensureAgent} />}
         </div>
       )}
     </StepSheet>

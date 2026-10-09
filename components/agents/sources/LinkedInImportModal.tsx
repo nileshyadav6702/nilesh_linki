@@ -30,7 +30,9 @@ const Submit = ({ busy, disabled, children }: { busy: boolean; disabled: boolean
 
 /** "Import leads from LinkedIn": Sales Navigator, post reactors or one profile into a list attached to the agent. */
 export default function LinkedInImportModal({ agentId, lists, onListsChanged, onClose, onImported }: {
-  agentId: string; lists: ListRow[]; onListsChanged: () => void; onClose: () => void; onImported: () => void;
+  agentId: string; lists: ListRow[]; onListsChanged: () => void; onClose: () => void;
+  /** Called after a successful import with the list the leads went into. */
+  onImported: (into: { listId: string; listName: string }) => void;
 }) {
   const [kind, setKind] = useState<Kind>("salesnav");
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
@@ -71,7 +73,8 @@ export default function LinkedInImportModal({ agentId, lists, onListsChanged, on
       const { ok, data } = await post(agentId, body);
       if (!ok) { toast.error(String(data.error ?? "Import failed")); return; }
       toast.success(success(data));
-      onImported();
+      const into = String(body.list_id ?? "");
+      onImported({ listId: into, listName: allLists.find((l) => l.id === into)?.name ?? "your list" });
       onClose();
     } catch { toast.error("Import failed. Check your connection and try again."); }
     finally { setBusy(false); }

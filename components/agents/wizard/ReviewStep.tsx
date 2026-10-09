@@ -55,7 +55,7 @@ export default function ReviewStep({ state }: { state: WizardState }) {
               <Line label="Location" values={state.lookalike.scope.location ? [state.lookalike.scope.location] : []} />
               <Line label="Industry" values={state.lookalike.scope.industry ? [state.lookalike.scope.industry + (state.lookalike.scope.relatedIndustries ? " and related" : "")] : []} />
             </>
-          ) : <p>{state.sourceKind === "lookalike" ? "Warm lookalikes from Sales Navigator" : state.sourceKind === "existing" ? `${state.listIds.length} existing list${state.listIds.length === 1 ? "" : "s"}` : `LinkedIn import: ${state.importUrl}`}</p>
+          ) : <p>{state.sourceKind === "lookalike" ? "Warm lookalikes from Sales Navigator" : state.sourceKind === "existing" ? state.existing.csvImported ? `CSV imported into "${state.existing.csvImported.listName}"` : `${state.listIds.length} existing list${state.listIds.length === 1 ? "" : "s"}` : `Imported from LinkedIn into "${state.linkedinImport?.listName ?? "your list"}"`}</p>
         )}
       </Section>
 

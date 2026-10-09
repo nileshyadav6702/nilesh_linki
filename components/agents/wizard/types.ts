@@ -54,6 +54,8 @@ export interface WizardState {
   outreach: OutreachChoice;
   lookalike: LookalikeState;
   existing: ExistingState;
+  /** Import from LinkedIn: the list the last import went into (attached to the draft agent). */
+  linkedinImport: { listId: string; listName: string } | null;
 }
 
 /** The agent's sources for the chosen kind, in the shape POST /api/agents expects. */
@@ -61,6 +63,7 @@ export function sourcesFor(s: WizardState): Array<{ source_type: string; config:
   // The lookalike runner reads the ICP's Sales Navigator query itself.
   if (s.sourceKind === "lookalike") return [{ source_type: "lookalike", config: s.lookalike.searchUrl ? { urls: [s.lookalike.searchUrl] } : {} }];
   if (s.sourceKind === "existing") return [{ source_type: "existing_list", config: { list_ids: s.listIds } }];
-  if (s.sourceKind === "linkedin_import") return [{ source_type: "linkedin_import", config: { urls: [s.importUrl] } }];
+  // The import modal attaches its list to the agent itself.
+  if (s.sourceKind === "linkedin_import") return [];
   return s.sources.filter((x) => x.enabled).map((x) => ({ source_type: x.source_type, config: x.config as Record<string, unknown> }));
 }
