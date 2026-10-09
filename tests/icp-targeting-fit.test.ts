@@ -149,10 +149,13 @@ describe("AI competitor filtering", () => {
 describe("match_mode broader", () => {
   it("is strictly more permissive than high precision", () => {
     for (const verdict of ["strong", "possible", "poor"]) for (const conf of ["high", "low"] as const) for (const score of [5, 50, 95]) {
-      if (isQualified(verdict, conf, score, 60, "high_precision")) expect(isQualified(verdict, conf, score, 60, "broader")).toBe(true);
+      if (isQualified(verdict, conf, score, "high_precision")) expect(isQualified(verdict, conf, score, "broader")).toBe(true);
     }
-    expect(isQualified("possible", "high", 20, 60, "broader")).toBe(true);
-    expect(isQualified("poor", "high", 90, 60, "broader")).toBe(false);
+    expect(isQualified("possible", "high", 20, "broader")).toBe(true);
+    expect(isQualified("poor", "high", 90, "broader")).toBe(false);
+    // Fit alone decides qualification now; warmth only sets priority.
+    expect(isQualified("possible", "high", 60, "high_precision")).toBe(true);
+    expect(isQualified("possible", "high", 50, "high_precision")).toBe(false);
   });
 
   it("keeps a below-threshold 'possible' lead that high precision drops", async () => {

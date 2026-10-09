@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { flamesFor } from "@/lib/signals/scoring";
 import { motion } from "motion/react";
 
 /** Shared building blocks for the AI SDR screens, following the Linki design system. */
@@ -69,7 +70,7 @@ export function ScoreBadge({ score, verdict }: { score: number | null | undefine
 /** Lead score as 1-3 flames, the way sales teams scan a list. */
 export function Flames({ score }: { score: number | null | undefined }) {
   if (score === null || score === undefined) return <span className="text-[13.5px] text-base-content/30">—</span>;
-  const n = score >= 70 ? 3 : score >= 50 ? 2 : 1;
+  const n = flamesFor(score);
   return (
     <span className="inline-flex items-center gap-0.5" title={`Lead score ${Math.round(score)}`} aria-label={`Lead score ${Math.round(score)}`}>
       {[1, 2, 3].map((i) => (

@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { flamesFor } from "@/lib/signals/scoring";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { RiAtLine, RiFireFill, RiHeartPulseLine, RiLoader4Line, RiPhoneLine, RiSparkling2Line } from "react-icons/ri";
@@ -20,7 +21,7 @@ function Flame({ on, size = 20 }: { on: boolean; size?: number }) {
 }
 
 export function Flames({ score, size = 20 }: { score: number; size?: number }) {
-  const n = score >= 70 ? 3 : score >= 50 ? 2 : 1;
+  const n = flamesFor(score);
   return <span className="inline-flex gap-0.5">{[1, 2, 3].map((i) => <Flame key={i} on={i <= n} size={size} />)}</span>;
 }
 

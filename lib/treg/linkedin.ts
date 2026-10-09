@@ -138,7 +138,7 @@ export async function tregPostEngagers(workspaceId: string, post: PostRef, opts:
 
 export interface TregProfile {
   full_name: string | null; first_name: string | null; last_name: string | null; headline: string | null; about: string | null;
-  location: string | null; linkedin_url: string | null; current: { company: string | null; title: string | null; started: string | null } | null;
+  location: string | null; linkedin_url: string | null; current: { company: string | null; title: string | null; started: string | null; companyUrl?: string | null } | null;
 }
 
 /** The current job from a vendor's raw profile (experience lists differ per vendor). */
@@ -157,7 +157,8 @@ export function currentPosition(raw: unknown): TregProfile["current"] {
         if (isCurrent) {
           const s = it.start ?? it.startDate ?? it.start_date ?? it.starts_at;
           const started = typeof s === "string" ? s || null :isObj(s) && s.year ? `${s.year}-${String(s.month ?? 1).padStart(2, "0")}-01` : null;
-          found = { company: company.split(" · ")[0], title, started };
+          const companyUrl = pick(it, ["companyUrl", "company_url", "companyLinkedinUrl", "company_linkedin_url"]) ?? (isObj(it.company) ? pick(it.company as Obj, ["url", "linkedinUrl"]) : null);
+          found = { company: company.split(" · ")[0], title, started, companyUrl };
           return;
         }
       }
@@ -188,4 +189,28 @@ export async function tregProfile(workspaceId: string, url: string): Promise<Tre
     full_name: str(o.full_name), first_name: str(o.first_name), last_name: str(o.last_name), headline: str(o.headline), about: str(o.about),
     location: str(o.location), linkedin_url: str(o.linkedin_url), current: currentPosition(isObj(r.data) ? r.data.raw : null),
   };
+}
+
+export interface TregCompany { name: string; description: string | null; website: string | null; employees: string | null; location: string | null; industry: string | null; linkedin_url: string | null }
+
+/** Company page firmographics (size, description, website; industry when the vendor has it). */
+export async function tregCompany(workspaceId: string, url: string): Promise<TregCompany | null> {
+  const m = url.match(/linkedin\.com\/(?:company|school|showcase)\/([^/?#]+)/i);
+  if (!m) return null;
+  let r;
+  try {
+    r = await tregCall<Obj>("treg.linkedin.company.profile", { workspaceId, purpose: "company", body: { linkedin_url: `https://www.linkedin.com/company/${m[1]}/` }, maxCostUsd: 0.01 });
+  } catch (err) {
+    if (err instanceof Error && "status" in err && (err as { status: number | null }).status === 404) return null;
+    throw err;
+  }
+  const o = isObj(r.data) && isObj(r.data.output) ? r.data.output : null;
+  if (!o || !str(o.name)) return null;
+  let industry: string | null = null;
+  const find = (v: unknown, d: number): void => {
+    if (industry || d > 5) return;
+    if (isObj(v)) { const i = v.industry ?? v.industries; if (typeof i === "string") industry = i; else if (Array.isArray(i) && typeof i[0] === "string") industry = i[0]; else for (const x of Object.values(v)) find(x, d + 1); }
+  };
+  find(isObj(r.data) ? r.data.raw : null, 0);
+  return { name: str(o.name)!, description: str(o.description), website: str(o.website), employees: typeof o.employees === "number" ? String(o.employees) : str(o.employees), location: str(o.location), industry, linkedin_url: str(o.linkedin_url) };
 }

@@ -31,7 +31,7 @@ export interface SourceRunContext {
   voyager?: VoyagerLike;
   browser?: BrowserContext;
   /** A newly discovered person + why they matter. */
-  emitLead(candidate: LeadCandidate, signal: EmittedSignal): EmitResult;
+  emitLead(candidate: LeadCandidate, signal: EmittedSignal, opts?: { excludeEmployeesOf?: string[] }): EmitResult;
   /** A signal about a contact already in the workspace. */
   emitForTarget(targetId: string, signal: EmittedSignal): EmitResult;
   /** A company-level signal; fans out to known contacts at that company. */

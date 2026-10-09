@@ -70,7 +70,7 @@ describe("treg LinkedIn parsing", () => {
 
   it("finds the current job in a vendor's raw profile", () => {
     expect(currentPosition({ experience: [{ title: "CEO", company: "NewCo", start: { year: 2026, month: 3 }, end: null }, { title: "VP", company: "OldCo", end: { year: 2025 } }] }))
-      .toEqual({ company: "NewCo", title: "CEO", started: "2026-03-01" });
+      .toMatchObject({ company: "NewCo", title: "CEO", started: "2026-03-01" });
     expect(currentPosition({ data: { positions: [{ title: "Founder", companyName: "Acme · Full-time", isCurrent: true }] } })?.company).toBe("Acme");
   });
 });
@@ -80,10 +80,12 @@ describe("treg people search", () => {
   it("builds an Icypeas query from the ICP", () => {
     expect(headcountRange(["11-50", "51-200"])).toEqual({ ">=": 11, "<=": 200 });
     expect(headcountRange(["1,001-5,000", "10,000+"])).toEqual({ ">=": 1001 });
-    expect(icypeasQuery(icp)).toEqual({
+    expect(icypeasQuery(icp)).toMatchObject({
       currentJobTitle: { include: ["VP of Sales", "Head of Sales"], exclude: ["intern"] },
-      location: { include: ["US"] }, "currentCompany.industry": { include: ["Software"] }, "currentCompany.headcount": { ">=": 11, "<=": 200 },
+      location: { include: ["US"] }, "currentCompany.headcount": { ">=": 11, "<=": 200 },
     });
+    // "Software" is mapped to the industry names the leads database uses.
+    expect((icypeasQuery(icp)!["currentCompany.industry"] as { include: string[] }).include).toContain("Software Development");
     expect(icypeasQuery({ ...icp, personas: [] } as unknown as Icp)).toBeNull();
   });
   it("maps result rows to leads", () => {

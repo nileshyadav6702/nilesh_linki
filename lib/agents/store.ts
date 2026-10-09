@@ -40,7 +40,7 @@ export const agentInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
   icp_id: z.string().max(100).nullish(),
   mode: z.enum(["copilot", "autopilot"]).default("copilot"),
-  min_score: z.number().min(0).max(100).default(55),
+  min_score: z.number().min(0).max(100).default(60),
   fit_weight: z.number().min(0).max(1).default(0.6),
   workflow_id: z.string().max(100).nullish(),
   linkedin_account_id: z.string().max(100).nullish(),

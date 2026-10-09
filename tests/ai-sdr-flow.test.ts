@@ -96,8 +96,9 @@ describe("agent flow (copilot)", () => {
     expect(ctx.emitLead({ name: "Ada Lovelace", headline: "VP Sales at Acme", profileUrl: "https://www.linkedin.com/in/ada" }, signal("p1:ada"))).toBe("ingested");
     expect(ctx.emitLead({ name: "Ada Lovelace", headline: "VP Sales at Acme", profileUrl: "https://www.linkedin.com/in/ada" }, signal("p1:ada"))).toBe("duplicate");
     expect(ctx.emitLead({ name: "Rival Rep", headline: "AE at Gojiberry", profileUrl: "https://www.linkedin.com/in/rival" }, signal("p1:rival"))).toBe("filtered");
-    expect(ctx.emitLead({ name: "Dee Signer", headline: "Designer at Foo", profileUrl: "https://www.linkedin.com/in/dee" }, signal("p1:dee"))).toBe("ingested");
-    expect(stats).toMatchObject({ ingested: 2, filtered: 1, duplicates: 1 });
+    // Social signals must name a persona role: a designer liking the post is not a lead.
+    expect(ctx.emitLead({ name: "Dee Signer", headline: "Designer at Foo", profileUrl: "https://www.linkedin.com/in/dee" }, signal("p1:dee"))).toBe("filtered");
+    expect(stats).toMatchObject({ ingested: 1, filtered: 2, duplicates: 1 });
 
     const ada = db.prepare("SELECT * FROM targets WHERE linkedin_url = ? AND workspace_id = ?").get("https://www.linkedin.com/in/ada", WS) as { id: string; agent_status: string; title: string; company: string };
     expect(ada).toMatchObject({ agent_status: "new", title: "VP Sales", company: "Acme" });
@@ -105,14 +106,14 @@ describe("agent flow (copilot)", () => {
 
     stubModel();
     const pass = await runAgentPass(getAgent(agent.id, WS)!);
-    expect(pass.scored).toBe(2);
+    expect(pass.scored).toBe(1);
     expect(pass.drafted).toBe(1);
 
     const scored = db.prepare("SELECT agent_status, fit_verdict, lead_score FROM targets WHERE id = ?").get(ada.id) as { agent_status: string; fit_verdict: string; lead_score: number };
     expect(scored.agent_status).toBe("drafted");
     expect(scored.fit_verdict).toBe("strong");
     expect(scored.lead_score).toBeGreaterThan(55);
-    expect((db.prepare("SELECT agent_status FROM targets WHERE linkedin_url = ? AND workspace_id = ?").get("https://www.linkedin.com/in/dee", WS) as { agent_status: string }).agent_status).toBe("disqualified");
+    expect(db.prepare("SELECT 1 FROM targets WHERE linkedin_url = ? AND workspace_id = ?").get("https://www.linkedin.com/in/dee", WS)).toBeUndefined();
 
     const draft = db.prepare("SELECT * FROM approval_queue WHERE target_id = ?").get(ada.id) as { id: string; channel: string; status: string; auto_approve_at: string | null; step_id: string; position: number };
     expect(draft).toMatchObject({ channel: "linkedin_message", status: "pending", auto_approve_at: null, step_id: "st-2", position: 1 });
@@ -133,7 +134,7 @@ describe("agent flow (copilot)", () => {
     expect(takeApprovedDraft(db, ada.id, "linkedin_message", "st-2")).toBeNull();
 
     const funnel = signalFunnel(db, WS, agent.id);
-    expect(funnel.find((f) => f.signal_type === "competitor_engagement")).toMatchObject({ detected: 2, qualified: 1 });
+    expect(funnel.find((f) => f.signal_type === "competitor_engagement")).toMatchObject({ detected: 1, qualified: 1 });
   });
 
   it("auto-approves due drafts in autopilot", () => {

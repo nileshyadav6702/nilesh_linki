@@ -6,7 +6,7 @@ import { getDb } from "@/lib/db";
 import { ingestSignal } from "@/lib/platform/signals";
 import { getIcp, getLatestIcp } from "@/lib/icp/store";
 import { parseSourceConfig, type Agent, type AgentSource } from "@/lib/agents/store";
-import { prefilterLead, upsertLead } from "@/lib/signals/leads";
+import { prefilterLead, upsertLead, type LeadCandidate } from "@/lib/signals/leads";
 import { SOURCE_TYPES, type SourceType } from "@/lib/signals/types";
 import { engagementRunner, keywordRunner } from "@/lib/signals/sources/engagement";
 import { jobChangeRunner } from "@/lib/signals/sources/job-change";
@@ -55,6 +55,26 @@ function findOrCreateCompany(db: Database.Database, workspaceId: string, c: { na
   return id;
 }
 
+const domainOf = (website: string | null | undefined) => {
+  if (!website) return null;
+  try { return new URL(/^https?:\/\//.test(website) ? website : `https://${website}`).hostname.replace(/^www\./, "").toLowerCase(); } catch { return null; }
+};
+
+/** About text and firmographics a source already had: stored so scoring needs no extra lookups. */
+function saveExtras(db: Database.Database, workspaceId: string, targetId: string, c: LeadCandidate) {
+  if (c.summary) db.prepare("UPDATE targets SET summary = COALESCE(summary, ?) WHERE id = ?").run(c.summary.slice(0, 4000), targetId);
+  const info = c.companyInfo;
+  if (!info?.name) return;
+  const domain = domainOf(info.website);
+  const companyId = findOrCreateCompany(db, workspaceId, { name: info.name, domain, website: info.website ?? null });
+  db.prepare(`UPDATE companies SET industry = COALESCE(industry, ?), employee_count = COALESCE(employee_count, ?), description = COALESCE(description, ?),
+      linkedin_url = COALESCE(linkedin_url, ?), location = COALESCE(location, ?), website = COALESCE(website, ?), domain = COALESCE(domain, ?) WHERE id = ?`)
+    .run(info.industry ?? null, info.employeeCount ?? null, info.description?.slice(0, 2000) ?? null, info.linkedinUrl ?? null, info.location ?? null, info.website ?? null, domain, companyId);
+  db.prepare("UPDATE targets SET company_id = COALESCE(company_id, ?) WHERE id = ?").run(companyId, targetId);
+}
+
+const SOCIAL_SIGNALS = new Set<string>(["competitor_engagement", "influencer_engagement", "keyword_engagement", "own_content_engagement"]);
+
 export interface RunStats { candidates: number; ingested: number; filtered: number; duplicates: number }
 
 export function buildContext(db: Database.Database, agent: Agent, source: AgentSource, detectorRunId: string, stats: RunStats, deps: { voyager?: VoyagerLike; browser?: BrowserContext; maxNew?: number }): SourceRunContext {
@@ -75,13 +95,16 @@ export function buildContext(db: Database.Database, agent: Agent, source: AgentS
   return {
     db, workspaceId: agent.workspace_id, agent, source, config: parseSourceConfig(source.config_json), icp, detectorRunId, cursor, voyager: deps.voyager, browser: deps.browser,
     isFull: () => deps.maxNew !== undefined && stats.ingested >= deps.maxNew,
-    emitLead(candidate, signal): EmitResult {
+    emitLead(candidate, signal, opts): EmitResult {
       stats.candidates++;
       if (signalExists(db, agent.workspace_id, signal.dedupeKey)) { stats.duplicates++; return "duplicate"; }
-      const verdict = prefilterLead(candidate, { icp });
+      // Anyone can react to a post: social signals must also name a persona role (unless the ICP asks for broader matching).
+      const personaGate = SOCIAL_SIGNALS.has(signal.type) && (icp?.match_mode ?? "high_precision") === "high_precision";
+      const verdict = prefilterLead(candidate, { icp, personaGate, excludeEmployeesOf: opts?.excludeEmployeesOf });
       if (!verdict.ok) { stats.filtered++; return "filtered"; }
       if (newLeadsToday(db, agent.id) >= cap || (deps.maxNew !== undefined && stats.ingested >= deps.maxNew)) return "capped";
       const { targetId } = upsertLead(db, agent.workspace_id, agent.id, candidate, signal.type === "lookalike" ? "lookalike" : "signal");
+      saveExtras(db, agent.workspace_id, targetId, candidate);
       addToList(db, agent.list_id, targetId);
       ingest(targetId, undefined, signal, signal.dedupeKey);
       stats.ingested++;

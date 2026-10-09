@@ -7,6 +7,8 @@ import { screenLead } from "@/lib/agents/fit-rules";
 import { recomputeIntent } from "@/lib/signals/scoring";
 import type { Agent } from "@/lib/agents/store";
 import { clearFailure, inBackoff, recordFailure } from "@/lib/agents/backoff";
+import { tregEnabled } from "@/lib/treg/client";
+import { enrichForScoring } from "@/lib/treg/enrich";
 
 const BATCH = 10;
 
@@ -15,6 +17,10 @@ export const fitBatchSchema = z.object({
     index: z.number().int(),
     fit_score: z.number().min(0).max(100),
     verdict: z.enum(["strong", "possible", "poor"]),
+    /** How strongly the signal evidence points to the problem the offer solves (0-100). */
+    signal_strength: z.number().min(0).max(100).optional(),
+    /** Can this person buy or push the purchase (0-100)? */
+    contact_relevance: z.number().min(0).max(100).optional(),
     reason: z.string().max(400),
   })).max(BATCH * 2),
 });
@@ -43,9 +49,22 @@ export function ruleFit(l: Pick<LeadRow, "headline" | "title">, icp: Icp | null)
  * Leads waiting for a fit score: new ones, plus needs_data ones whose headline or about has
  * since been filled in (profile enrichment, job-change re-check). Leads in retry backoff wait.
  */
+const LEAD_COLUMNS = `t.id, t.full_name, t.headline, t.title, t.company, t.location, t.summary,
+        c.industry company_industry, COALESCE(c.employee_count, c.employee_range) company_size, c.description company_description`;
+
+/** Same rows re-read after enrichment filled them in. */
+function reloadRows(db: Database.Database, rows: LeadRow[]): LeadRow[] {
+  if (!rows.length) return rows;
+  const fresh = db.prepare(`SELECT ${LEAD_COLUMNS} FROM targets t LEFT JOIN companies c ON c.id = t.company_id WHERE t.id IN (${rows.map(() => "?").join(",")})`).all(...rows.map((r) => r.id)) as LeadRow[];
+  const byId = new Map(fresh.map((r) => [r.id, r]));
+  return rows.map((r) => byId.get(r.id) ?? r);
+}
+
+/** The verdict always follows the score (the model sometimes says "poor" next to a 65). */
+export const verdictFor = (fit: number): "strong" | "possible" | "poor" => (fit >= 70 ? "strong" : fit >= 40 ? "possible" : "poor");
+
 function loadUnscored(db: Database.Database, agent: Agent, icpId: string | null, limit: number, anyNeedsData = false): LeadRow[] {
-  const rows = db.prepare(`SELECT t.id, t.full_name, t.headline, t.title, t.company, t.location, t.summary,
-        c.industry company_industry, c.employee_count company_size, c.description company_description
+  const rows = db.prepare(`SELECT ${LEAD_COLUMNS}
       FROM targets t LEFT JOIN companies c ON c.id = t.company_id
      WHERE t.agent_id = ? AND (t.scored_icp_id IS NULL OR t.scored_icp_id IS NOT ?)
        AND (t.agent_status = 'new'
@@ -60,27 +79,46 @@ export function markNeedsData(db: Database.Database, targetId: string): void {
       fit_reason = 'Waiting for headline or about to score against the ICP' WHERE id = ? AND agent_status = 'new'`).run(targetId);
 }
 
-function topSignals(db: Database.Database, targetId: string): Array<{ type: string; title: string; snippet: string | null }> {
-  return db.prepare("SELECT type, title, snippet FROM signals WHERE target_id = ? ORDER BY COALESCE(weight, score) DESC, occurred_at DESC LIMIT 3").all(targetId) as Array<{ type: string; title: string; snippet: string | null }>;
+function topSignals(db: Database.Database, targetId: string): Array<{ type: string; title: string; snippet: string | null; occurred_at: string | null }> {
+  return db.prepare("SELECT type, title, snippet, occurred_at FROM signals WHERE target_id = ? ORDER BY COALESCE(weight, score) DESC, occurred_at DESC LIMIT 3").all(targetId) as Array<{ type: string; title: string; snippet: string | null; occurred_at: string | null }>;
 }
 
+/** Automatic skips (not the user's judgement), excluded from feedback examples. */
+const AUTO_SKIP = ["Already a 1st-degree connection%", "Someone from this company%", "Competitor:%", "%is on your blocklist", "Removed from%"];
+
 /**
- * Whether a scored lead is kept. high_precision: not "poor" and at or above the agent's min score.
- * broader (strictly more permissive): anything not "poor" passes regardless of score, and a
- * low-confidence "poor" still passes when it clears the min score. Only a confident "poor" drops.
+ * The user's own calls on this agent's leads, so the model scores new leads the way the user
+ * would: up to 6 accepted (approved / in outreach) and 6 rejected, newest first.
  */
-export function isQualified(verdict: string, confidence: "high" | "low", leadScore: number, minScore: number, mode: MatchMode = "high_precision"): boolean {
-  if (mode === "broader") return verdict !== "poor" || (confidence === "low" && leadScore >= minScore);
-  return verdict !== "poor" && leadScore >= minScore;
+export function feedbackExamples(db: Database.Database, agentId: string): { accepted: unknown[]; rejected: unknown[] } {
+  const accepted = db.prepare(`SELECT title, headline, company FROM targets WHERE agent_id = ? AND agent_status IN ('approved','enrolled')
+    ORDER BY agent_status_at DESC LIMIT 6`).all(agentId);
+  const rejected = db.prepare(`SELECT title, headline, company, skip_reason AS reason FROM targets WHERE agent_id = ? AND agent_status = 'skipped'
+    AND skip_reason IS NOT NULL AND ${AUTO_SKIP.map(() => "skip_reason NOT LIKE ?").join(" AND ")} ORDER BY agent_status_at DESC LIMIT 6`).all(agentId, ...AUTO_SKIP);
+  return { accepted, rejected };
+}
+
+/** ICP fit a lead needs to qualify (high precision); broader mode accepts anything not "poor". */
+export const QUALIFY_FIT = 55;
+
+/**
+ * Whether a scored lead is kept, judged on ICP fit alone (who they are). How warm the lead is
+ * (signal, recency, relevance) only sets its priority and whether outreach starts on its own.
+ * high_precision: not "poor" and fit >= QUALIFY_FIT. broader: anything not "poor", plus a
+ * low-confidence "poor" with fit >= 40 (thin profile, plausible match).
+ */
+export function isQualified(verdict: string, confidence: "high" | "low", fitScore: number, mode: MatchMode = "high_precision"): boolean {
+  if (mode === "broader") return verdict !== "poor" || (confidence === "low" && fitScore >= 40);
+  return verdict !== "poor" && fitScore >= QUALIFY_FIT;
 }
 
 /** Applies a fit verdict and moves the lead to qualified / disqualified on the agent's threshold. */
-export function applyFit(db: Database.Database, agent: Agent, targetId: string, icpId: string | null, fit: { fit_score: number; verdict: string; reason: string }, confidence: "high" | "low", mode: MatchMode = "high_precision") {
-  db.prepare(`UPDATE targets SET fit_score = ?, fit_verdict = ?, fit_reason = ?, fit_confidence = ?, scored_at = datetime('now'), scored_icp_id = ? WHERE id = ?`)
-    .run(fit.fit_score, fit.verdict, fit.reason, confidence, icpId, targetId);
+export function applyFit(db: Database.Database, agent: Agent, targetId: string, icpId: string | null, fit: { fit_score: number; verdict: string; reason: string; signal_strength?: number; contact_relevance?: number }, confidence: "high" | "low", mode: MatchMode = "high_precision") {
+  db.prepare(`UPDATE targets SET fit_score = ?, fit_verdict = ?, fit_reason = ?, fit_confidence = ?, signal_strength = ?, contact_relevance = ?,
+      scored_at = datetime('now'), scored_icp_id = ? WHERE id = ?`)
+    .run(fit.fit_score, fit.verdict, fit.reason, confidence, fit.signal_strength ?? null, fit.contact_relevance ?? null, icpId, targetId);
   recomputeIntent(db, targetId, agent.fit_weight);
-  const { lead_score } = db.prepare("SELECT lead_score FROM targets WHERE id = ?").get(targetId) as { lead_score: number };
-  const qualified = isQualified(fit.verdict, confidence, lead_score, agent.min_score, mode);
+  const qualified = isQualified(fit.verdict, confidence, fit.fit_score, mode);
   db.prepare("UPDATE targets SET agent_status = ?, agent_status_at = datetime('now') WHERE id = ?").run(qualified ? "qualified" : "disqualified", targetId);
   return qualified;
 }
@@ -106,7 +144,12 @@ export async function scoreNewLeads(db: Database.Database, agent: Agent, icp: Ic
     for (const l of all) skipFit(db, l.id, icpId);
     return all.length;
   }
-  const loaded = loadUnscored(db, agent, icpId, limit);
+  let loaded = loadUnscored(db, agent, icpId, limit);
+  // Thin leads (no company data yet): read profile + company first, so fit is judged on facts.
+  if (tregEnabled() && icp && loaded.length) {
+    const thin = loaded.filter((l) => !l.company_industry && !l.company_description).map((l) => l.id);
+    if (thin.length && (await enrichForScoring(db, agent.workspace_id, thin))) loaded = reloadRows(db, loaded);
+  }
   const requireText = opts.requireProfileText ?? true;
   let screenedOut = 0;
   const screened = icp ? loaded.filter((l) => {
@@ -152,9 +195,15 @@ export function fitInstructions(icp: Icp): string[] {
     "Score how well each lead in data.leads fits the ideal customer profile in data.icp, from 0 (no fit) to 100 (perfect buyer).",
     "Judge role, seniority, department and company against the ICP personas, industries, company types, sizes and geographies.",
     "verdict: strong (>= 70), possible (40-69), poor (< 40). reason: one short sentence naming the deciding facts.",
+    "signal_strength (0-100): how strongly the lead's signals (data.leads[].signals: what they engaged with or did, and when) point to the problem data.icp.offer solves. A comment on a post about that exact problem is high; a like on a generic or unrelated post is low; no signals is 0.",
+    "contact_relevance (0-100): whether this person can buy or push the purchase: decision makers and budget owners in the personas' departments are high, individual contributors lower, other departments low.",
+    "Judge fit on who the person is; do not lower fit_score because a signal is weak (that is what signal_strength is for).",
+    "data.feedback holds leads the user accepted and rejected for this agent: score similar people the same way.",
     "If a lead has little profile information, score from what is there and say so in the reason; do not invent facts.",
-    "People who work at a competitor, are students, recruiters or job seekers are poor fits.",
-    "People whose company, headline or title matches anything in data.icp.exclusions are poor fits.",
+    "People who WORK AT a competitor, are students, recruiters or job seekers are poor fits.",
+    "Engaging with a competitor's or anyone else's post is a buying signal, never a reason for a poor fit: judge fit on who the person is and where they work.",
+    "data.icp.exclusions apply to the lead's own company, headline and title only, never to the posts or companies they engaged with.",
+    "When the company is unknown, judge from the title and headline and say so; a matching role at an unknown company is a possible fit (40-69), not poor.",
   ];
   if (excludesServiceProviders(icp)) out.push("People at agencies, consultancies, freelancers and B2B service providers (data.icp.exclude_service_providers) are poor fits.");
   if (icp.ai_competitor_filtering) out.push("Also treat as a poor fit anyone working at a company that competes with data.icp.company_name (sells an offer similar to data.icp.offer), even if it is not listed in data.icp.competitors; say \"competitor\" in the reason.");
@@ -179,15 +228,16 @@ async function scoreBatch(db: Database.Database, agent: Agent, icp: Icp, icpId: 
         about: l.summary?.slice(0, 500) ?? null, company_industry: l.company_industry, company_size: l.company_size,
         company_description: l.company_description?.slice(0, 300) ?? null, signals: topSignals(db, l.id),
       })),
+      feedback: feedbackExamples(db, agent.id),
     },
-    outputShape: `{"leads":[{"index":0,"fit_score":75,"verdict":"strong","reason":""}]}`,
+    outputShape: `{"leads":[{"index":0,"fit_score":75,"verdict":"strong","signal_strength":60,"contact_relevance":80,"reason":""}]}`,
     schema: fitBatchSchema,
   });
   const byIndex = new Map(result.leads.map((r) => [r.index, r]));
   let scored = 0;
   batch.forEach((l, index) => {
     const r = byIndex.get(index);
-    const fit = r ?? ruleFit(l, icp);
+    const fit = r ? { ...r, verdict: verdictFor(r.fit_score) } : ruleFit(l, icp);
     try {
       applyFit(db, agent, l.id, icpId, fit, r && hasProfileText(l) ? "high" : "low", icp.match_mode);
       clearFailure("score", l.id);

@@ -44,7 +44,7 @@ function postData(ctx: SourceRunContext): PostData {
   };
 }
 
-async function harvestPost(ctx: SourceRunContext, data: PostData, post: PostRef, type: SignalType, what: string) {
+async function harvestPost(ctx: SourceRunContext, data: PostData, post: PostRef, type: SignalType, what: string, excludeEmployeesOf?: string[]) {
   const seen = (ctx.cursor.posts ?? {}) as Record<string, string>;
   const firstSeen = seen[post.activityUrn];
   if (firstSeen && ageDays(firstSeen) > REVISIT_DAYS) return;
@@ -68,6 +68,7 @@ async function harvestPost(ctx: SourceRunContext, data: PostData, post: PostRef,
         occurredAt: post.postedAt,
         metadata: { post_urn: post.activityUrn, post_excerpt: post.text.slice(0, 300), engagement: e.kind, reaction: e.reactionType },
       },
+      { excludeEmployeesOf },
     );
   }
 }
@@ -81,7 +82,9 @@ export function engagementRunner(type: SignalType): SourceRunner {
       if (!entity) continue;
       const posts = await data.posts(entity, ctx.config.posts_per_entity);
       const what = type === "own_content_engagement" ? "your post" : `${entityLabel(url)}'s post`;
-      for (const post of posts) { if (ctx.isFull()) return; await harvestPost(ctx, data, post, type, what); }
+      // A competitor's own staff like its posts; they are not prospects.
+      const staff = type === "competitor_engagement" ? [entityLabel(url)] : undefined;
+      for (const post of posts) { if (ctx.isFull()) return; await harvestPost(ctx, data, post, type, what, staff); }
     }
   };
 }

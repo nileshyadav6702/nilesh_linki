@@ -22,7 +22,7 @@ export const getServerSideProps = requireSignedIn;
 const STEPS = ["Sources", "Target", "Preview", "Outreach", "Review"] as const;
 
 const INITIAL: WizardState = {
-  name: "", website: "", icp: EMPTY_ICP, icpId: null, sourceKind: null, sources: [], listIds: [], importUrl: "", minScore: 55, agentId: null,
+  name: "", website: "", icp: EMPTY_ICP, icpId: null, sourceKind: null, sources: [], listIds: [], importUrl: "", minScore: 60, agentId: null,
   outreach: { build: null, channel: "multi", goal: "conversations", tone: "professional", workflow_id: "", linkedin_account_id: "", email_account_id: "", exclude_first_degree: true, mode: "autopilot", booking_url: "", daily_lead_cap: 25 },
   lookalike: EMPTY_LOOKALIKE,
   existing: EMPTY_EXISTING,

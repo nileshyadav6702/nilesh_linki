@@ -7,6 +7,10 @@ import { execMigration, rebuildTable, tableSql } from "@/lib/db/migrate";
  * runner's hot queries need. Idempotent; replayed on every boot after the other migrations.
  */
 const STATEMENTS: string[] = [
+  // Lead scoring v2 (lib/signals/scoring.ts): the model's signal + relevance judgements and the breakdown shown in the UI.
+  "ALTER TABLE targets ADD COLUMN signal_strength REAL",
+  "ALTER TABLE targets ADD COLUMN contact_relevance REAL",
+  "ALTER TABLE targets ADD COLUMN score_breakdown TEXT",
   // Treg data calls (lib/treg/client.ts): what each workspace spends, for the daily cap and reporting.
   `CREATE TABLE IF NOT EXISTS treg_calls (
     id TEXT PRIMARY KEY, workspace_id TEXT, endpoint TEXT NOT NULL, purpose TEXT, status INTEGER,

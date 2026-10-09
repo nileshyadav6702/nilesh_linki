@@ -1,7 +1,8 @@
 import type Database from "better-sqlite3";
 import { getDb } from "@/lib/db";
 import { TregError, tregEnabled } from "@/lib/treg/client";
-import { tregProfile } from "@/lib/treg/linkedin";
+import { randomUUID } from "crypto";
+import { tregCompany, tregProfile } from "@/lib/treg/linkedin";
 import { NEEDS_DATA_MAX_ATTEMPTS, NEEDS_DATA_RETRY_HOURS } from "@/lib/linkedin/needs-data";
 
 /**
@@ -12,6 +13,50 @@ import { NEEDS_DATA_MAX_ATTEMPTS, NEEDS_DATA_RETRY_HOURS } from "@/lib/linkedin/
 
 export const TREG_ENRICH_PER_PASS = 40;
 const CONCURRENCY = 5;
+
+/**
+ * Before scoring: leads that passed the free persona gate but arrived thin (an engager has a
+ * name and headline, no company) get their profile and company firmographics read first, so
+ * the model judges company size and industry instead of saying "company unknown". About
+ * $0.002 a lead, once per lead (enriched_profile_at), only for leads about to be scored.
+ */
+export async function enrichForScoring(db: DB, workspaceId: string, targetIds: string[]): Promise<number> {
+  if (!tregEnabled() || !targetIds.length) return 0;
+  const rows = db.prepare(`SELECT t.id, t.linkedin_url, t.company_id, c.description, c.employee_count FROM targets t LEFT JOIN companies c ON c.id = t.company_id
+    WHERE t.id IN (${targetIds.map(() => "?").join(",")}) AND t.enriched_profile_at IS NULL AND t.linkedin_url LIKE '%linkedin.com/in/%'
+      AND (t.company_id IS NULL OR (c.description IS NULL AND c.employee_count IS NULL))`).all(...targetIds) as Array<{ id: string; linkedin_url: string }>;
+  let done = 0;
+  const queue = [...rows];
+  const worker = async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) {
+      try {
+        const p = await tregProfile(workspaceId, r.linkedin_url);
+        db.prepare(`UPDATE targets SET headline = COALESCE(headline, ?), summary = COALESCE(summary, ?), location = COALESCE(location, ?),
+            company = COALESCE(company, ?), title = COALESCE(title, ?), enriched_profile_at = datetime('now') WHERE id = ?`)
+          .run(p?.headline ?? null, p?.about ?? null, p?.location ?? null, p?.current?.company ?? null, p?.current?.title ?? null, r.id);
+        if (p?.current?.companyUrl) {
+          const c = await tregCompany(workspaceId, p.current.companyUrl);
+          if (c) {
+            const employees = Number((c.employees ?? "").replace(/[^\d]/g, "")) || null;
+            const existing = db.prepare("SELECT id FROM companies WHERE workspace_id = ? AND (linkedin_url = ? OR lower(name) = lower(?))").get(workspaceId, c.linkedin_url ?? "", c.name) as { id: string } | undefined;
+            const id = existing?.id ?? randomUUID();
+            if (!existing) db.prepare("INSERT INTO companies (id, workspace_id, name) VALUES (?, ?, ?)").run(id, workspaceId, c.name);
+            db.prepare(`UPDATE companies SET description = COALESCE(description, ?), website = COALESCE(website, ?), employee_count = COALESCE(employee_count, ?),
+                employee_range = COALESCE(employee_range, ?), location = COALESCE(location, ?), industry = COALESCE(industry, ?), linkedin_url = COALESCE(linkedin_url, ?) WHERE id = ?`)
+              .run(c.description?.slice(0, 2000) ?? null, c.website, employees, c.employees, c.location, c.industry, c.linkedin_url, id);
+            db.prepare("UPDATE targets SET company_id = COALESCE(company_id, ?) WHERE id = ?").run(id, r.id);
+          }
+        }
+        done++;
+      } catch (err) {
+        if (err instanceof TregError && err.blocking) { queue.length = 0; break; }
+        console.warn(`[treg-enrich] pre-score ${r.id}:`, err instanceof Error ? err.message : err);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  return done;
+}
 
 type DB = Database.Database;
 interface Candidate { id: string; workspace_id: string; linkedin_url: string }

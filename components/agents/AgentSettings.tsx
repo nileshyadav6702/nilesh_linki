@@ -134,8 +134,7 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
         {advanced && (
           <div className="space-y-4 border-t border-[var(--border-subtle)] px-6 py-5">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Min lead score"><input type="number" min={0} max={100} className={inputCls} value={f.min_score} onChange={(e) => setF({ ...f, min_score: Number(e.target.value) })} /></Field>
-              <Field label="Fit weight" hint="0 = intent only, 1 = fit only"><input type="number" min={0} max={1} step={0.1} className={inputCls} value={f.fit_weight} onChange={(e) => setF({ ...f, fit_weight: Number(e.target.value) })} /></Field>
+              <Field label="Min score to contact" hint="Leads at or above it get emails found and go to outreach. Warm = 60, hot = 80; cooler leads wait for your approval."><input type="number" min={0} max={100} className={inputCls} value={f.min_score} onChange={(e) => setF({ ...f, min_score: Number(e.target.value) })} /></Field>
               <Field label="Leads per day"><input type="number" min={1} max={500} className={inputCls} value={f.daily_lead_cap} onChange={(e) => setF({ ...f, daily_lead_cap: Number(e.target.value) })} /></Field>
               <Field label="Autopilot delay (min)" hint="How long a draft waits for review before autopilot sends it"><input type="number" min={0} className={inputCls} value={f.autopilot_delay_minutes} onChange={(e) => setF({ ...f, autopilot_delay_minutes: Number(e.target.value) })} /></Field>
             </div>

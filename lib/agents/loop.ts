@@ -58,9 +58,10 @@ async function enrichQualified(db: Database.Database, agent: Agent, limit = 5): 
   // LinkedIn URL, or a workspace without the pattern provider, would otherwise be re-picked
   // forever and starve every lead below the top few. Misses stay cached per provider for 30
   // days, so the daily retry only re-asks providers that errored.
-  const rows = db.prepare(`SELECT id FROM targets WHERE agent_id = ? AND agent_status = 'qualified' AND (email IS NULL OR email = '')
+  // Only warm leads (score >= the agent's min score) get an email lookup: it costs credits.
+  const rows = db.prepare(`SELECT id FROM targets WHERE agent_id = ? AND agent_status = 'qualified' AND lead_score >= ? AND (email IS NULL OR email = '')
     AND NOT EXISTS (SELECT 1 FROM enrichment_cache ec WHERE ec.identity_key = ${EMAIL_ATTEMPT_KEY_SQL} AND ec.provider = '${EMAIL_ATTEMPT_PROVIDER}' AND ec.fetched_at > datetime('now','-1 day'))
-    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, limit) as Array<{ id: string }>;
+    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, agent.min_score, limit) as Array<{ id: string }>;
   let n = 0;
   for (const r of rows) {
     // Out of credits: stop before marking the attempt, so these leads are picked up after the refill.
@@ -82,8 +83,9 @@ async function draftQualified(db: Database.Database, agent: Agent, icp: ReturnTy
   const room = agent.daily_lead_cap - handledToday(db, agent.id);
   if (room <= 0) return { drafted: 0, enrolled: 0 };
   const take = Math.min(room, 10);
-  const leads = (db.prepare(`SELECT id, linkedin_url, email, degree, company, company_id FROM targets WHERE agent_id = ? AND agent_status = 'qualified'
-    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, take * 3) as Array<{ id: string; linkedin_url: string | null; email: string | null; degree: number | null; company: string | null; company_id: string | null }>)
+  // Warm and hot leads only (score >= min score); cooler qualified leads wait for a manual approve.
+  const leads = (db.prepare(`SELECT id, linkedin_url, email, degree, company, company_id FROM targets WHERE agent_id = ? AND agent_status = 'qualified' AND lead_score >= ?
+    ORDER BY lead_score DESC LIMIT ?`).all(agent.id, agent.min_score, take * 3) as Array<{ id: string; linkedin_url: string | null; email: string | null; degree: number | null; company: string | null; company_id: string | null }>)
     .filter((l) => !inBackoff("draft", l.id)).slice(0, take);
   const aiReady = isAiConfigured(agent.workspace_id);
   const companyDedup = getWorkspacePref(db, agent.workspace_id, "company_dedup");

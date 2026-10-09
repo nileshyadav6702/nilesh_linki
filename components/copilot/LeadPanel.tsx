@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { flamesFor } from "@/lib/signals/scoring";
 import Link from "next/link";
 import { toast } from "sonner";
 import { RiArrowDownSLine, RiArrowRightDoubleLine, RiCheckLine, RiCloseLine, RiKey2Line, RiLinkedinBoxFill, RiLoader4Line, RiUpload2Line } from "react-icons/ri";
@@ -16,7 +17,7 @@ const Chip = ({ children }: { children: ReactNode }) => <span className="inline-
 
 function HotLead({ score }: { score: number | null }) {
   if (score === null) return null;
-  const n = score >= 70 ? 3 : score >= 50 ? 2 : 1;
+  const n = flamesFor(score);
   const label = n === 3 ? "Hot lead" : n === 2 ? "Warm lead" : "Cool lead";
   return (
     <div className="flex shrink-0 flex-col items-center gap-1" title={`Lead score ${Math.round(score)}`}>
