@@ -8,7 +8,7 @@ import { BRAND } from "@/lib/brand";
 
 const hasNoLayout = (path: string) => path === "/login" || path === "/onboarding" || path.startsWith("/invite/") || path.startsWith("/join/");
 /** Data-dense pages (the leads table) that use the full content width instead of the 1240px column. */
-const WIDE_ROUTES = new Set(["/agents", "/agents/[id]", "/agents/new", "/copilot", "/contacts", "/lists", "/lists/[id]", "/inbox", "/insights", "/dashboard", "/leads"]);
+const WIDE_ROUTES = new Set(["/agents", "/agents/[id]", "/agents/new", "/copilot", "/contacts", "/lists", "/lists/[id]", "/inbox", "/insights", "/dashboard", "/settings", "/leads"]);
 
 export default function Layout({ children }: { children: ReactNode }) {
   const router = useRouter();
