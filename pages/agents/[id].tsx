@@ -14,7 +14,7 @@ import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSour
 import { EMPTY_ICP } from "@/components/agents/IcpEditor";
 import TargetingDrawer from "@/components/agents/targeting/TargetingDrawer";
 import AgentCampaign from "@/components/agents/AgentCampaign";
-import LeadsTable from "@/components/agents/LeadsTable";
+import { ContactsWorkspace } from "@/components/contacts/ContactsWorkspace";
 import { FindingLeadsToast, LeadsFinderTip } from "@/components/agents/LaunchNotice";
 import type { Step } from "@/components/agents/SequenceEditor";
 import {
@@ -163,7 +163,8 @@ export default function AgentDetail() {
         {tab === "Overview" && (
           <AgentOverview performance={d.performance} series={d.series} activity={d.activity} dueToday={d.due_today} budget={d.linkedin_budget} onReview={() => setTab("Leads")} onActivity={() => setTab("Activity")} />
         )}
-        {tab === "Leads" && <LeadsTable agentId={a.id} showAgent={false} openLeadId={typeof router.query.lead === "string" ? router.query.lead : undefined} />}
+        {tab === "Leads" && <ContactsWorkspace base={{ agent: a.id }} hidden={["agent"]} sizesKey="linki.agent-leads.columns.v1" className="h-[calc(100vh-150px)] min-h-[520px]"
+          openLeadId={typeof router.query.lead === "string" ? router.query.lead : undefined} />}
         {tab === "Sources" && (
           <div className="space-y-4">
             {editingIcp && <TargetingDrawer icp={icp} websiteUrl={icpWebsite} onClose={() => setEditingIcp(false)} onSave={saveIcp} />}

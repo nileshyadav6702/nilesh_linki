@@ -79,9 +79,11 @@ function DateRange({ from, to, onChange }: { from: string; to: string; onChange:
   );
 }
 
-export default function FiltersPanel({ filters, patch, clear, onClose, agents, lists, signals }: {
+export default function FiltersPanel({ filters, patch, clear, onClose, agents, lists, signals, lockAgent = false }: {
   filters: ContactFilters; patch: (p: Partial<ContactFilters>) => void; clear: () => void; onClose: () => void;
   agents: Array<{ id: string; name: string }>; lists: Array<{ id: string; name: string; target_count: number }>; signals: Array<{ type: string; count: number }>;
+  /** The agent is fixed (an agent's Leads tab): hide the agent picker. */
+  lockAgent?: boolean;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   useDismiss(true, [wrap], onClose);
@@ -92,7 +94,7 @@ export default function FiltersPanel({ filters, patch, clear, onClose, agents, l
     <div ref={wrap} role="dialog" aria-label="Contact filters" className="wizard-rise absolute left-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(880px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
       <button type="button" onClick={onClose} aria-label="Close filters" className="absolute right-4 top-4 z-10 text-base-content/50 hover:text-base-content"><RiCloseLine size={22} /></button>
       <div className="grid gap-x-5 gap-y-4 px-6 pb-5 pt-6 sm:grid-cols-2">
-        {sel("AI Agent", filters.agent, [{ value: "", label: "All Agents" }, ...agents.map((a) => ({ value: a.id, label: a.name }))], (v) => patch({ agent: v }), agents.length > 6)}
+        {!lockAgent && sel("AI Agent", filters.agent, [{ value: "", label: "All Agents" }, ...agents.map((a) => ({ value: a.id, label: a.name }))], (v) => patch({ agent: v }), agents.length > 6)}
         {sel("List", filters.list, [{ value: "", label: "All Lists" }, { value: "none", label: "Contacts without any list" }, ...lists.map((l) => ({ value: l.id, label: `${l.name} (${l.target_count})` }))], (v) => patch({ list: v }), true)}
         {sel("AI Score", filters.band, SCORES, (v) => patch({ band: v }))}
         {sel("Email Enrichment", filters.email, EMAIL, (v) => patch({ email: v }))}

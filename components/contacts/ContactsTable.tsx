@@ -6,6 +6,7 @@ import { FloatingMenu } from "@/components/agents/leads/Menu";
 import { timeAgo } from "@/components/agents/ui";
 import { ApprovalCell, EmailCell, PhoneCell, ScoreCell } from "@/components/contacts/cells";
 import type { ContactRow } from "@/components/contacts/useContacts";
+import Checkbox from "@/components/contacts/Checkbox";
 
 /** The All contacts grid: resizable columns (remembered per browser), a pinnable contact column, row actions. */
 
@@ -125,8 +126,7 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
           {table.getHeaderGroups().map((g) => (
             <tr key={g.id}>
               <th className={`border-b border-[var(--border-subtle)] bg-base-200 py-4 pl-5 ${pinned ? "sticky left-0 z-20" : ""}`}>
-                <input type="checkbox" className="checkbox checkbox-sm rounded-[4px]" aria-label="Select all on this page" checked={allOn}
-                  ref={(el) => { if (el) el.indeterminate = someOn; }} onChange={(e) => toggleAll(e.target.checked)} />
+                <Checkbox label="Select all on this page" checked={allOn} indeterminate={someOn} onChange={toggleAll} />
               </th>
               {g.headers.map((h) => {
                 const isContact = h.column.id === "contact";
@@ -160,7 +160,7 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
             return (
               <tr key={r.id} className="group cursor-pointer" onClick={() => onOpen(r.id)}>
                 <td className={`border-b border-[var(--border-subtle)] py-4 pl-5 align-middle ${bg} ${pinned ? "sticky left-0 z-10" : ""}`} onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" className="checkbox checkbox-sm rounded-[4px]" aria-label={`Select ${r.original.full_name ?? "contact"}`} checked={on} onChange={() => toggle(r.id)} />
+                  <Checkbox label={`Select ${r.original.full_name ?? "contact"}`} checked={on} onChange={() => toggle(r.id)} />
                 </td>
                 {r.getVisibleCells().map((c) => {
                   const isContact = c.column.id === "contact";
