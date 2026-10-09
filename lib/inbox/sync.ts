@@ -24,6 +24,11 @@ export async function syncInboxAccount(kind: AccountKind, id: string): Promise<{
       ? await (await import("@/lib/inbox/linkedin-sync")).syncLinkedInInbox(id)
       : await (await import("@/lib/inbox/email-sync")).syncEmailMailbox(id);
     record(kind, id, null);
+    // Then swap internal-id profile links ("/in/ACoAAB…") for public URLs, a few per run.
+    if (kind === "linkedin") {
+      await (await import("@/lib/linkedin/public-url")).repairProfileUrls(id)
+        .catch((err) => console.warn(`[inbox] profile URL repair for ${id}:`, err instanceof Error ? err.message : err));
+    }
     return r;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

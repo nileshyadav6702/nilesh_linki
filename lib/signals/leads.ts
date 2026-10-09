@@ -19,7 +19,15 @@ export interface LeadCandidate {
 export function normalizeProfileUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const m = url.match(/linkedin\.com\/in\/([^/?#]+)/i);
-  return m ? `https://www.linkedin.com/in/${decodeURIComponent(m[1]).toLowerCase()}` : null;
+  return m ? `https://www.linkedin.com/in/${profileSlug(decodeURIComponent(m[1]))}` : null;
+}
+
+/**
+ * Public handles ("jane-doe") are case-insensitive and stored lowercase; LinkedIn's internal
+ * member ids ("ACoAAB…") are case-sensitive, so lowercasing one produces a profile that doesn't exist.
+ */
+export function profileSlug(slug: string): string {
+  return /^ACo[A-Za-z0-9_-]{20,}$/.test(slug) ? slug : slug.toLowerCase();
 }
 
 /** "VP Sales at Acme | ex-Google" → { title: "VP Sales", company: "Acme" } */
@@ -70,7 +78,7 @@ export function upsertLead(db: Database.Database, workspaceId: string, agentId: 
   const urn = c.memberUrn ?? null;
   let existing: { id: string; agent_id: string | null } | undefined;
   if (urn) existing = db.prepare("SELECT id, agent_id FROM targets WHERE workspace_id = ? AND linkedin_member_urn = ?").get(workspaceId, urn) as typeof existing;
-  if (!existing && url) existing = db.prepare("SELECT id, agent_id FROM targets WHERE workspace_id = ? AND lower(rtrim(linkedin_url, '/')) = ?").get(workspaceId, url) as typeof existing;
+  if (!existing && url) existing = db.prepare("SELECT id, agent_id FROM targets WHERE workspace_id = ? AND lower(rtrim(linkedin_url, '/')) = lower(?)").get(workspaceId, url) as typeof existing;
 
   const parsed = splitHeadline(c.headline);
   if (existing) {

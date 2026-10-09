@@ -16,7 +16,8 @@ export function canonicalProfileUrl(raw: string | null | undefined): string | nu
   if (!m) return null;
   let slug = m[1];
   try { slug = decodeURIComponent(slug); } catch { /* keep raw */ }
-  return `https://www.linkedin.com/in/${slug.toLowerCase()}`;
+  // Internal ids ("ACoAAB…") are case-sensitive; public handles are not.
+  return `https://www.linkedin.com/in/${/^ACo[A-Za-z0-9_-]{20,}$/.test(slug) ? slug : slug.toLowerCase()}`;
 }
 
 /** Contact fields the agent CSV import maps. `custom` ones are stored as custom fields. */

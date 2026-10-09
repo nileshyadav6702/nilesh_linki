@@ -82,3 +82,24 @@ describe("inbox store", () => {
     expect(normalizeSubject("Re: Fwd: RE: Hello")).toBe("hello");
   });
 });
+
+describe("profile URLs", () => {
+  it("keeps the case of internal ids and lowercases public handles", async () => {
+    const { normalizeProfileUrl } = await import("@/lib/signals/leads");
+    const { normalizeProfileUrlStrict } = await import("@/lib/agents/lead-source-rules");
+    const { canonicalProfileUrl } = await import("@/lib/csv-rows");
+    const internal = "https://www.linkedin.com/in/ACoAAC0t07UBi_fkcMY-8xQqskXqFdc_Zwy_5QU";
+    for (const f of [normalizeProfileUrl, normalizeProfileUrlStrict, canonicalProfileUrl]) {
+      expect(f(internal)).toBe(internal);
+      expect(f("https://www.linkedin.com/in/Sean-Pinto99/")).toBe("https://www.linkedin.com/in/sean-pinto99");
+    }
+  });
+
+  it("resolves an internal id to the public URL and recognises broken links", async () => {
+    const { isInternalProfileUrl, publicUrlFor } = await import("@/lib/linkedin/public-url");
+    const client = { get: async (p: string) => (p.includes("ACoAAC0t07") ? { publicIdentifier: "sean-pinto99" } : null) };
+    expect(await publicUrlFor(client, "ACoAAC0t07UBi_fkcMY-8xQqskXqFdc_Zwy_5QU")).toBe("https://www.linkedin.com/in/sean-pinto99");
+    expect(isInternalProfileUrl("https://www.linkedin.com/in/acoaaff6y8wbuxltcxmzul6iiig_siaqiqf_8qy")).toBe(true);
+    expect(isInternalProfileUrl("https://www.linkedin.com/in/sean-pinto99")).toBe(false);
+  });
+});

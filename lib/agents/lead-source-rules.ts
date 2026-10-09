@@ -57,7 +57,10 @@ export function normalizeCompanyUrl(input: string): string | null {
 /** LinkedIn /in/ URL → canonical profile URL, or null. */
 export function normalizeProfileUrlStrict(input: string): string | null {
   const m = input.trim().match(PROFILE_RE);
-  return m ? `https://www.linkedin.com/in/${decodeURIComponent(m[1]).toLowerCase()}` : null;
+  // LinkedIn's internal ids ("ACoAAB…") are case-sensitive; public handles are not.
+  if (!m) return null;
+  const slug = decodeURIComponent(m[1]);
+  return `https://www.linkedin.com/in/${/^ACo[A-Za-z0-9_-]{20,}$/.test(slug) ? slug : slug.toLowerCase()}`;
 }
 
 /** Profile or company page (own content can be either). */
