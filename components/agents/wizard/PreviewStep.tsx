@@ -85,15 +85,15 @@ export default function PreviewStep({ agentId, onBusy }: { agentId: string; onBu
         <RiSparkling2Line size={20} className="mt-1 shrink-0" aria-hidden="true" />
         <p><span className="font-semibold">Your feedback shapes your ICP.</span> <span className="opacity-90">Each rejection is replaced by a new lead better matching your criteria.</span></p>
       </div>
-      {note && <p className="text-center text-xs text-base-content/50">{note}</p>}
+      {note && <p className="text-center text-[13.5px] text-base-content/50">{note}</p>}
 
       {leads.length === 0 ? (
-        <div className="mx-auto max-w-[860px] space-y-3 rounded-[16px] border border-[var(--border-subtle)] p-6 text-sm text-base-content/60">
+        <div className="mx-auto max-w-[860px] space-y-3 rounded-[16px] border border-[var(--border-subtle)] p-6 text-[15px] text-base-content/60">
           {summary && summary.not_a_fit > 0 ? (
             <>
               <p className="font-medium text-base-content">The people engaging with your signals don&apos;t match your ICP yet.</p>
-              {summary.reasons.length > 0 && <ul className="list-disc space-y-1 pl-5 text-xs text-base-content/55">{summary.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
-              <p className="text-xs">Go back to <b>Sources</b> and track topics your buyers post about, or loosen <b>Target</b>.</p>
+              {summary.reasons.length > 0 && <ul className="list-disc space-y-1 pl-5 text-[13.5px] text-base-content/55">{summary.reasons.map((r) => <li key={r}>{r}</li>)}</ul>}
+              <p className="text-[13.5px]">Go back to <b>Sources</b> and track topics your buyers post about, or loosen <b>Target</b>.</p>
             </>
           ) : summary && summary.found === 0 ? (
             <p>No one engaged with your signals in the last week yet. Try broader topics or add competitor pages. Your agent keeps searching after launch.</p>
@@ -124,9 +124,9 @@ export default function PreviewStep({ agentId, onBusy }: { agentId: string; onBu
                   {rejecting === l.id && (
                     <form className="wizard-rise flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); void reject(l.id); }}>
                       <input autoFocus value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Why isn't this a fit? (optional, it tunes your agent)"
-                        className="h-10 min-w-0 flex-1 rounded-[8px] border border-[var(--border-subtle)] px-3 text-sm outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]" />
-                      <button type="submit" disabled={saving} className="h-10 rounded-[8px] bg-primary px-4 text-sm font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:opacity-60">{saving ? "Replacing…" : "Reject & replace"}</button>
-                      <button type="button" onClick={() => { setRejecting(null); setReason(""); }} className="h-10 rounded-[8px] px-3 text-sm text-base-content/70 hover:bg-base-200">Cancel</button>
+                        className="h-10 min-w-0 flex-1 rounded-[8px] border border-[var(--border-subtle)] px-3 text-[15px] outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]" />
+                      <button type="submit" disabled={saving} className="h-10 rounded-[8px] bg-primary px-4 text-[15px] font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:opacity-60">{saving ? "Replacing…" : "Reject & replace"}</button>
+                      <button type="button" onClick={() => { setRejecting(null); setReason(""); }} className="h-10 rounded-[8px] px-3 text-[15px] text-base-content/70 hover:bg-base-200">Cancel</button>
                     </form>
                   )}
                 </div>

@@ -94,7 +94,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
   const allOn = list.length > 0 && list.every((r) => selected.has(r.id));
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const sortIcon = filters.sort === "score_desc" ? <RiArrowDownLine size={14} /> : filters.sort === "score_asc" ? <RiArrowUpLine size={14} /> : <RiArrowUpDownLine size={14} />;
-  const thBase = "sticky top-0 border-b border-[var(--border-subtle)] bg-base-200 px-3 py-3 text-left text-[12px] font-medium uppercase tracking-[0.08em] text-base-content/50 whitespace-nowrap";
+  const thBase = "sticky top-0 border-b border-[var(--border-subtle)] bg-base-200 px-3 py-3 text-left text-[13.5px] font-medium uppercase tracking-[0.08em] text-base-content/50 whitespace-nowrap";
   const th = `${thBase} z-20`;
 
   return (
@@ -109,15 +109,15 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
 
       <Panel className="overflow-hidden">
         <div className="max-h-[calc(100vh-300px)] min-h-[320px] overflow-auto" onScroll={(e) => setScrolled(e.currentTarget.scrollLeft > 0)}>
-          {rows === null ? <p className="p-6 text-sm text-base-content/40">Loading…</p>
-            : error ? <p className="p-6 text-sm text-error">{error}</p>
+          {rows === null ? <p className="p-6 text-[15px] text-base-content/40">Loading…</p>
+            : error ? <p className="p-6 text-[15px] text-error">{error}</p>
             : list.length === 0 ? (
               <div className="px-6 py-16 text-center">
-                <p className="text-sm font-medium text-base-content/70">No leads match</p>
-                <p className="mt-2 text-sm text-base-content/45">Leads appear as your agent detects signals. Try clearing filters.</p>
+                <p className="text-[15px] font-medium text-base-content/70">No leads match</p>
+                <p className="mt-2 text-[15px] text-base-content/45">Leads appear as your agent detects signals. Try clearing filters.</p>
               </div>
             ) : (
-              <table className="w-full min-w-[1480px] border-separate border-spacing-0 text-sm">
+              <table className="w-full min-w-[1480px] border-separate border-spacing-0 text-[15px]">
                 <thead>
                   <tr>
                     <th className={`${thBase} w-12 min-w-12 max-w-12 pl-4 pr-2 ${pinned ? "left-0 z-30" : "z-20"}`}>
@@ -158,7 +158,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
               </table>
             )}
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-4 py-3 text-[13px] text-base-content/50">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-4 py-3 text-[14.5px] text-base-content/50">
           <span className="tabular-nums">{total ? `${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total}` : "0 of 0"}</span>
           <Pager page={page} pages={pages} onPage={(p) => { setPage(p); setSelected(new Set()); }} />
         </div>
@@ -172,7 +172,7 @@ export default function LeadsTable({ agentId, showAgent = !agentId, initialAgent
 export function Pager({ page, pages, onPage }: { page: number; pages: number; onPage: (p: number) => void }) {
   const start = Math.max(0, Math.min(page - 2, pages - 5));
   const nums = Array.from({ length: Math.min(5, pages) }, (_, i) => start + i);
-  const btn = "inline-flex h-8 min-w-8 items-center justify-center rounded-[6px] px-2 text-[13px] tabular-nums transition-colors disabled:opacity-35";
+  const btn = "inline-flex h-8 min-w-8 items-center justify-center rounded-[6px] px-2 text-[14.5px] tabular-nums transition-colors disabled:opacity-35";
   return (
     <nav className="flex items-center gap-1" aria-label="Pagination">
       <button type="button" className={`${btn} text-base-content/55 hover:bg-base-200`} disabled={page === 0} onClick={() => onPage(page - 1)} aria-label="Previous page"><RiArrowLeftSLine size={16} /></button>

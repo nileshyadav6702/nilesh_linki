@@ -85,8 +85,8 @@ export default function TargetingDrawer({ icp, websiteUrl, onClose, onSave }: {
         className={`relative flex h-full w-full flex-col bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition-transform duration-300 ease-out motion-reduce:transition-none md:w-[65%] md:min-w-[640px] ${shown ? "translate-x-0" : "translate-x-full"}`}>
         <header className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-6 py-5">
           <div className="min-w-0">
-            <h2 id="targeting-title" className="font-display text-[24px] leading-tight text-base-content">Edit targeting</h2>
-            <p className="mt-1 text-sm text-base-content/55">Narrow down the leads your agent should bring in.</p>
+            <h2 id="targeting-title" className="font-medium text-[24px] leading-tight text-base-content">Edit targeting</h2>
+            <p className="mt-1 text-[15px] text-base-content/55">Narrow down the leads your agent should bring in.</p>
           </div>
           <button type="button" onClick={requestClose} aria-label="Close"
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-base-content/50 hover:bg-base-200 hover:text-base-content">
@@ -103,11 +103,11 @@ export default function TargetingDrawer({ icp, websiteUrl, onClose, onSave }: {
 
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={regenerate} disabled={regenerating || saving}
-              className="inline-flex h-10 items-center gap-1.5 rounded-[8px] border border-primary/30 bg-primary/10 px-4 text-sm font-medium text-primary hover:bg-primary/15 disabled:opacity-60">
+              className="inline-flex h-10 items-center gap-1.5 rounded-[8px] border border-primary/30 bg-primary/10 px-4 text-[15px] font-medium text-primary hover:bg-primary/15 disabled:opacity-60">
               {regenerating ? <><RiLoader4Line size={16} className="animate-spin" /> Regenerating…</> : "Regenerate with AI"}
             </button>
             <button type="button" onClick={() => setDraft((cur) => clearTargeting(cur))} disabled={regenerating || saving}
-              className="inline-flex h-10 items-center gap-1.5 rounded-[8px] px-3 text-sm font-medium text-base-content/75 hover:bg-base-200 hover:text-base-content disabled:opacity-50">
+              className="inline-flex h-10 items-center gap-1.5 rounded-[8px] px-3 text-[15px] font-medium text-base-content/75 hover:bg-base-200 hover:text-base-content disabled:opacity-50">
               <RiDeleteBinLine size={15} /> Clear all
             </button>
           </div>
@@ -118,7 +118,7 @@ export default function TargetingDrawer({ icp, websiteUrl, onClose, onSave }: {
         </div>
 
         <footer className="flex items-center justify-end gap-2 border-t border-[var(--border-subtle)] bg-base-100 px-6 py-4">
-          <button type="button" onClick={requestClose} disabled={saving} className="inline-flex h-10 items-center rounded-[8px] px-4 text-sm font-medium text-base-content/75 hover:bg-base-200 hover:text-base-content">Cancel</button>
+          <button type="button" onClick={requestClose} disabled={saving} className="inline-flex h-10 items-center rounded-[8px] px-4 text-[15px] font-medium text-base-content/75 hover:bg-base-200 hover:text-base-content">Cancel</button>
           <button type="button" onClick={save} disabled={saving || regenerating || !dirty} className={primaryBtn}>
             {saving ? <><RiLoader4Line size={16} className="animate-spin" /> Saving…</> : "Save changes"}
           </button>

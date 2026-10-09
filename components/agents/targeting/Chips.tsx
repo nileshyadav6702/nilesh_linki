@@ -6,7 +6,7 @@ export interface ChipItem { value: string; label: string }
 /** Selected value: coral tint with a remove ×. */
 export function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-1.5 rounded-[8px] border border-primary/25 bg-primary/10 py-1 pl-3 pr-1.5 text-sm text-primary">
+    <span className="inline-flex max-w-full items-center gap-1.5 rounded-[8px] border border-primary/25 bg-primary/10 py-1 pl-3 pr-1.5 text-[15px] text-primary">
       <span className="truncate">{label}</span>
       <button type="button" onClick={onRemove} aria-label={`Remove ${label}`}
         className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] text-primary/70 hover:bg-primary/15 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
@@ -20,7 +20,7 @@ export function Chip({ label, onRemove }: { label: string; onRemove: () => void 
 export function ToggleChip({ label, on, onToggle, check = false, row = false }: { label: string; on: boolean; onToggle: () => void; check?: boolean; row?: boolean }) {
   return (
     <button type="button" aria-pressed={on} onClick={onToggle} data-row={row ? "" : undefined}
-      className={`inline-flex items-center gap-1.5 rounded-[8px] border px-3 py-1 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${on ? "border-primary/25 bg-primary/10 text-primary" : "border-[var(--border-subtle)] bg-base-100 text-base-content/75 hover:bg-base-200"}`}>
+      className={`inline-flex items-center gap-1.5 rounded-[8px] border px-3 py-1 text-[15px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${on ? "border-primary/25 bg-primary/10 text-primary" : "border-[var(--border-subtle)] bg-base-100 text-base-content/75 hover:bg-base-200"}`}>
       {on && check && <RiCheckLine size={14} aria-hidden="true" />}
       {label}
       {on && !check && <RiCloseLine size={14} aria-hidden="true" className="text-primary/70" />}
@@ -42,7 +42,7 @@ export function ChipField({ items, onRemove, picker, addLabel = "Add" }: { items
       <button id={addId} type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}
         // While open, keep this mousedown from reaching the picker's outside-click handler so a click toggles it closed.
         onMouseDown={(e) => { if (open) e.stopPropagation(); }}
-        className="inline-flex items-center gap-1 rounded-[8px] border border-dashed border-base-content/40 px-3 py-1 text-sm font-medium text-base-content/75 hover:bg-base-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
+        className="inline-flex items-center gap-1 rounded-[8px] border border-dashed border-base-content/40 px-3 py-1 text-[15px] font-medium text-base-content/75 hover:bg-base-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
         <RiAddLine size={14} /> {addLabel}
       </button>
       {open && picker(close)}
@@ -66,11 +66,11 @@ export function AddInput({ values, onChange, placeholder, label }: { values: str
         </div>
       )}
       <div className="flex gap-2">
-        <input className="h-10 min-w-0 flex-1 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-sm text-base-content outline-none transition focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]"
+        <input className="h-10 min-w-0 flex-1 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-[15px] text-base-content outline-none transition focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]"
           value={text} placeholder={placeholder} aria-label={label} onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
         <button type="button" onClick={add} disabled={!text.trim()}
-          className="inline-flex h-10 shrink-0 items-center rounded-[8px] bg-primary px-5 text-sm font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-[#e6dfd8] disabled:text-[#8e8b82]">
+          className="inline-flex h-10 shrink-0 items-center rounded-[8px] bg-primary px-5 text-[15px] font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-[#e6dfd8] disabled:text-[#8e8b82]">
           Add
         </button>
       </div>

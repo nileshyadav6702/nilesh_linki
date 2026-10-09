@@ -6,7 +6,7 @@ import {
   RiPauseCircleLine, RiPauseLine, RiPlayFill, RiRadarLine, RiRocketLine, RiSendPlaneLine, RiUserAddLine,
 } from "react-icons/ri";
 import { FloatingMenu, type MenuItem } from "@/components/agents/leads/Menu";
-import { Avatar, primaryBtn, secondaryBtn } from "@/components/agents/ui";
+import { primaryBtn, secondaryBtn } from "@/components/agents/ui";
 
 export interface HeaderSenders {
   linkedin: { name: string | null; email: string | null; daily_connection_limit: number | null; daily_message_limit: number | null; is_authenticated: number } | null;
@@ -18,7 +18,7 @@ function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) {
   return (
     <span className="group relative inline-flex">
       {children}
-      <span role="tooltip" className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden w-max max-w-[340px] -translate-x-1/2 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3.5 py-2 text-center text-[13px] leading-snug text-base-content/75 shadow-[var(--shadow-overlay)] group-focus-within:block group-hover:block">
+      <span role="tooltip" className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden w-max max-w-[340px] -translate-x-1/2 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3.5 py-2 text-center text-[14.5px] leading-snug text-base-content/75 shadow-[var(--shadow-overlay)] group-focus-within:block group-hover:block">
         {tip}
       </span>
     </span>
@@ -28,7 +28,7 @@ function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) {
 function LimitChip({ icon, value, title }: { icon: ReactNode; value: number; title: string }) {
   return (
     <Tip tip={<><div className="font-medium text-base-content">{title}</div><div>{value}/day</div></>}>
-      <span tabIndex={0} className="inline-flex h-7 items-center gap-1 rounded-[6px] bg-base-200 px-2 text-[13px] tabular-nums text-base-content/60 outline-none hover:bg-base-300/60 focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
+      <span tabIndex={0} className="inline-flex h-7 items-center gap-1 rounded-[6px] bg-base-200 px-2 text-[14.5px] tabular-nums text-base-content/60 outline-none hover:bg-base-300/60 focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
         {icon}{value}/day
       </span>
     </Tip>
@@ -63,24 +63,24 @@ export default function AgentHeader({ name, status, statusTip, outreachOn, sende
   ];
 
   return (
-    <div className="flex flex-col gap-4 border-b border-[var(--border-subtle)] pb-5 sm:flex-row sm:items-start sm:justify-between">
+    <div className="-mx-4 -mt-6 flex flex-col gap-4 px-4 pt-6 sm:flex-row sm:items-start sm:justify-between md:-mx-10 md:-mt-9 md:px-10 md:pt-8">
       <div className="min-w-0 space-y-2.5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <RiFocus3Line size={20} className="shrink-0 text-primary" aria-hidden />
-          <h1 className="min-w-0 truncate text-[22px] font-medium leading-tight text-base-content" title={name}>{name}</h1>
+          <RiFocus3Line size={24} className="shrink-0 text-primary" aria-hidden />
+          <h1 className="min-w-0 truncate text-[24px] font-semibold leading-tight text-base-content" title={name}>{name}</h1>
           <Tip tip={statusTip}>
-            <span tabIndex={0} className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-[6px] border px-2.5 text-[13px] outline-none ${finding ? "border-success/30 bg-success/10 text-success" : "border-[var(--border-subtle)] bg-base-200 text-base-content/60"}`}>
+            <span tabIndex={0} className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[14.5px] font-medium outline-none ${finding ? "border-success/30 bg-success/10 text-success" : "border-[var(--border-subtle)] bg-base-200 text-base-content/60"}`}>
               {finding ? <RiLoader4Line size={13} className="animate-spin" /> : status === "draft" ? null : <RiPauseCircleLine size={13} />}
               {finding ? "Finding leads" : status === "draft" ? "Draft" : "Paused"}
             </span>
           </Tip>
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pl-[30px] text-[14px] text-base-content/75">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pl-[36px] text-[15.5px] text-base-content/80">
           {li ? (
             <>
               <span className="inline-flex items-center gap-2">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[13px] font-semibold text-primary-content">{(li.name ?? li.email ?? "?").trim()[0]?.toUpperCase()}</span>
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-[14.5px] font-semibold text-primary-content">{(li.name ?? li.email ?? "?").trim()[0]?.toUpperCase()}</span>
                 <span>{li.name ?? li.email}</span>
               </span>
               {li.is_authenticated ? (
@@ -119,7 +119,7 @@ export default function AgentHeader({ name, status, statusTip, outreachOn, sende
               )}
             </>
           ) : (
-            <button type="button" onClick={onSenderSettings} className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-dashed border-[var(--border-subtle)] px-3 text-[13px] text-base-content/55 hover:border-primary/40 hover:text-primary">
+            <button type="button" onClick={onSenderSettings} className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-dashed border-[var(--border-subtle)] px-3 text-[14.5px] text-base-content/55 hover:border-primary/40 hover:text-primary">
               <RiAddLine size={15} /> Add email sender
             </button>
           )}

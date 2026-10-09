@@ -50,7 +50,7 @@ export function TipLink({ href, tip, label, children }: { href: string; tip: str
 }
 
 export const CrunchbaseIcon = () => (
-  <span className="flex h-[19px] w-[19px] items-center justify-center rounded-[5px] bg-[#4f46e5] text-[10px] font-bold leading-none text-white">cb</span>
+  <span className="flex h-[19px] w-[19px] items-center justify-center rounded-[5px] bg-[#4f46e5] text-[11px] font-bold leading-none text-white">cb</span>
 );
 
 const SIGNAL_TILE: Record<string, { icon: ReactNode; cls: string }> = {
@@ -134,7 +134,7 @@ export function ActivityLog({ items }: { items: Array<{ at: string; kind: string
             <RiRadioButtonLine size={18} className={`mt-0.5 shrink-0 ${a.kind === "outreach" ? "text-success" : "text-base-content/50"}`} />
             <div className="min-w-0">
               <p className="text-[15px] leading-snug text-base-content/80">{a.text}</p>
-              {d && !Number.isNaN(d.getTime()) && <p className="mt-0.5 text-[13px] text-base-content/45">{format(d, "MMM dd, yyyy 'at' HH:mm")}</p>}
+              {d && !Number.isNaN(d.getTime()) && <p className="mt-0.5 text-[14.5px] text-base-content/45">{format(d, "MMM dd, yyyy 'at' HH:mm")}</p>}
             </div>
           </li>
         );

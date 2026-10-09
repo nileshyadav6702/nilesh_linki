@@ -8,8 +8,8 @@ import type { Drafts } from "@/components/agents/sources/catalog";
 
 interface Props { drafts: Drafts; set: (type: DrawerSignalType, next: SignalDraft) => void; budgetLeft: number; hasLinkedIn: boolean }
 
-const inputCls = "h-11 min-w-0 flex-1 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-sm text-base-content outline-none transition placeholder:text-base-content/40 focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]";
-const addBtn = "inline-flex h-11 shrink-0 items-center gap-1 rounded-[8px] border border-[var(--border-subtle)] bg-base-200 px-4 text-sm font-medium text-base-content hover:bg-base-300 disabled:opacity-50";
+const inputCls = "h-11 min-w-0 flex-1 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-[15px] text-base-content outline-none transition placeholder:text-base-content/40 focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]";
+const addBtn = "inline-flex h-11 shrink-0 items-center gap-1 rounded-[8px] border border-[var(--border-subtle)] bg-base-200 px-4 text-[15px] font-medium text-base-content hover:bg-base-300 disabled:opacity-50";
 const budgetMsg = `You're tracking ${SIGNAL_BUDGET} signals, the most one agent can. Remove one first.`;
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
@@ -17,7 +17,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 }
 
 const LinkedInNote = ({ show }: { show: boolean }) => show
-  ? <p className="rounded-[10px] bg-[#e8a55a]/15 px-3 py-2 text-[13px] text-[#8a5a1f]">This needs a LinkedIn account on the agent. Add one in the agent&apos;s Settings tab; it starts working once connected.</p>
+  ? <p className="rounded-[10px] bg-[#e8a55a]/15 px-3 py-2 text-[14.5px] text-[#8a5a1f]">This needs a LinkedIn account on the agent. Add one in the agent&apos;s Settings tab; it starts working once connected.</p>
   : null;
 
 /** Small "type + Add" list editor used inside a checked row. */
@@ -39,7 +39,7 @@ function MiniList({ values, placeholder, onAdd, onRemove, validate, render }: {
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
         <button type="button" className={addBtn} disabled={!text.trim()} onClick={add}><RiAddLine size={15} /> Add</button>
       </div>
-      {error && <p className="text-[13px] text-error">{error}</p>}
+      {error && <p className="text-[14.5px] text-error">{error}</p>}
       {values.map((v) => { const r = render?.(v) ?? { title: v }; return <TrackedRow key={v} lead={r.lead} title={r.title} sub={r.sub} onRemove={() => onRemove(v)} />; })}
     </div>
   );
@@ -58,7 +58,7 @@ export function BuyingEventsPanel({ drafts, set, budgetLeft, hasLinkedIn }: Prop
   return (
     <div className="space-y-6">
       <PanelHeader title="Buying events" count={count} description="Find people and companies showing signals that make now a good time to reach out" />
-      {blocked && <p className="text-[13px] text-error">{blocked}</p>}
+      {blocked && <p className="text-[14.5px] text-error">{blocked}</p>}
       <Group title="People signals">
         <CheckRow label="Track top 5% active profiles in your ICP" hint="People in your ICP among the top 5% most active on LinkedIn." checked={false} onChange={() => {}} soon />
         <CheckRow label="Recent job changes" hint="Contacts in this agent who start a new role. Profiles are re-checked every 30 days." checked={drafts.job_change.enabled} onChange={(v) => toggle("job_change", v)} />
@@ -88,7 +88,7 @@ export function BuyingEventsPanel({ drafts, set, budgetLeft, hasLinkedIn }: Prop
                 return null;
               }}
               onRemove={(v) => set("hiring", { ...hiring, config: { ...hiring.config, role_keywords: (hiring.config.role_keywords ?? []).filter((x) => x !== v) } })} />
-            {!boards.length && <p className="pb-2 pl-8 text-[13px] text-error">Add at least one job board to track openings.</p>}
+            {!boards.length && <p className="pb-2 pl-8 text-[14.5px] text-error">Add at least one job board to track openings.</p>}
           </div>
         )}
         <CheckRow label="Hiring surge" pill={<NewPill />} hint="Companies whose hiring activity has increased significantly." checked={false} onChange={() => {}} soon />
@@ -118,8 +118,8 @@ export function EngagingPanel({ drafts, set, budgetLeft, hasLinkedIn }: Props) {
             onRemove={(v) => set("own_content_engagement", { ...d, config: { ...d.config, urls: urls.filter((x) => x !== v) } })}
             render={(v) => ({ title: labelFromUrl(v), sub: shortLinkedIn(v), lead: <InitialTile label={labelFromUrl(v)} size={32} /> })} />
         )}
-        {d.enabled && !urls.length && <p className="pb-2 pl-8 text-[13px] text-error">Add your profile or company page so we know whose posts to watch.</p>}
-        <CheckRow label="Profile visitors" pill={<span className="rounded-full bg-base-200 px-2 py-0.5 text-[12px] text-base-content/65">LinkedIn Premium</span>} hint="People who viewed your LinkedIn profile." checked={false} onChange={() => {}} soon />
+        {d.enabled && !urls.length && <p className="pb-2 pl-8 text-[14.5px] text-error">Add your profile or company page so we know whose posts to watch.</p>}
+        <CheckRow label="Profile visitors" pill={<span className="rounded-full bg-base-200 px-2 py-0.5 text-[13.5px] text-base-content/65">LinkedIn Premium</span>} hint="People who viewed your LinkedIn profile." checked={false} onChange={() => {}} soon />
         <CheckRow label="Company page followers" hint="People who follow your company page on LinkedIn." checked={false} onChange={() => {}} soon />
       </Group>
       <LinkedInNote show={d.enabled && !hasLinkedIn} />
@@ -134,17 +134,17 @@ export function LookalikePanel({ drafts, set, budgetLeft, hasLinkedIn, icpQuery 
   return (
     <div className="space-y-6">
       <PanelHeader title="Lookalike" description="Find prospects similar to your best customers" />
-      {blocked && <p className="text-[13px] text-error">{blocked}</p>}
+      {blocked && <p className="text-[14.5px] text-error">{blocked}</p>}
       <div className="border-t border-[var(--border-subtle)]">
         <CheckRow label="Find lookalike prospects" hint="Continuously discover similar prospects for this agent from Sales Navigator, using your ICP's keyword query."
           checked={d.enabled} onChange={(v) => { if (v && budgetLeft <= 0) { setBlocked(budgetMsg); return; } setBlocked(null); set("lookalike", { ...d, enabled: v }); }} />
       </div>
       {d.enabled && (
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-base-content">Sales Navigator keyword query {icpQuery ? <span className="font-normal text-base-content/50">(optional)</span> : <span className="text-error">*</span>}</span>
+          <span className="text-[15px] font-medium text-base-content">Sales Navigator keyword query {icpQuery ? <span className="font-normal text-base-content/50">(optional)</span> : <span className="text-error">*</span>}</span>
           <input className={`${inputCls} w-full`} value={query} placeholder={icpQuery || "e.g. (\"VP Sales\" OR \"Head of Sales\") AND SaaS"}
             onChange={(e) => set("lookalike", { ...d, config: { ...d.config, keywords: e.target.value.trim() ? [e.target.value] : [] } })} maxLength={80} />
-          <span className="block text-[13px] text-base-content/55">{icpQuery ? "Leave empty to use the query from your ICP." : "Your ICP has no Sales Navigator query yet, so add one here."}</span>
+          <span className="block text-[14.5px] text-base-content/55">{icpQuery ? "Leave empty to use the query from your ICP." : "Your ICP has no Sales Navigator query yet, so add one here."}</span>
         </label>
       )}
       <LinkedInNote show={d.enabled && !hasLinkedIn} />
@@ -157,7 +157,7 @@ export function SoonPanel({ title, description, children }: { title: string; des
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3"><PanelHeader title={title} description={description} /><SoonPill /></div>
       <div className="pointer-events-none select-none space-y-3 opacity-55" aria-disabled="true">{children}</div>
-      <p className="rounded-[10px] bg-base-200 px-4 py-3 text-sm text-base-content/60">This source isn&apos;t available yet. We&apos;ll let you know when it is.</p>
+      <p className="rounded-[10px] bg-base-200 px-4 py-3 text-[15px] text-base-content/60">This source isn&apos;t available yet. We&apos;ll let you know when it is.</p>
     </div>
   );
 }
@@ -169,7 +169,7 @@ export function TechStackPanel() {
     <SoonPanel title="Tech stack" description="Find companies using specific technologies and surface matching prospects">
       <SubHeading>Add technologies</SubHeading>
       <input disabled className="h-12 w-full rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-4 text-[15px]" placeholder="Search tools like Shopify, WordPress, Mixpanel…" aria-label="Search technologies" />
-      <div className="flex flex-wrap items-center gap-2 text-sm text-base-content/60">
+      <div className="flex flex-wrap items-center gap-2 text-[15px] text-base-content/60">
         Popular {POPULAR.map((p) => <span key={p} className="rounded-[8px] bg-base-200 px-2.5 py-1 text-base-content/80">{p}</span>)}
       </div>
     </SoonPanel>

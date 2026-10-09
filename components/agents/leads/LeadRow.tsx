@@ -34,8 +34,8 @@ export default function LeadRow({ lead: r, selected, pinned, scrolled, showAgent
               <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(); }} className="truncate text-left font-medium text-primary hover:underline">{r.full_name ?? "Unknown"}</button>
               {r.linkedin_url && <a href={r.linkedin_url} target="_blank" rel="noreferrer" onClick={stop} aria-label="LinkedIn profile" className="shrink-0 text-[#0a66c2] hover:opacity-80"><RiLinkedinBoxFill size={16} /></a>}
             </div>
-            <div className="truncate text-[13px] text-base-content/60">{r.title ?? r.headline}</div>
-            {r.company && <div className="truncate text-xs text-base-content/40">@ {r.company}</div>}
+            <div className="truncate text-[14.5px] text-base-content/60">{r.title ?? r.headline}</div>
+            {r.company && <div className="truncate text-[13.5px] text-base-content/40">@ {r.company}</div>}
           </div>
         </div>
       </td>
@@ -45,9 +45,9 @@ export default function LeadRow({ lead: r, selected, pinned, scrolled, showAgent
       <td className={`${td} w-[150px] max-w-[170px]`}><PhoneCell lead={r} /></td>
       <td className={`${td} min-w-[320px]`}><OutreachCell outreach={r.outreach} /></td>
       <td className={`${td} min-w-[210px]`} onClick={stop}><ApprovalCell lead={r} onReject={onReject} onReview={onOpen} /></td>
-      {showAgent && <td className={`${td} max-w-[160px] truncate text-xs text-base-content/50`}>{r.agent_name}</td>}
+      {showAgent && <td className={`${td} max-w-[160px] truncate text-[13.5px] text-base-content/50`}>{r.agent_name}</td>}
       <td className={`${td} whitespace-nowrap pr-4 text-right`} onClick={stop}>
-        <span className="mr-1 text-[11px] text-base-content/35">{timeAgo(r.created_at)}</span>
+        <span className="mr-1 text-[12.5px] text-base-content/35">{timeAgo(r.created_at)}</span>
         <button type="button" aria-label={`Actions for ${r.full_name ?? "lead"}`} aria-haspopup="menu" aria-expanded={!!menu}
           onClick={(e) => setMenu(menu ? null : e.currentTarget)}
           className="rounded-[6px] p-1.5 text-base-content/45 hover:bg-base-300 hover:text-base-content"><RiMore2Fill size={16} /></button>

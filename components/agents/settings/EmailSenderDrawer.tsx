@@ -26,7 +26,7 @@ export function warmup(limit: number, start: string | null) {
 }
 
 function Note({ children }: { children: React.ReactNode }) {
-  return <p className="mt-2 flex items-start gap-1.5 text-[13px] text-base-content/50"><RiInformationLine size={14} className="mt-px shrink-0" />{children}</p>;
+  return <p className="mt-2 flex items-start gap-1.5 text-[14.5px] text-base-content/50"><RiInformationLine size={14} className="mt-px shrink-0" />{children}</p>;
 }
 
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
@@ -113,13 +113,13 @@ export default function EmailSenderDrawer({ emailAccountId, onClose, onSaved }: 
             <input id="es-limit" type="number" min={1} max={500} className={`${inputCls} !h-12 !text-[16px] mt-2 ${form.ramp_up_enabled ? "!bg-primary/[0.07] text-base-content/50" : ""}`}
               disabled={form.ramp_up_enabled} value={form.ramp_up_enabled ? ramp.todayLimit : form.daily_email_limit}
               onChange={(e) => set({ daily_email_limit: Math.min(500, Math.max(1, Math.round(Number(e.target.value) || 1))) })} />
-            {form.ramp_up_enabled && <p className="mt-2 flex items-center gap-1.5 text-[13px] text-base-content/50"><RiLock2Line size={13} /> Managed by warm-up. Stop warm-up to set a custom quota.</p>}
+            {form.ramp_up_enabled && <p className="mt-2 flex items-center gap-1.5 text-[14.5px] text-base-content/50"><RiLock2Line size={13} /> Managed by warm-up. Stop warm-up to set a custom quota.</p>}
           </section>
 
           <section>
             <label className="text-[17px] font-semibold text-base-content" htmlFor="es-name">Sender name</label>
             <input id="es-name" className={`${inputCls} !h-12 !text-[16px] mt-2`} value={form.from_name} maxLength={120} placeholder="Your name" onChange={(e) => set({ from_name: e.target.value })} />
-            <p className="mt-2 text-[13px] text-base-content/50">Displayed as the &quot;From&quot; name in your recipients&apos; inbox.</p>
+            <p className="mt-2 text-[14.5px] text-base-content/50">Displayed as the &quot;From&quot; name in your recipients&apos; inbox.</p>
           </section>
 
           <Section title="Open Tracking" subtitle="Track when recipients open your emails using a tracking pixel.">

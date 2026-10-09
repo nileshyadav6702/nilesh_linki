@@ -15,7 +15,7 @@ export default function ActivityChips({ value, counts, onChange }: { value: Acti
               : "border-[var(--border-subtle)] bg-base-100 text-base-content/70 hover:bg-base-200 hover:text-base-content"}`}>
             {f !== "all" && <span className={on ? "" : "text-base-content/45"}>{CATEGORY[f].icon(15)}</span>}
             {f === "all" ? "All" : CATEGORY[f].label}
-            <span className={`min-w-6 rounded-[6px] px-1.5 py-0.5 text-center text-[12px] tabular-nums ${on ? "bg-primary/10 text-primary" : "bg-base-200 text-base-content/55"}`}>
+            <span className={`min-w-6 rounded-[6px] px-1.5 py-0.5 text-center text-[13.5px] tabular-nums ${on ? "bg-primary/10 text-primary" : "bg-base-200 text-base-content/55"}`}>
               {n ?? "–"}
             </span>
           </button>

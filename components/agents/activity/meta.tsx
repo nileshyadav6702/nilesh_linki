@@ -12,11 +12,12 @@ import type { ActivityCategory, OutcomeIcon, OutcomeTone } from "@/lib/agents/ac
 export type ActivityFilter = "all" | ActivityCategory;
 export const FILTERS: ActivityFilter[] = ["all", "website", "discovery", "campaign", "setup"];
 
-export const CATEGORY: Record<ActivityCategory, { label: string; icon: (size: number) => ReactNode }> = {
-  website: { label: "Website visitors", icon: (s) => <RiGlobalLine size={s} /> },
-  discovery: { label: "Lead discovery", icon: (s) => <RiSearchLine size={s} /> },
-  campaign: { label: "Campaign", icon: (s) => <RiSendPlaneLine size={s} /> },
-  setup: { label: "Setup", icon: (s) => <RiSettings3Line size={s} /> },
+/** Each category has a colour: the row mark and its chip use it. */
+export const CATEGORY: Record<ActivityCategory, { label: string; icon: (size: number) => ReactNode; tint: string }> = {
+  website: { label: "Website visitors", icon: (s) => <RiGlobalLine size={s} />, tint: "bg-[#e8a55a]/15 text-[#b8742a]" },
+  discovery: { label: "Lead discovery", icon: (s) => <RiSearchLine size={s} />, tint: "bg-accent/15 text-[#2f8a78]" },
+  campaign: { label: "Campaign", icon: (s) => <RiSendPlaneLine size={s} />, tint: "bg-primary/10 text-primary" },
+  setup: { label: "Setup", icon: (s) => <RiSettings3Line size={s} />, tint: "bg-base-200 text-base-content/70" },
 };
 
 /** Source types and setup kinds → the icon the Lead sources catalog uses for them. */

@@ -63,8 +63,8 @@ function ListPicker({ value, onChange, lists, used, onCreated, label = "Lead lis
       {creating && (
         <Modal labelId="new-list-title" title="Create a new List" subtitle="Imported and selected contacts are added to it." wide={false} onClose={() => !saving && setCreating(false)}
           footer={<>
-            <button type="button" onClick={() => setCreating(false)} disabled={saving} className="h-10 rounded-[8px] px-4 text-sm font-medium text-base-content/75 hover:bg-base-200">Cancel</button>
-            <button type="button" onClick={create} disabled={saving || !name.trim()} className="h-10 rounded-[8px] bg-primary px-4 text-sm font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-base-200 disabled:text-base-content/35">{saving ? "Creating…" : "Create list"}</button>
+            <button type="button" onClick={() => setCreating(false)} disabled={saving} className="h-10 rounded-[8px] px-4 text-[15px] font-medium text-base-content/75 hover:bg-base-200">Cancel</button>
+            <button type="button" onClick={create} disabled={saving || !name.trim()} className="h-10 rounded-[8px] bg-primary px-4 text-[15px] font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-base-200 disabled:text-base-content/35">{saving ? "Creating…" : "Create list"}</button>
           </>}>
           <form className="space-y-2 px-6 py-6" onSubmit={(e) => { e.preventDefault(); if (name.trim()) void create(); }}>
             <label htmlFor="new-list-name" className="text-[15px] font-medium">List Name <span className="text-error">*</span></label>
@@ -162,7 +162,7 @@ function CsvFlow({ state, set, lists, used, onCreated }: {
         className={`flex cursor-pointer flex-col items-center gap-2 rounded-[14px] border-2 border-dashed px-6 py-14 text-center transition-colors ${drag ? "border-primary/60 bg-primary/10" : "border-primary/20 hover:bg-primary/[0.04]"}`}>
         <p className="text-[17px] font-medium">Drop your CSV file or click to browse your computer</p>
         <p className="text-[14px] text-base-content/55">Max size: 10MB</p>
-        {error && <p role="alert" className="text-sm text-error">{error}</p>}
+        {error && <p role="alert" className="text-[15px] text-error">{error}</p>}
         <input ref={input} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void take(e.target.files?.[0]); e.target.value = ""; }} />
       </div>
     );
@@ -175,7 +175,7 @@ function CsvFlow({ state, set, lists, used, onCreated }: {
         <button type="button" onClick={() => input.current?.click()} className="text-[15px] font-medium hover:underline">Replace</button>
         <input ref={input} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void take(e.target.files?.[0]); e.target.value = ""; }} />
       </div>
-      {error && <p role="alert" className="text-sm text-error">{error}</p>}
+      {error && <p role="alert" className="text-[15px] text-error">{error}</p>}
 
       {reviewing
         ? <ReviewStep rows={rows} total={csv.rows.length} agentName="" autoEnrichEmails={false} bare />

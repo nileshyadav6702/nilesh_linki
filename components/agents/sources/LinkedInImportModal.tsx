@@ -124,12 +124,12 @@ export default function LinkedInImportModal({ agentId, lists, onListsChanged, on
         <Intro>{kind === "search" ? "Import people from a regular LinkedIn search URL." : "Import people who viewed your LinkedIn profile."}</Intro>
         <div className="flex flex-col items-center gap-3 rounded-[12px] bg-base-200/60 px-6 py-8 text-center">
           <SoonPill />
-          <p className="max-w-[460px] text-sm text-base-content/65">
+          <p className="max-w-[460px] text-[15px] text-base-content/65">
             {kind === "search"
               ? "Regular LinkedIn search imports aren't available yet. Run the same search in Sales Navigator and use the SalesNav import instead."
               : "Profile visitor imports aren't available yet."}
           </p>
-          {kind === "search" && <button type="button" className="text-sm font-medium text-primary hover:underline" onClick={() => setKind("salesnav")}>Use SalesNav import</button>}
+          {kind === "search" && <button type="button" className="text-[15px] font-medium text-primary hover:underline" onClick={() => setKind("salesnav")}>Use SalesNav import</button>}
         </div>
       </div>
     );
@@ -168,11 +168,11 @@ export default function LinkedInImportModal({ agentId, lists, onListsChanged, on
                 <label className="flex cursor-pointer items-center gap-3 border-b border-[var(--border-subtle)] px-4 py-3">
                   <input type="checkbox" className="checkbox checkbox-sm checkbox-primary rounded-[5px]" checked={reactions} onChange={(e) => setReactions(e.target.checked)} />
                   <span className="flex-1 text-[15px] text-base-content">People who reacted</span>
-                  <span className="text-sm tabular-nums text-base-content/60">{preview.reactions}{preview.reactions >= 100 ? "+" : ""}</span>
+                  <span className="text-[15px] tabular-nums text-base-content/60">{preview.reactions}{preview.reactions >= 100 ? "+" : ""}</span>
                 </label>
                 <label className="flex cursor-not-allowed items-center gap-3 px-4 py-3 opacity-60">
                   <input type="checkbox" className="checkbox checkbox-sm rounded-[5px]" disabled checked={false} onChange={() => {}} />
-                  <span className="flex-1"><span className="block text-[15px] text-base-content">Commenters</span><span className="block text-[13px] text-base-content/55">LinkedIn no longer lists commenters separately; most commenters also react.</span></span>
+                  <span className="flex-1"><span className="block text-[15px] text-base-content">Commenters</span><span className="block text-[14.5px] text-base-content/55">LinkedIn no longer lists commenters separately; most commenters also react.</span></span>
                   <SoonPill />
                 </label>
               </div>

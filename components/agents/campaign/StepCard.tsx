@@ -31,11 +31,11 @@ function SkipPill({ days, disabled, onSave }: { days: number; disabled: boolean;
   };
   if (editing) {
     return (
-      <span className="inline-flex items-center gap-2 text-[13px] text-base-content/55">
+      <span className="inline-flex items-center gap-2 text-[14.5px] text-base-content/55">
         <input autoFocus type="number" min={0} max={60} value={value} aria-label="Skip after days"
           onChange={(e) => setValue(e.target.value)} onBlur={commit}
           onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setValue(String(days)); setEditing(false); } }}
-          className="h-9 w-[72px] rounded-[8px] border border-[#0a66c2]/50 bg-base-100 px-3 text-sm text-base-content outline-none focus:ring-2 focus:ring-[#0a66c2]/20" />
+          className="h-9 w-[72px] rounded-[8px] border border-[#0a66c2]/50 bg-base-100 px-3 text-[15px] text-base-content outline-none focus:ring-2 focus:ring-[#0a66c2]/20" />
         day(s)
       </span>
     );
@@ -46,7 +46,7 @@ function SkipPill({ days, disabled, onSave }: { days: number; disabled: boolean;
   return (
     <Tip text={text} side="bottom">
       <button type="button" disabled={disabled} onClick={() => { setValue(String(days)); setEditing(true); }}
-        className="inline-flex items-center gap-1.5 rounded-[8px] border-2 border-dotted border-[#0a66c2]/30 bg-[#0a66c2]/[0.06] px-3 py-1 text-[13px] font-medium text-[#0a66c2] enabled:hover:bg-[#0a66c2]/10">
+        className="inline-flex items-center gap-1.5 rounded-[8px] border-2 border-dotted border-[#0a66c2]/30 bg-[#0a66c2]/[0.06] px-3 py-1 text-[14.5px] font-medium text-[#0a66c2] enabled:hover:bg-[#0a66c2]/10">
         <RiArrowRightDoubleLine size={15} />{days > 0 ? `Skip after ${days} day${days === 1 ? "" : "s"}` : "Never skip"}
       </button>
     </Tip>
@@ -67,13 +67,13 @@ export default function StepCard({ item, n, stat, editing, busy, aiLabel, workfl
   const likes = Math.max(1, s.like_count ?? 1);
 
   return (
-    <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-5">
+    <div className="wizard-rise rounded-[16px] border border-[var(--border-subtle)] bg-base-100 p-6 transition-shadow hover:shadow-[0_10px_28px_-16px_rgba(20,20,19,0.22)]">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <IconTile icon={look.icon} tone={look.tone} />
           <div className="min-w-0">
-            <div className="font-medium text-base-content">{STEP_TITLE[s.step_type] ?? s.step_type}</div>
-            <div className="text-xs text-base-content/45">Step {n} · {s.track === "email" ? "Email" : "LinkedIn"}</div>
+            <div className="text-[17px] font-semibold text-base-content">{STEP_TITLE[s.step_type] ?? s.step_type}</div>
+            <div className="text-[14px] text-base-content/55">Step {n} · {s.track === "email" ? "Email" : "LinkedIn"}</div>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -82,43 +82,43 @@ export default function StepCard({ item, n, stat, editing, busy, aiLabel, workfl
         </div>
       </div>
 
-      {s.step_type === "visit" && <p className="mt-4 rounded-[10px] bg-base-200/70 px-4 py-3 text-sm text-base-content/60">Automatically visits the contact&apos;s LinkedIn profile</p>}
-      {s.step_type === "like_posts" && <p className="mt-4 rounded-[10px] bg-base-200/70 px-4 py-3 text-sm text-base-content/60">Likes {likes} recent LinkedIn post{likes === 1 ? "" : "s"}</p>}
+      {s.step_type === "visit" && <p className="mt-4 rounded-[10px] bg-base-200/70 px-4 py-3 text-[15px] text-base-content/60">Automatically visits the contact&apos;s LinkedIn profile</p>}
+      {s.step_type === "like_posts" && <p className="mt-4 rounded-[10px] bg-base-200/70 px-4 py-3 text-[15px] text-base-content/60">Likes {likes} recent LinkedIn post{likes === 1 ? "" : "s"}</p>}
       {s.step_type === "voice" && (
         <div className="mt-4">
           {s.voice_duration_ms && !isNew
             ? <VoicePlayer key={`${s.id}:${s.voice_duration_ms}`} src={voiceUrl(workflowId, s.id)} durationMs={s.voice_duration_ms} />
             : editing || isNew
-              ? <p className="flex items-center gap-2 rounded-[10px] bg-error/[0.06] px-4 py-3 text-sm text-error/80"><RiMicLine size={16} /> Save changes, then record your message</p>
-              : <button type="button" onClick={onRecord} className="flex w-full items-center gap-2 rounded-[10px] border border-error/20 bg-error/[0.06] px-4 py-3 text-left text-sm text-error hover:bg-error/10"><RiMicLine size={16} /> Click to record a voice message</button>}
+              ? <p className="flex items-center gap-2 rounded-[10px] bg-error/[0.06] px-4 py-3 text-[15px] text-error/80"><RiMicLine size={16} /> Save changes, then record your message</p>
+              : <button type="button" onClick={onRecord} className="flex w-full items-center gap-2 rounded-[10px] border border-error/20 bg-error/[0.06] px-4 py-3 text-left text-[15px] text-error hover:bg-error/10"><RiMicLine size={16} /> Click to record a voice message</button>}
         </div>
       )}
       {s.step_type === "connect" && (
-        <div className="mt-3 space-y-1 text-sm italic text-base-content/55">
+        <div className="mt-3 space-y-1 text-[15px] italic text-base-content/55">
           <p>{s.connect_note ? <>Invitation with note: <span className="not-italic text-base-content/75">“{s.connect_note}”</span></> : "Invitation without note"}</p>
           {withdraw > 0 && <p>Automatically withdrawn after {withdraw} days to avoid too many open invitations.</p>}
-          {item.visitBefore && <p className="not-italic text-[13px] text-base-content/50"><RiEyeLine size={13} className="mr-1 inline" />Visits the profile first</p>}
+          {item.visitBefore && <p className="not-italic text-[14.5px] text-base-content/50"><RiEyeLine size={13} className="mr-1 inline" />Visits the profile first</p>}
         </div>
       )}
       {writes && (s.send_mode === "fixed" && fixedText ? (
-        <div className="mt-4 rounded-[10px] bg-base-200/70 px-4 py-3 text-sm text-base-content/70">
+        <div className="mt-4 rounded-[10px] bg-base-200/70 px-4 py-3 text-[15px] text-base-content/70">
           {s.step_type === "email" && s.email_subject && <div className="mb-1 font-medium text-base-content">{s.email_subject}</div>}
           <p className="line-clamp-3 whitespace-pre-wrap">{fixedText}</p>
-          <div className="mt-2 text-[11px] text-base-content/45">Same message for everyone</div>
+          <div className="mt-2 text-[12.5px] text-base-content/45">Same message for everyone</div>
         </div>
       ) : (
         <div className="mt-4 flex items-center gap-3 rounded-[10px] border border-primary/15 bg-primary/[0.06] px-4 py-3">
           <IconTile icon={<RiSparkling2Line size={16} />} size={36} />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium text-base-content">{aiLabel}</div>
-            <div className="text-xs text-base-content/50">Personalized for each contact</div>
+            <div className="text-[15px] font-medium text-base-content">{aiLabel}</div>
+            <div className="text-[13.5px] text-base-content/50">Personalized for each contact</div>
           </div>
           <Tip text="A personalized message is automatically generated for each contact, tailored to your value proposition."><RiInformationLine size={16} className="text-base-content/35" /></Tip>
         </div>
       ))}
 
       {!isNew && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--border-subtle)] pt-3 text-[13px]">
+        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--border-subtle)] pt-3 text-[14.5px]">
           {s.step_type === "connect" && (
             <span className="inline-flex items-center gap-1.5">
               <Tip text={`Invitation has been sent to ${stat?.invited ?? 0} contact${stat?.invited === 1 ? "" : "s"} (${stat?.accepted ?? 0} accepted)`}>

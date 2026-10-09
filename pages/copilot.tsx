@@ -89,10 +89,10 @@ export default function Copilot() {
   return (
     <>
       <Head><title>Copilot — Kairo</title></Head>
-      <div className="-mt-2 mb-6 flex flex-wrap items-start justify-between gap-4 border-b border-[var(--border-subtle)] pb-5">
+      <div className="-mx-4 -mt-6 mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border-subtle)] px-4 pb-6 pt-6 md:-mx-10 md:-mt-9 md:px-10 md:pt-8">
         <div>
-          <div className="flex items-center gap-3"><RiBrainLine size={22} className="text-primary" /><div role="heading" aria-level={1} className="text-[24px] font-medium text-base-content">Copilot</div></div>
-          <p className="mt-1 pl-1 text-[16px] text-base-content/65">Review and act on AI-recommended leads</p>
+          <div className="flex items-center gap-3"><RiBrainLine size={24} className="text-primary" /><div role="heading" aria-level={1} className="text-[24px] font-semibold text-base-content">Copilot</div></div>
+          <p className="mt-1.5 pl-[36px] text-[16px] text-base-content/65">Review and act on AI-recommended leads</p>
         </div>
         <div className="w-full sm:w-[330px]">
           <SearchSelect label="LinkedIn account" value={account} placeholder="All LinkedIn accounts" searchable

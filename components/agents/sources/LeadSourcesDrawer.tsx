@@ -137,12 +137,12 @@ export default function LeadSourcesDrawer({ agentId, agentName, ownListId, rows,
         <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] ${item.tint}`}>{item.icon}</span>
         <span className="min-w-0 flex-1">
           <span className={`block truncate text-[15px] ${item.soon ? "text-base-content/50" : "text-base-content"}`}>{item.title}</span>
-          <span className="block truncate text-[13px] text-base-content/50">{item.summary(draft, { lists: listsCount })}</span>
+          <span className="block truncate text-[14.5px] text-base-content/50">{item.summary(draft, { lists: listsCount })}</span>
         </span>
         {item.soon ? <SoonPill />
           : item.modal ? <RiExternalLinkLine size={17} className="shrink-0 text-base-content/35" aria-label="Opens a dialog" />
           : item.id === "saved_list" ? <RiArrowRightSLine size={18} className="shrink-0 text-base-content/35" />
-          : n > 0 && <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[12px] text-base-content/75">{n} signal{n === 1 ? "" : "s"}</span>}
+          : n > 0 && <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[13.5px] text-base-content/75">{n} signal{n === 1 ? "" : "s"}</span>}
       </button>
     );
   };
@@ -154,7 +154,7 @@ export default function LeadSourcesDrawer({ agentId, agentName, ownListId, rows,
       <div ref={panel} role="dialog" aria-modal="true" aria-labelledby="lead-sources-title" tabIndex={-1} onKeyDown={modal ? undefined : onKeyDown}
         className={`relative flex h-full w-full flex-col bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition-transform duration-300 ease-out motion-reduce:transition-none md:w-[72%] md:min-w-[760px] ${shown ? "translate-x-0" : "translate-x-full"}`}>
         <header className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] px-6 py-5">
-          <h2 id="lead-sources-title" className="flex flex-wrap items-baseline gap-3 font-display text-[26px] leading-tight text-base-content">
+          <h2 id="lead-sources-title" className="flex flex-wrap items-baseline gap-3 font-medium text-[26px] leading-tight text-base-content">
             Lead sources
             <span className={`font-sans text-[15px] ${signals > SIGNAL_BUDGET ? "text-error" : "text-base-content/55"}`} title="Each tracked page, topic or switched-on event is one signal">{signals} of {SIGNAL_BUDGET} signals</span>
           </h2>
@@ -167,7 +167,7 @@ export default function LeadSourcesDrawer({ agentId, agentName, ownListId, rows,
           <nav aria-label="Lead source types" className="max-h-[42vh] shrink-0 overflow-y-auto overscroll-contain border-b border-[var(--border-subtle)] bg-base-200/35 md:max-h-none md:w-[35%] md:border-b-0 md:border-r">
             <div className="border-b border-[var(--border-subtle)] p-3">
               <button type="button" onClick={() => setLiveOpen(!liveOpen)} aria-expanded={liveOpen} className="flex w-full items-center justify-between rounded-[8px] px-2 py-2 text-left hover:bg-base-200/60">
-                <span className="text-[13px] font-semibold uppercase tracking-[0.08em] text-base-content/60">Live signals</span>
+                <span className="text-[14.5px] font-semibold uppercase tracking-[0.08em] text-base-content/60">Live signals</span>
                 <RiArrowDownSLine size={18} className={`text-base-content/45 transition-transform ${liveOpen ? "rotate-180" : ""}`} />
               </button>
               {liveOpen && <div className="mt-1 space-y-0.5">{LIVE_ITEMS.map(itemRow)}</div>}
@@ -175,8 +175,8 @@ export default function LeadSourcesDrawer({ agentId, agentName, ownListId, rows,
             <div className="p-3">
               <button type="button" onClick={() => setImportOpen(!importOpen)} aria-expanded={importOpen} className="flex w-full items-center justify-between rounded-[8px] px-2 py-2 text-left hover:bg-base-200/60">
                 <span>
-                  <span className="block text-[13px] font-semibold uppercase tracking-[0.08em] text-base-content/60">Import from…</span>
-                  <span className="block text-[13px] text-base-content/50">CSV, Saved lists, or LinkedIn</span>
+                  <span className="block text-[14.5px] font-semibold uppercase tracking-[0.08em] text-base-content/60">Import from…</span>
+                  <span className="block text-[14.5px] text-base-content/50">CSV, Saved lists, or LinkedIn</span>
                 </span>
                 <RiArrowDownSLine size={18} className={`text-base-content/45 transition-transform ${importOpen ? "rotate-180" : ""}`} />
               </button>
@@ -185,14 +185,14 @@ export default function LeadSourcesDrawer({ agentId, agentName, ownListId, rows,
           </nav>
           <section className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-6 sm:px-8" aria-live="polite">
             {!hasLinkedIn && ["competitor", "topic", "experts"].includes(selected) && (
-              <p className="mb-5 rounded-[12px] bg-[#e8a55a]/15 px-4 py-3 text-[13px] text-[#8a5a1f]">This agent has no LinkedIn account yet, so LinkedIn signals will start once you add one in Settings.</p>
+              <p className="mb-5 rounded-[12px] bg-[#e8a55a]/15 px-4 py-3 text-[14.5px] text-[#8a5a1f]">This agent has no LinkedIn account yet, so LinkedIn signals will start once you add one in Settings.</p>
             )}
             {panelFor(selected)}
           </section>
         </div>
 
         <footer className="flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] px-6 py-4">
-          <span className={`text-sm ${issues.length && pending ? "text-error" : "text-base-content/60"}`}>
+          <span className={`text-[15px] ${issues.length && pending ? "text-error" : "text-base-content/60"}`}>
             {pending ? (issues.length ? issues[0] : `${pending} pending change${pending === 1 ? "" : "s"}`) : "No pending changes"}
           </span>
           <button type="button" className={primaryBtn} disabled={!pending || saving} onClick={save}>

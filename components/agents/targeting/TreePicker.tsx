@@ -45,7 +45,7 @@ export default function TreePicker({ label, nodes, selected, onToggle, onClose, 
   return (
     <PickerShell label={label} query={query} onQuery={setQuery} onEnter={enter} onClose={onClose} placeholder={placeholder}>
       {q && !exact && (
-        <button type="button" data-row onClick={enter} className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-sm text-primary hover:bg-primary/5 focus-visible:bg-primary/5 focus-visible:outline-none">
+        <button type="button" data-row onClick={enter} className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2.5 text-left text-[15px] text-primary hover:bg-primary/5 focus-visible:bg-primary/5 focus-visible:outline-none">
           <RiAddLine size={16} /> Add &ldquo;{query.trim()}&rdquo;
         </button>
       )}
@@ -73,13 +73,13 @@ export default function TreePicker({ label, nodes, selected, onToggle, onClose, 
               <button type="button" data-row aria-pressed={on} onClick={() => onToggle(r.value)}
                 className={`flex min-w-0 flex-1 items-center justify-between gap-3 rounded-[8px] px-3 py-2.5 text-left text-[15px] focus-visible:bg-base-200 focus-visible:outline-none ${on ? "text-primary" : "text-base-content/85 hover:bg-base-200/70"}`}>
                 <span className="truncate">{r.label}</span>
-                {on ? <RiCheckLine size={16} className="shrink-0" aria-hidden="true" /> : kids > 0 && <span className="shrink-0 text-[13px] tabular-nums text-base-content/40">{kids}</span>}
+                {on ? <RiCheckLine size={16} className="shrink-0" aria-hidden="true" /> : kids > 0 && <span className="shrink-0 text-[14.5px] tabular-nums text-base-content/40">{kids}</span>}
               </button>
             </li>
           );
         })}
       </ul>
-      {!rows.length && !q && <p className="px-3 py-4 text-sm text-base-content/45">Nothing to pick.</p>}
+      {!rows.length && !q && <p className="px-3 py-4 text-[15px] text-base-content/45">Nothing to pick.</p>}
     </PickerShell>
   );
 }

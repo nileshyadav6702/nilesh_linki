@@ -83,7 +83,7 @@ export default function TargetingSections({ icp, onChange, accordion = false }: 
           <input type="checkbox" className="checkbox checkbox-sm checkbox-primary mt-0.5" checked={icp.exclude_service_providers} onChange={(e) => set("exclude_service_providers", e.target.checked)} />
           <span>
             <span className="block text-[15px] font-medium text-base-content">Exclude service providers, freelancers, and consultants</span>
-            <span className="mt-0.5 block text-sm text-base-content/55">Filter out agencies, consultants, and B2B service companies from your results.</span>
+            <span className="mt-0.5 block text-[15px] text-base-content/55">Filter out agencies, consultants, and B2B service companies from your results.</span>
           </span>
         </label>
       </SectionCard>
@@ -94,9 +94,9 @@ export default function TargetingSections({ icp, onChange, accordion = false }: 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-base-content">
                 AI Competitor Filtering
-                <span className="rounded-[6px] border border-primary/40 px-1.5 py-px text-[11px] font-medium text-primary">Uses AI credits</span>
+                <span className="rounded-[6px] border border-primary/40 px-1.5 py-px text-[12.5px] font-medium text-primary">Uses AI credits</span>
               </div>
-              <p className="mt-0.5 text-sm text-base-content/55">Auto-exclude competitors you haven&apos;t listed.</p>
+              <p className="mt-0.5 text-[15px] text-base-content/55">Auto-exclude competitors you haven&apos;t listed.</p>
             </div>
             <Toggle on={icp.ai_competitor_filtering} onChange={() => set("ai_competitor_filtering", !icp.ai_competitor_filtering)} label="AI competitor filtering" />
           </div>
@@ -113,10 +113,10 @@ export default function TargetingSections({ icp, onChange, accordion = false }: 
                 className={`rounded-[12px] border px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${on ? "border-primary/60 bg-primary/5" : "border-[var(--border-subtle)] hover:bg-base-200/50"}`}>
                 <span className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-base-content">
                   {m.title}
-                  {m.badge && <span className="rounded-[6px] bg-primary px-2 py-px text-[11px] font-medium text-primary-content">{m.badge}</span>}
+                  {m.badge && <span className="rounded-[6px] bg-primary px-2 py-px text-[12.5px] font-medium text-primary-content">{m.badge}</span>}
                   {on && <RiCheckLine size={16} className="ml-auto text-primary" aria-hidden="true" />}
                 </span>
-                <span className="mt-1 block text-sm text-base-content/55">{m.hint}</span>
+                <span className="mt-1 block text-[15px] text-base-content/55">{m.hint}</span>
               </button>
             );
           })}
@@ -125,7 +125,7 @@ export default function TargetingSections({ icp, onChange, accordion = false }: 
 
       <PlainSection title="Specify your targeting (optional)" description="Add advanced criteria only when needed. Your ICP above stays the main targeting setup." open={!!open.advanced} onToggle={() => flip("advanced")}>
         <div className="space-y-2">
-          <div className="flex items-center gap-1.5 text-sm font-medium text-base-content">
+          <div className="flex items-center gap-1.5 text-[15px] font-medium text-base-content">
             Mandatory keywords
             <span tabIndex={0} className="text-base-content/45" title="Leads must mention at least one of these words in their headline, title, about or company. Others are disqualified before scoring." aria-label="About mandatory keywords">
               <RiInformationLine size={15} />

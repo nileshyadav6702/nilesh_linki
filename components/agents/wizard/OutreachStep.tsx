@@ -138,7 +138,7 @@ export default function OutreachStep({ state, set, onManual, onEditSources }: {
             {manual && (
               <Block title="Outreach sequence" subtitle="Build the campaign workflow step by step.">
                 {creating || !state.agentId ? (
-                  <p className="py-6 text-center text-sm text-base-content/50">Creating your default sequence…</p>
+                  <p className="py-6 text-center text-[15px] text-base-content/50">Creating your default sequence…</p>
                 ) : (
                   <AgentCampaign agentId={state.agentId} workflowId={o.workflow_id || null} stats={[]} leadCount={0}
                     sources={{ count: state.sourceKind === "signals" ? state.sources.filter((s) => s.enabled).length : 1, leads: 0 }}
@@ -157,7 +157,7 @@ export default function OutreachStep({ state, set, onManual, onEditSources }: {
                     options={accounts.map((a) => ({
                       value: a.id, label: a.name ?? a.email ?? "LinkedIn account", disabled: !a.is_authenticated, note: a.is_authenticated ? undefined : "(not connected)",
                       lead: <Avatar name={a.name ?? a.email} size={30} />,
-                      pill: a.is_authenticated ? <span className="rounded-[6px] border border-success/30 bg-success/10 px-2 py-px text-[12px] text-[#3a8c4f]">Connected</span> : undefined,
+                      pill: a.is_authenticated ? <span className="rounded-[6px] border border-success/30 bg-success/10 px-2 py-px text-[13.5px] text-[#3a8c4f]">Connected</span> : undefined,
                     }))} />
                 </div>
               </Block>

@@ -167,7 +167,7 @@ export default function LinkedInAccountDrawer({ accountId, agentId, inbox, onClo
                     </span>
                     <input type="number" min={0} max={l.max} className={`${inputCls} !h-12 !text-[16px] mt-1.5`} value={limits[l.key] ?? ""} onChange={(e) => setLimits({ ...limits, [l.key]: Number(e.target.value) })} />
                     <UsageBar used={usage[l.usage] ?? 0} limit={n} />
-                    <span className="text-[13px] text-base-content/40">≈ {n * activeDays}/week</span>
+                    <span className="text-[14.5px] text-base-content/40">≈ {n * activeDays}/week</span>
                   </label>
                 );
               })}
@@ -189,8 +189,8 @@ export default function LinkedInAccountDrawer({ accountId, agentId, inbox, onClo
             <p className="text-[15px] text-base-content/55">Select the period of time when this seat should run its activities.</p>
             <HourRange value={hours} onChange={setHours} />
             <p className="mt-1 text-center text-[15px] text-base-content/70">Selected: from <span className="font-semibold text-primary">{hourLabel(hours[0])}</span> to <span className="font-semibold text-primary">{hourLabel(hours[1])}</span> ({tz})</p>
-            <p className="mt-1 flex items-center justify-center gap-1 text-[13px] text-base-content/45"><RiInformationLine size={13} /> LinkedIn activities run only inside this window</p>
-            {!validHours && <p className="mt-1 text-center text-[13px] text-error">The end must be after the start.</p>}
+            <p className="mt-1 flex items-center justify-center gap-1 text-[14.5px] text-base-content/45"><RiInformationLine size={13} /> LinkedIn activities run only inside this window</p>
+            {!validHours && <p className="mt-1 text-center text-[14.5px] text-error">The end must be after the start.</p>}
             <div className="mt-6 font-medium text-base-content">Active days</div>
             <p className="text-[15px] text-base-content/55">Select which days this seat should be active for LinkedIn activities.</p>
             <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
@@ -216,7 +216,7 @@ export default function LinkedInAccountDrawer({ accountId, agentId, inbox, onClo
               <span className="text-[15px] font-medium text-base-content">AI reply instructions <span className="font-normal text-base-content/45">(optional)</span></span>
               <textarea className={`${textareaCls} !text-[16px] mt-1.5 min-h-[110px]`} maxLength={500} value={instructions} onChange={(e) => setInstructions(e.target.value)}
                 placeholder="Example: keep replies short and friendly. If someone shows interest, invite them to book a demo and include the calendar link." />
-              <span className="mt-1 flex justify-between text-[13px] text-base-content/45"><span>Tone, product to mention, when to suggest a meeting.</span><span className="tabular-nums">{instructions.length}/500</span></span>
+              <span className="mt-1 flex justify-between text-[14.5px] text-base-content/45"><span>Tone, product to mention, when to suggest a meeting.</span><span className="tabular-nums">{instructions.length}/500</span></span>
             </label>
           </SettingsSection>}
 
@@ -255,7 +255,7 @@ function HourRange({ value, onChange }: { value: [number, number]; onChange: (v:
         <input type="range" min={0} max={24} step={1} value={start} aria-label="Start hour" className={thumb} onChange={(e) => onChange([Math.min(Number(e.target.value), end - 1), end])} />
         <input type="range" min={0} max={24} step={1} value={end} aria-label="End hour" className={thumb} onChange={(e) => onChange([start, Math.max(Number(e.target.value), start + 1)])} />
       </div>
-      <div className="mt-1 flex justify-between text-[11px] tabular-nums">
+      <div className="mt-1 flex justify-between text-[12.5px] tabular-nums">
         {Array.from({ length: 25 }, (_, h) => <span key={h} className={`w-3 text-center ${h >= start && h <= end ? "text-primary" : "text-base-content/40"}`}>{h % 2 === 0 ? h : ""}</span>)}
       </div>
     </div>

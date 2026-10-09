@@ -41,17 +41,17 @@ export default function AgentOverview({ performance, series, activity, dueToday,
           )}
           <ActionRow icon={<RiPlayCircleLine size={20} />} tone="coral"
             title={`${dueToday} lead${dueToday === 1 ? "" : "s"} will be contacted today`} subtitle="Steps already due on this campaign."
-            action={<button type="button" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:text-[var(--primary-hover)]" onClick={onReview}>Review leads <RiArrowRightLine size={15} /></button>} />
+            action={<button type="button" className="inline-flex items-center gap-1 text-[15px] font-medium text-primary hover:text-[var(--primary-hover)]" onClick={onReview}>Review leads <RiArrowRightLine size={15} /></button>} />
         </section>
 
         <section className="space-y-4">
           <SectionHeading title="Performance" subtitle="From leads found to interested replies" />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <StatTile label="Found" value={p.found} icon={<RiUserSearchLine size={16} />} />
-            <StatTile label="Contacted" value={p.contacted} hint={p.found ? `${pct(p.contacted, p.found)} of found` : undefined} icon={<RiMailSendLine size={16} />} />
-            <StatTile label="Accepted" value={p.accepted} hint={p.contacted ? `${pct(p.accepted, p.contacted)} acceptance rate` : undefined} icon={<RiUserFollowLine size={16} />} />
-            <StatTile label="Replied" value={p.replied || "—"} hint={p.contacted && p.replied ? `${pct(p.replied, p.contacted)} reply rate` : undefined} icon={<RiMailLine size={16} />} />
-            <StatTile label="Interested" value={p.interested || "—"} icon={<RiFireLine size={16} />} />
+            <StatTile label="Found" value={p.found} icon={<RiUserSearchLine size={18} />} tone="teal" />
+            <StatTile label="Contacted" value={p.contacted} hint={p.found ? `${pct(p.contacted, p.found)} of found` : undefined} icon={<RiMailSendLine size={18} />} tone="coral" />
+            <StatTile label="Accepted" value={p.accepted} hint={p.contacted ? `${pct(p.accepted, p.contacted)} acceptance rate` : undefined} icon={<RiUserFollowLine size={18} />} tone="linkedin" />
+            <StatTile label="Replied" value={p.replied || "—"} hint={p.contacted && p.replied ? `${pct(p.replied, p.contacted)} reply rate` : undefined} icon={<RiMailLine size={18} />} tone="amber" />
+            <StatTile label="Interested" value={p.interested || "—"} icon={<RiFireLine size={18} />} tone="success" />
           </div>
         </section>
 
@@ -59,10 +59,10 @@ export default function AgentOverview({ performance, series, activity, dueToday,
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <IconTile icon={<RiLineChartLine size={18} />} tone="coral" size={36} />
-              <div className="font-display text-[20px] leading-none">Last {Math.min(days.length, range === "7 days" ? 7 : 30)} days</div>
+              <div className="text-[20px] font-semibold leading-none">Last {Math.min(days.length, range === "7 days" ? 7 : 30)} days</div>
               <Segmented options={["7 days", "30 days"] as const} value={range} onChange={setRange} />
             </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-base-content/60">
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[13.5px] text-base-content/60">
               {SERIES.map((s) => <span key={s.key} className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: s.color }} />{s.label}</span>)}
             </div>
           </div>
@@ -72,21 +72,21 @@ export default function AgentOverview({ performance, series, activity, dueToday,
 
       <Panel className="flex max-h-[760px] flex-col xl:sticky xl:top-4 xl:self-start">
         <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
-          <h2 className="font-display text-[20px] leading-none">Activity feed</h2>
-          <button type="button" className="inline-flex items-center gap-1 text-[13px] font-medium text-primary" onClick={onActivity}>View all <RiArrowRightLine size={14} /></button>
+          <h2 className="text-[20px] font-semibold leading-none">Activity feed</h2>
+          <button type="button" className="inline-flex items-center gap-1 text-[14.5px] font-medium text-primary" onClick={onActivity}>View all <RiArrowRightLine size={14} /></button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-          {activity.length === 0 && <p className="px-3 py-8 text-center text-sm text-base-content/45">Nothing yet. Sources and sends show up here.</p>}
+          {activity.length === 0 && <p className="px-3 py-8 text-center text-[15px] text-base-content/45">Nothing yet. Sources and sends show up here.</p>}
           {activity.slice(0, 14).map((item) => {
             const m = describe(item);
             return (
               <div key={item.id} className="flex items-center gap-3 rounded-[8px] px-3 py-2.5 hover:bg-base-200/60">
                 {m.avatar ? <Avatar name={item.title} size={32} /> : <IconTile icon={m.icon} tone={m.tone} size={32} />}
-                <div className="min-w-0 flex-1 text-sm">
+                <div className="min-w-0 flex-1 text-[15px]">
                   <div className="truncate"><span className="font-medium text-base-content">{m.event}</span>{m.who && <span className="text-base-content/50"> · {m.who}</span>}</div>
-                  {m.sub && <div className="truncate text-xs text-base-content/45">{m.sub}</div>}
+                  {m.sub && <div className="truncate text-[13.5px] text-base-content/45">{m.sub}</div>}
                 </div>
-                <span className="shrink-0 text-[11px] text-base-content/40">{timeAgo(item.at)}</span>
+                <span className="shrink-0 text-[12.5px] text-base-content/40">{timeAgo(item.at)}</span>
               </div>
             );
           })}
@@ -102,7 +102,7 @@ function ActionRow({ icon, tone, title, subtitle, action }: { icon: ReactNode; t
       <IconTile icon={icon} tone={tone} />
       <div className="min-w-0 flex-1">
         <div className="font-medium text-base-content">{title}</div>
-        {subtitle && <div className="text-sm text-base-content/55">{subtitle}</div>}
+        {subtitle && <div className="text-[15px] text-base-content/55">{subtitle}</div>}
       </div>
       {action}
     </Panel>
@@ -111,7 +111,7 @@ function ActionRow({ icon, tone, title, subtitle, action }: { icon: ReactNode; t
 
 /** Daily leads found and sends (Recharts), with the shared dated tooltip. */
 function Chart({ days }: { days: DayPoint[] }) {
-  if (!days.length) return <p className="py-14 text-center text-sm text-base-content/45">No activity in this period yet.</p>;
+  if (!days.length) return <p className="py-14 text-center text-[15px] text-base-content/45">No activity in this period yet.</p>;
   return <div className="mt-4"><TrendChart data={days} series={SERIES} height={240} compact /></div>;
 }
 
@@ -168,7 +168,7 @@ export function ActivityList({ items, filter }: { items: ActivityItem[]; filter:
     return (
       <Panel className="px-6 py-14 text-center">
         <IconTile icon={<RiRadarLine size={20} />} tone="ink" className="mx-auto" />
-        <p className="mt-3 text-sm text-base-content/50">No {filter === "all" ? "activity" : filter} yet.</p>
+        <p className="mt-3 text-[15px] text-base-content/50">No {filter === "all" ? "activity" : filter} yet.</p>
       </Panel>
     );
   }
@@ -182,7 +182,7 @@ export function ActivityList({ items, filter }: { items: ActivityItem[]; filter:
     <Panel className="overflow-hidden">
       {groups.map((g) => (
         <div key={g.name}>
-          <div className="border-b border-[var(--border-subtle)] bg-base-200/70 px-5 py-2 text-[12px] font-medium uppercase tracking-[1.2px] text-base-content/50">{g.name}</div>
+          <div className="border-b border-[var(--border-subtle)] bg-base-200/70 px-5 py-2 text-[13.5px] font-medium uppercase tracking-[1.2px] text-base-content/50">{g.name}</div>
           <div className="divide-y divide-[var(--border-subtle)]">
             {g.items.map((item) => {
               const m = describe(item);
@@ -191,14 +191,14 @@ export function ActivityList({ items, filter }: { items: ActivityItem[]; filter:
                 <div key={item.id} className="flex items-center gap-4 px-5 py-3.5">
                   {m.avatar ? <Avatar name={item.title} size={36} /> : <IconTile icon={m.icon} tone={m.tone} size={36} />}
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-base-content">{m.avatar ? item.title : m.event}</div>
-                    {(m.avatar ? item.detail : m.sub) && <div className="truncate text-xs text-base-content/50">{m.avatar ? item.detail : m.sub}</div>}
-                    <div className="mt-1 flex items-center gap-2 text-[11px] text-base-content/45">
+                    <div className="truncate text-[15px] font-medium text-base-content">{m.avatar ? item.title : m.event}</div>
+                    {(m.avatar ? item.detail : m.sub) && <div className="truncate text-[13.5px] text-base-content/50">{m.avatar ? item.detail : m.sub}</div>}
+                    <div className="mt-1 flex items-center gap-2 text-[12.5px] text-base-content/45">
                       <span className="inline-flex items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 font-medium text-base-content/60">{chip.icon}{chip.label}</span>
                       <span>{timeAgo(item.at)}</span>
                     </div>
                   </div>
-                  <span className={`hidden shrink-0 items-center gap-1.5 text-[13px] font-medium sm:inline-flex ${LABEL_TONE[m.labelTone]}`}>{m.labelIcon}{m.label}</span>
+                  <span className={`hidden shrink-0 items-center gap-1.5 text-[14.5px] font-medium sm:inline-flex ${LABEL_TONE[m.labelTone]}`}>{m.labelIcon}{m.label}</span>
                 </div>
               );
             })}

@@ -13,8 +13,8 @@ export function SectionCard({ icon, label, count, summary, open, onToggle, child
         <span className="shrink-0 text-base-content/50" aria-hidden="true">{icon}</span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
-            <span className="text-[12px] font-semibold uppercase tracking-[0.06em] text-base-content/60">{label}</span>
-            {count > 0 && <span className="rounded-[6px] border border-primary/30 px-1.5 text-[11px] tabular-nums text-primary">{count}</span>}
+            <span className="text-[13.5px] font-semibold uppercase tracking-[0.06em] text-base-content/60">{label}</span>
+            {count > 0 && <span className="rounded-[6px] border border-primary/30 px-1.5 text-[12.5px] tabular-nums text-primary">{count}</span>}
           </span>
           <span className={`mt-1 block truncate text-[15px] ${count > 0 ? "text-base-content" : "text-base-content/45"}`}>{summary}</span>
         </span>
@@ -34,7 +34,7 @@ export function PlainSection({ title, description, open, onToggle, children }: {
         className="flex w-full items-center gap-4 rounded-[12px] px-5 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
         <span className="min-w-0 flex-1">
           <span className="block text-[17px] font-medium text-base-content">{title}</span>
-          <span className="mt-1 block text-sm text-base-content/55">{description}</span>
+          <span className="mt-1 block text-[15px] text-base-content/55">{description}</span>
         </span>
         <RiArrowDownSLine size={18} aria-hidden="true" className={`shrink-0 text-base-content/40 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

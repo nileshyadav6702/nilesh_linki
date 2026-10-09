@@ -93,11 +93,11 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
       <section className="space-y-3">
         <SectionHeading title="Who this agent targets" subtitle="Every source below only keeps leads that match this audience." />
         <Panel className="flex flex-wrap items-center gap-2 px-5 py-4">
-          {chips.slice(0, 6).map((c) => <Pill key={c} className="!px-3 !py-1 !text-[13px]">{c}</Pill>)}
-          {chips.length > 6 && <Pill tone="coral" className="!px-3 !py-1 !text-[13px]">+{chips.length - 6}</Pill>}
-          {!chips.length && <span className="text-sm text-base-content/45">No targeting yet.</span>}
-          {modeNote && <Pill tone="amber" className="!px-3 !py-1 !text-[13px]">{modeNote}</Pill>}
-          {onEditTargeting && <button type="button" className={`${ghostBtn} ml-auto !h-9 !text-sm !text-base-content`} onClick={onEditTargeting}><RiPencilLine size={15} /> Edit targeting</button>}
+          {chips.slice(0, 6).map((c) => <Pill key={c} className="!px-3 !py-1 !text-[14.5px]">{c}</Pill>)}
+          {chips.length > 6 && <Pill tone="coral" className="!px-3 !py-1 !text-[14.5px]">+{chips.length - 6}</Pill>}
+          {!chips.length && <span className="text-[15px] text-base-content/45">No targeting yet.</span>}
+          {modeNote && <Pill tone="amber" className="!px-3 !py-1 !text-[14.5px]">{modeNote}</Pill>}
+          {onEditTargeting && <button type="button" className={`${ghostBtn} ml-auto !h-9 !text-[15px] !text-base-content`} onClick={onEditTargeting}><RiPencilLine size={15} /> Edit targeting</button>}
         </Panel>
       </section>
 
@@ -115,13 +115,13 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
             <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[var(--border-subtle)] bg-base-200/60 px-5 py-4">
               <div>
                 <div className="flex items-center gap-2 text-[15px] font-medium text-base-content">Signals <Pill>{active} of {rows.length}</Pill></div>
-                <p className="mt-0.5 text-xs text-base-content/50">How this agent continuously finds leads.</p>
+                <p className="mt-0.5 text-[13.5px] text-base-content/50">How this agent continuously finds leads.</p>
               </div>
-              <div className="hidden grid-cols-[72px_120px_150px_52px] gap-3 text-[11px] font-medium uppercase tracking-[0.08em] text-base-content/45 md:grid">
+              <div className="hidden grid-cols-[72px_120px_150px_52px] gap-3 text-[12.5px] font-medium uppercase tracking-[0.08em] text-base-content/45 md:grid">
                 <span className="text-right">Leads</span><span>Next run</span><span /><span />
               </div>
             </div>
-            {rows.length === 0 && <p className="px-5 py-8 text-center text-sm text-base-content/45">No sources yet. Click Lead sources to start finding people.</p>}
+            {rows.length === 0 && <p className="px-5 py-8 text-center text-[15px] text-base-content/45">No sources yet. Click Lead sources to start finding people.</p>}
             {rows.map((s) => {
               const list = items(s);
               const expanded = !!open[s.id];
@@ -136,12 +136,12 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
                     <IconTile icon={l.icon} tone={l.tone} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-medium text-base-content">{SIGNAL_LABEL[s.source_type] ?? s.source_type}</div>
-                      <div className="truncate text-[13px] text-base-content/50">{tracked(s)}</div>
-                      {s.last_error && <div className="mt-0.5 truncate text-xs text-error" title={s.last_error}>{s.last_error}</div>}
+                      <div className="truncate text-[14.5px] text-base-content/50">{tracked(s)}</div>
+                      {s.last_error && <div className="mt-0.5 truncate text-[13.5px] text-error" title={s.last_error}>{s.last_error}</div>}
                     </div>
                     <div className="ml-auto grid grid-cols-[72px_120px_150px_52px] items-center gap-3">
-                      <span className="text-right font-display text-[20px] tabular-nums text-base-content">{s.leads}</span>
-                      <span className="text-xs text-base-content/55">{s.enabled ? nextRunLabel(s.next_run_at, s.last_run_at) : "Off"}</span>
+                      <span className="text-right font-medium text-[20px] tabular-nums text-base-content">{s.leads}</span>
+                      <span className="text-[13.5px] text-base-content/55">{s.enabled ? nextRunLabel(s.next_run_at, s.last_run_at) : "Off"}</span>
                       <button type="button" className={`${ghostBtn} justify-self-start border border-[var(--border-subtle)] bg-base-100`} disabled={!s.enabled} onClick={() => setAskLaunch(s)}><RiPlayLine size={13} /> Launch now</button>
                       <Toggle on={!!s.enabled} onChange={() => toggle(s)} label={`Toggle ${SIGNAL_LABEL[s.source_type] ?? s.source_type}`} />
                     </div>
@@ -152,8 +152,8 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
                         <div key={it.label + it.sub} className="flex items-center gap-3 rounded-[8px] px-2 py-2 hover:bg-base-200/60">
                           <Avatar name={it.label} size={32} />
                           <div className="min-w-0">
-                            <div className="truncate text-sm text-base-content">{it.label}</div>
-                            <div className="truncate text-xs capitalize text-base-content/50">{it.sub}</div>
+                            <div className="truncate text-[15px] text-base-content">{it.label}</div>
+                            <div className="truncate text-[13.5px] capitalize text-base-content/50">{it.sub}</div>
                           </div>
                         </div>
                       ))}

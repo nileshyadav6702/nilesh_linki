@@ -33,7 +33,7 @@ function Group({ id, open, setOpen, icon, tint, title, subtitle, active, pill, a
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2 text-[17px] font-medium text-base-content">
               {title}
-              {!!active && <span className="rounded-[6px] border border-primary/30 bg-primary/5 px-2 py-px text-[13px] font-normal text-primary">{active} active</span>}
+              {!!active && <span className="rounded-[6px] border border-primary/30 bg-primary/5 px-2 py-px text-[14.5px] font-normal text-primary">{active} active</span>}
               {pill}
             </span>
             <span className="mt-0.5 block text-[15px] text-base-content/60">{subtitle}</span>
@@ -53,14 +53,14 @@ function Group({ id, open, setOpen, icon, tint, title, subtitle, active, pill, a
 }
 
 const Hint = ({ children, error }: { children: ReactNode; error?: boolean }) =>
-  <p className={`text-[13px] ${error ? "text-error" : "text-base-content/55"}`}>{children}</p>;
+  <p className={`text-[14.5px] ${error ? "text-error" : "text-base-content/55"}`}>{children}</p>;
 
 function Chips({ values, label, onRemove }: { values: string[]; label?: (v: string) => string; onRemove: (v: string) => void }) {
   if (!values.length) return null;
   return (
     <div className="flex flex-wrap gap-2">
       {values.map((v) => (
-        <span key={v} className="wizard-rise inline-flex max-w-full items-center gap-1.5 rounded-[8px] border border-primary/25 bg-primary/10 py-1 pl-3 pr-1.5 text-sm text-primary">
+        <span key={v} className="wizard-rise inline-flex max-w-full items-center gap-1.5 rounded-[8px] border border-primary/25 bg-primary/10 py-1 pl-3 pr-1.5 text-[15px] text-primary">
           <span className="truncate">{label ? label(v) : v}</span>
           <button type="button" onClick={() => onRemove(v)} aria-label={`Remove ${label ? label(v) : v}`} className="flex h-5 w-5 items-center justify-center rounded-[6px] text-primary/70 hover:bg-primary/15 hover:text-primary"><RiCloseLine size={14} /></button>
         </span>
@@ -136,8 +136,8 @@ function CompanySearch({ suggestions, onAdd }: { suggestions: Array<{ name: stri
           {options.map((o) => (
             <li key={o.url}>
               <button type="button" onClick={() => add(o.url)} className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left hover:bg-base-200">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#fdf3d8] text-sm font-semibold uppercase text-[#b45309]">{o.name.charAt(0)}</span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-[15px]">{o.name}</span><span className="block truncate text-[13px] text-base-content/50">{shortLinkedIn(o.url)}</span></span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#fdf3d8] text-[15px] font-semibold uppercase text-[#b45309]">{o.name.charAt(0)}</span>
+                <span className="min-w-0 flex-1"><span className="block truncate text-[15px]">{o.name}</span><span className="block truncate text-[14.5px] text-base-content/50">{shortLinkedIn(o.url)}</span></span>
                 <RiAddLine size={16} className="text-base-content/40" />
               </button>
             </li>
@@ -190,7 +190,7 @@ export default function SignalsPicker({ value, onChange, hasLinkedIn, keywordSug
         title="Keyword engagement" subtitle="People engaging with topics related to your solution" active={kw.length}
         action={fresh.length > 0 ? (
           <button type="button" disabled={left <= 0} onClick={() => { setKw([...kw, ...fresh].slice(0, kw.length + Math.max(0, left))); setOpen("keywords"); }}
-            className="hidden h-9 shrink-0 items-center gap-1.5 rounded-[8px] bg-primary px-3.5 text-sm font-medium text-primary-content shadow-sm transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-50 sm:inline-flex">
+            className="hidden h-9 shrink-0 items-center gap-1.5 rounded-[8px] bg-primary px-3.5 text-[15px] font-medium text-primary-content shadow-sm transition-colors hover:bg-[var(--primary-hover)] disabled:opacity-50 sm:inline-flex">
             <RiSparkling2Line size={16} /> Generate with AI
           </button>
         ) : undefined}>
@@ -269,7 +269,7 @@ export default function SignalsPicker({ value, onChange, hasLinkedIn, keywordSug
 
       <Group id="tech" open={open} setOpen={setOpen} icon={<RiCodeSSlashLine size={22} />} tint="bg-[#d9f3f4] text-[#0e7490]"
         title="Tech Stack" subtitle="Find companies using specific tools" disabled
-        pill={<><span className="rounded-[6px] border border-[#93c5fd] bg-[#eff6ff] px-2 py-px text-[13px] font-normal text-[#2563eb]">Beta</span><SoonBadge /></>} />
+        pill={<><span className="rounded-[6px] border border-[#93c5fd] bg-[#eff6ff] px-2 py-px text-[14.5px] font-normal text-[#2563eb]">Beta</span><SoonBadge /></>} />
 
       <div className="flex items-center gap-4 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 px-5 py-4">
         <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-primary/10 text-primary"><RiSparkling2Line size={22} /></span>

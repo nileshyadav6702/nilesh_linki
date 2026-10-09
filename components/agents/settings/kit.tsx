@@ -29,7 +29,7 @@ export function SettingsSection({ icon, tone, title, pill, subtitle, defaultOpen
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-[17px] font-semibold text-base-content">{title}</span>
-            {pill && <span className="rounded-full bg-base-200 px-3 py-0.5 text-[13px] font-medium text-base-content/70">{pill}</span>}
+            {pill && <span className="rounded-full bg-base-200 px-3 py-0.5 text-[14.5px] font-medium text-base-content/70">{pill}</span>}
           </span>
           {subtitle && <span className="mt-0.5 block text-[15px] text-base-content/60">{subtitle}</span>}
         </span>
@@ -46,7 +46,7 @@ export function UsageBar({ used, limit, label = "Used today" }: { used: number; 
   return (
     <div className="mt-2">
       <div className="h-1.5 overflow-hidden rounded-full bg-base-200"><div className={`h-full rounded-full ${pct >= 100 ? "bg-error" : "bg-primary"}`} style={{ width: `${pct}%` }} /></div>
-      <div className="mt-1.5 text-xs text-base-content/55">{label} <span className="font-semibold tabular-nums text-success">{used} / {limit}</span></div>
+      <div className="mt-1.5 text-[13.5px] text-base-content/55">{label} <span className="font-semibold tabular-nums text-success">{used} / {limit}</span></div>
     </div>
   );
 }

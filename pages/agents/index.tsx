@@ -46,14 +46,14 @@ export default function AgentsPage() {
     <>
       <Head><title>Outreach Agents — Kairo</title></Head>
       <div className="space-y-7">
-        <div className="flex flex-col justify-between gap-4 border-b border-[var(--border-subtle)] pb-5 sm:flex-row sm:items-start">
+        <div className="-mx-4 -mt-6 flex flex-col justify-between gap-4 border-b border-[var(--border-subtle)] px-4 pb-6 pt-6 sm:flex-row sm:items-center md:-mx-10 md:-mt-9 md:px-10 md:pt-8">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-3">
-              <RiBroadcastLine size={20} className="text-primary" aria-hidden />
-              <h1 className="text-[22px] font-medium leading-tight text-base-content">Outreach Agents</h1>
+              <RiBroadcastLine size={24} className="text-primary" aria-hidden />
+              <h1 className="text-[24px] font-semibold leading-tight text-base-content">Outreach Agents</h1>
               <HowItWorks />
             </div>
-            <p className="mt-1.5 pl-8 text-[15px] text-base-content/60">Manage your automated outreach agents</p>
+            <p className="mt-1.5 pl-[36px] text-[16px] text-base-content/65">Manage your automated outreach agents</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             {!!agents?.length && (
@@ -66,7 +66,7 @@ export default function AgentsPage() {
           </div>
         </div>
 
-        {agents === null ? <p className="text-sm text-base-content/40">Loading…</p> : agents.length === 0 ? (
+        {agents === null ? <p className="text-[15px] text-base-content/40">Loading…</p> : agents.length === 0 ? (
           <Empty title="No agents yet">
             <IconTile icon={<RiRobot2Line size={24} />} size={48} className="mx-auto mb-3" />
             <p>Create an agent and it will find leads and run LinkedIn and email from one sequence.</p>

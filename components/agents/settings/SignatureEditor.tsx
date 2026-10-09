@@ -108,14 +108,14 @@ export default function SignatureEditor({ initialHtml, onChange }: { initialHtml
             <div className="absolute left-2 top-full z-20 mt-1 flex w-[320px] max-w-[calc(100%-1rem)] items-center gap-2 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 p-2 shadow-[var(--shadow-overlay)]">
               <input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://"
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLink(); } if (e.key === "Escape") setLinking(false); }}
-                className="h-8 min-w-0 flex-1 rounded-[6px] border border-[var(--border-subtle)] bg-base-100 px-2 text-sm outline-none focus:border-[var(--border-focus)]" />
-              <button type="button" onClick={applyLink} className="h-8 rounded-[6px] bg-primary px-3 text-xs font-medium text-primary-content">Add</button>
-              <button type="button" onClick={() => setLinking(false)} className="h-8 rounded-[6px] px-2 text-xs text-base-content/60 hover:bg-base-200">Cancel</button>
+                className="h-8 min-w-0 flex-1 rounded-[6px] border border-[var(--border-subtle)] bg-base-100 px-2 text-[15px] outline-none focus:border-[var(--border-focus)]" />
+              <button type="button" onClick={applyLink} className="h-8 rounded-[6px] bg-primary px-3 text-[13.5px] font-medium text-primary-content">Add</button>
+              <button type="button" onClick={() => setLinking(false)} className="h-8 rounded-[6px] px-2 text-[13.5px] text-base-content/60 hover:bg-base-200">Cancel</button>
             </div>
           )}
         </div>
         <div className="relative">
-          {empty && <div className="pointer-events-none absolute left-4 top-3 whitespace-pre-line text-sm italic text-base-content/40">{"Best regards,\nYour name"}</div>}
+          {empty && <div className="pointer-events-none absolute left-4 top-3 whitespace-pre-line text-[15px] italic text-base-content/40">{"Best regards,\nYour name"}</div>}
           <div ref={ref} contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" aria-label="Email signature"
             onInput={sync}
             onKeyDown={(e) => {
@@ -127,10 +127,10 @@ export default function SignatureEditor({ initialHtml, onChange }: { initialHtml
               const text = e.clipboardData.getData("text/plain").slice(0, Math.max(0, SIGNATURE_MAX - count));
               document.execCommand("insertText", false, text);
             }}
-            className="min-h-[180px] px-4 py-3 text-sm leading-relaxed text-base-content outline-none [&_a]:text-primary [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5" />
+            className="min-h-[180px] px-4 py-3 text-[15px] leading-relaxed text-base-content outline-none [&_a]:text-primary [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5" />
         </div>
       </div>
-      <div className="mt-1.5 flex items-center justify-between text-xs text-base-content/45">
+      <div className="mt-1.5 flex items-center justify-between text-[13.5px] text-base-content/45">
         <span>Maximum {SIGNATURE_MAX} characters</span>
         <span className={`tabular-nums ${count >= SIGNATURE_MAX ? "text-error" : ""}`}>{count}/{SIGNATURE_MAX}</span>
       </div>

@@ -7,14 +7,14 @@ import { APPROVAL_OPTIONS, EMAIL_OPTIONS, PHONE_OPTIONS, SORT_OPTIONS, STEP_OPTI
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-2">
-      <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-base-content/50">{title}</h3>
+      <h3 className="text-[13.5px] font-semibold uppercase tracking-[0.08em] text-base-content/50">{title}</h3>
       {children}
     </section>
   );
 }
 
 function Labelled({ label, children }: { label: string; children: ReactNode }) {
-  return <div className="min-w-0 space-y-1.5"><span className="block text-[13px] text-base-content/70">{label}</span>{children}</div>;
+  return <div className="min-w-0 space-y-1.5"><span className="block text-[14.5px] text-base-content/70">{label}</span>{children}</div>;
 }
 
 /** "Add filters" popover: campaign step, approval, enrichment, signal type and sort order. */
@@ -59,7 +59,7 @@ export default function FilterPopover({ filters, facets, onChange, onClear, onCl
           <Listbox label="Sort order" value={filters.sort} onChange={(v) => onChange({ sort: v })} options={SORT_OPTIONS} />
         </Section>
       </div>
-      <div className="mt-5 flex items-center justify-between border-t border-[var(--border-subtle)] pt-4 text-sm">
+      <div className="mt-5 flex items-center justify-between border-t border-[var(--border-subtle)] pt-4 text-[15px]">
         <button type="button" onClick={onClear} className="font-medium text-base-content/70 underline underline-offset-2 hover:text-base-content">Clear All</button>
         <button type="button" onClick={onClose} className="font-medium text-base-content/60 hover:text-base-content">Close</button>
       </div>

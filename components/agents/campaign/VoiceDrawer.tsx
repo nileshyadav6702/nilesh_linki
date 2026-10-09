@@ -140,7 +140,7 @@ export default function VoiceDrawer({ step, workflowId, delayBefore, busy, onClo
   const noAudio = phase !== "recorded" || (!blob && !hasServerAudio);
   return (
     <SideDrawer title="Edit Send Voice Message step" onClose={onClose} footer={<>
-      <button type="button" className="px-3 text-sm font-medium text-base-content/70 hover:text-base-content" onClick={onClose}>Cancel</button>
+      <button type="button" className="px-3 text-[15px] font-medium text-base-content/70 hover:text-base-content" onClick={onClose}>Cancel</button>
       <button type="button" className={primaryBtn} disabled={busy || saving || phase === "recording" || noAudio} onClick={save}>{saving ? "Saving…" : "Save Step"}</button>
     </>}>
       <div className="space-y-4">
@@ -148,21 +148,21 @@ export default function VoiceDrawer({ step, workflowId, delayBefore, busy, onClo
           {phase === "idle" && (
             <div className="flex flex-col items-center gap-4 py-8">
               <span className="flex h-24 w-24 items-center justify-center rounded-full bg-success/15 text-[#3a8c4f]"><RiMicLine size={40} /></span>
-              <div className="font-display text-[22px] text-base-content">Ready to Record</div>
-              <button type="button" onClick={start} className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-neutral px-5 text-sm font-medium text-neutral-content hover:opacity-90"><RiMicLine size={16} /> Start Recording</button>
-              <p className="text-xs text-base-content/45">Up to 1 minute.</p>
+              <div className="font-medium text-[22px] text-base-content">Ready to Record</div>
+              <button type="button" onClick={start} className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-neutral px-5 text-[15px] font-medium text-neutral-content hover:opacity-90"><RiMicLine size={16} /> Start Recording</button>
+              <p className="text-[13.5px] text-base-content/45">Up to 1 minute.</p>
             </div>
           )}
           {phase === "recording" && (
             <div className="flex flex-col items-center gap-3 py-6">
               <span className="flex h-24 w-24 items-center justify-center rounded-full bg-error/12 text-error"><RiMicLine size={40} /></span>
               <div className="font-mono text-[32px] font-semibold tabular-nums text-base-content">{clock(elapsed)}</div>
-              <div className="text-sm text-base-content/55">Recording in progress…</div>
+              <div className="text-[15px] text-base-content/55">Recording in progress…</div>
               <div className="flex h-12 items-end gap-1.5" aria-hidden="true">
                 {levels.map((l, i) => <span key={i} style={{ height: 4 + l * 40 }} className={`w-1.5 rounded-full ${l > 0.08 ? "bg-success" : "bg-success/25"}`} />)}
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => stop(false)} className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-base-200 px-4 text-sm font-medium text-base-content hover:bg-base-300"><RiCloseLine size={16} /> Cancel</button>
+                <button type="button" onClick={() => stop(false)} className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-base-200 px-4 text-[15px] font-medium text-base-content hover:bg-base-300"><RiCloseLine size={16} /> Cancel</button>
                 <button type="button" onClick={() => stop(true)} className={primaryBtn}><RiStopCircleLine size={16} /> Stop &amp; Save</button>
               </div>
             </div>
@@ -171,23 +171,23 @@ export default function VoiceDrawer({ step, workflowId, delayBefore, busy, onClo
             <div className="space-y-3 pt-1">
               <VoicePlayer key={blob?.url ?? "server"} src={blob?.url ?? voiceUrl(workflowId, step.id)} durationMs={blob?.ms ?? step.voice_duration_ms ?? null} />
               <div className="text-center">
-                <button type="button" onClick={start} className="inline-flex items-center gap-1.5 text-sm font-medium text-base-content/65 hover:text-base-content"><RiRefreshLine size={15} /> Re-record</button>
+                <button type="button" onClick={start} className="inline-flex items-center gap-1.5 text-[15px] font-medium text-base-content/65 hover:text-base-content"><RiRefreshLine size={15} /> Re-record</button>
               </div>
             </div>
           )}
         </RadioCard>
 
         <div className="relative rounded-[12px] border border-[var(--border-subtle)] bg-base-100 opacity-70" aria-disabled="true">
-          <span className="absolute -top-2.5 left-4 rounded-full bg-base-content/40 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[1px] text-base-100">Soon</span>
+          <span className="absolute -top-2.5 left-4 rounded-full bg-base-content/40 px-2.5 py-0.5 text-[12.5px] font-semibold uppercase tracking-[1px] text-base-100">Soon</span>
           <div className="flex items-start gap-3 px-5 py-4">
             <span className="mt-0.5 h-[18px] w-[18px] shrink-0 rounded-full border-2 border-base-content/25" />
             <span><span className="block font-medium text-base-content/70">AI voice message <span className="text-[#d4a017]">☆</span></span>
-              <span className="mt-0.5 block text-sm text-base-content/50">A different message for each contact, written by AI and spoken in your own voice.</span></span>
+              <span className="mt-0.5 block text-[15px] text-base-content/50">A different message for each contact, written by AI and spoken in your own voice.</span></span>
           </div>
         </div>
 
         {delayBefore !== null && <div className="pt-2"><WaitSelect value={delay} onChange={setDelay} /></div>}
-        <p className="flex items-center gap-1.5 text-xs text-base-content/50"><RiInformationLine size={14} /> This voice message will be sent to each contact when they reach this step</p>
+        <p className="flex items-center gap-1.5 text-[13.5px] text-base-content/50"><RiInformationLine size={14} /> This voice message will be sent to each contact when they reach this step</p>
       </div>
     </SideDrawer>
   );

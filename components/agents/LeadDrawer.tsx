@@ -324,7 +324,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
               <span className="flex min-w-0 items-center gap-3">
                 {pending && <button type="button" className={rejectBtn} disabled={busy} onClick={() => decide("reject")}>Reject</button>}
                 {!pending && c.agent_status !== "skipped" && c.agent_status !== "enrolled" && c.agent_id && <button type="button" className={rejectBtn} disabled={busy} onClick={() => act("skip", "Rejected from the lead")}>Reject</button>}
-                {pending && <span className="truncate text-[13px] text-base-content/50">{whenSends(sendsAt) ? `Autopilot sends ${whenSends(sendsAt)} unless you reject` : "Waiting for your approval"}</span>}
+                {pending && <span className="truncate text-[14.5px] text-base-content/50">{whenSends(sendsAt) ? `Autopilot sends ${whenSends(sendsAt)} unless you reject` : "Waiting for your approval"}</span>}
               </span>
               <span className="flex items-center gap-2">
                 {pending && <button type="button" disabled={busy} onClick={() => decide("approve")} className="inline-flex h-12 items-center gap-2 rounded-[10px] bg-primary px-5 text-[16px] font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:opacity-60"><RiCheckLine size={18} /> Approve</button>}

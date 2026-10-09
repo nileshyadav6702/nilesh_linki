@@ -37,18 +37,18 @@ export default function SignalDataSettings() {
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <Card className="space-y-3">
-        <div><h2 className="text-sm font-semibold">Email waterfall</h2><p className="text-xs text-base-content/50">Providers run top to bottom; the first verified email wins. Keys are encrypted at rest.</p></div>
+        <div><h2 className="text-[15px] font-semibold">Email waterfall</h2><p className="text-[13.5px] text-base-content/50">Providers run top to bottom; the first verified email wins. Keys are encrypted at rest.</p></div>
         {providers.map((p, i) => (
           <div key={p.key} className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border-subtle)] p-2.5">
             <input type="checkbox" className="checkbox checkbox-sm" checked={p.enabled} onChange={(e) => saveOrder(providers.map((x) => x.key === p.key ? { ...x, enabled: e.target.checked } : x))} aria-label={`Use ${p.label}`} />
-            <span className="w-32 text-sm font-medium">{p.label}</span>
+            <span className="w-32 text-[15px] font-medium">{p.label}</span>
             {p.needs_key && (
               <span className="flex flex-1 items-center gap-1.5">
                 <input className={`${inputCls} h-8`} type="password" placeholder={p.configured ? "Key saved — paste to replace" : "API key"} value={keys[p.key] ?? ""} onChange={(e) => setKeys({ ...keys, [p.key]: e.target.value })} />
                 <button className={ghostBtn} onClick={() => saveKey(p.key)}>Save</button>
               </span>
             )}
-            {!p.needs_key && <span className="flex-1 text-xs text-base-content/45">Free — guesses common patterns and checks the mailbox</span>}
+            {!p.needs_key && <span className="flex-1 text-[13.5px] text-base-content/45">Free — guesses common patterns and checks the mailbox</span>}
             <button className={ghostBtn} onClick={() => move(i, -1)} aria-label="Move up"><RiArrowUpLine size={14} /></button>
             <button className={ghostBtn} onClick={() => move(i, 1)} aria-label="Move down"><RiArrowDownLine size={14} /></button>
           </div>
@@ -56,20 +56,20 @@ export default function SignalDataSettings() {
       </Card>
 
       <Card className="space-y-3">
-        <div><h2 className="text-sm font-semibold">Website visitors</h2><p className="text-xs text-base-content/50">Add this snippet to your site. With an IPinfo key, visiting companies become signals for your agents.</p></div>
+        <div><h2 className="text-[15px] font-semibold">Website visitors</h2><p className="text-[13.5px] text-base-content/50">Add this snippet to your site. With an IPinfo key, visiting companies become signals for your agents.</p></div>
         {pixel && (
           <>
             <div className="relative">
-              <pre className="overflow-x-auto rounded-xl bg-base-200 p-3 pr-10 text-[11px] leading-relaxed">{pixel.snippet}</pre>
+              <pre className="overflow-x-auto rounded-xl bg-base-200 p-3 pr-10 text-[12.5px] leading-relaxed">{pixel.snippet}</pre>
               <button className={`${ghostBtn} absolute right-1.5 top-1.5`} onClick={() => { navigator.clipboard.writeText(pixel.snippet); toast.success("Copied"); }} aria-label="Copy snippet"><RiFileCopyLine size={14} /></button>
             </div>
             <div className="flex items-center gap-1.5">
               <input className={`${inputCls} h-8`} type="password" placeholder={ipinfo ? "IPinfo key saved — paste to replace" : "IPinfo API key"} value={keys.ipinfo ?? ""} onChange={(e) => setKeys({ ...keys, ipinfo: e.target.value })} />
               <button className={primaryBtn + " !h-8"} onClick={() => saveKey("ipinfo")}>Save</button>
             </div>
-            <p className="text-xs text-base-content/50">{pixel.total_views_30d} page views in the last 30 days.</p>
+            <p className="text-[13.5px] text-base-content/50">{pixel.total_views_30d} page views in the last 30 days.</p>
             {pixel.visits.map((v) => (
-              <div key={v.company_name} className="flex justify-between text-sm"><span>{v.company_name}{v.company_domain ? <span className="text-base-content/40"> · {v.company_domain}</span> : null}</span><span className="tabular-nums text-base-content/50">{v.views}</span></div>
+              <div key={v.company_name} className="flex justify-between text-[15px]"><span>{v.company_name}{v.company_domain ? <span className="text-base-content/40"> · {v.company_domain}</span> : null}</span><span className="tabular-nums text-base-content/50">{v.views}</span></div>
             ))}
           </>
         )}

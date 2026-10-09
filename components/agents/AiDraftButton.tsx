@@ -22,7 +22,7 @@ export default function AiDraftButton({ replyId, onDraft }: { replyId: string | 
   }
   return (
     <button type="button" onClick={draft} disabled={busy}
-      className="inline-flex items-center gap-1.5 px-3 h-10 rounded-[8px] text-sm font-medium border border-[var(--border-subtle)] bg-base-100 text-base-content/75 hover:bg-base-200 disabled:opacity-40 transition-colors">
+      className="inline-flex items-center gap-1.5 px-3 h-10 rounded-[8px] text-[15px] font-medium border border-[var(--border-subtle)] bg-base-100 text-base-content/75 hover:bg-base-200 disabled:opacity-40 transition-colors">
       {busy ? <RiLoader4Line size={14} className="animate-spin" /> : <RiSparkling2Line size={14} className="text-primary" />}
       {busy ? "Drafting…" : "AI draft"}
     </button>

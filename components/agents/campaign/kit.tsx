@@ -52,9 +52,9 @@ export const voiceUrl = (workflowId: string, stepId: string) => `/api/workflows/
 export function WaitSelect({ value, onChange }: { value: number; onChange: (sec: number) => void }) {
   const opts = Array.from(new Set([...DELAY_OPTIONS, value])).sort((a, b) => a - b);
   return (
-    <div className="flex flex-wrap items-center gap-2 text-sm text-base-content/70">
+    <div className="flex flex-wrap items-center gap-2 text-[15px] text-base-content/70">
       <span>Wait at least</span>
-      <select className="h-10 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-sm text-base-content outline-none focus:border-[var(--border-focus)]" value={value} onChange={(e) => onChange(Number(e.target.value))}>
+      <select className="h-10 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-[15px] text-base-content outline-none focus:border-[var(--border-focus)]" value={value} onChange={(e) => onChange(Number(e.target.value))}>
         {opts.map((sec) => <option key={sec} value={sec}>{delayLabel(sec)}</option>)}
       </select>
       <span>after previous step</span>
@@ -67,7 +67,7 @@ export function Tip({ text, children, side = "top", className = "" }: { text: Re
   return (
     <span className={`group/tip relative inline-flex ${className}`}>
       {children}
-      <span role="tooltip" className={`pointer-events-none absolute left-1/2 z-50 w-max max-w-[320px] -translate-x-1/2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-left text-[13px] font-normal leading-snug text-base-content opacity-0 shadow-[var(--shadow-overlay)] transition-opacity group-hover/tip:opacity-100 ${side === "top" ? "bottom-full mb-2" : "top-full mt-2"}`}>{text}</span>
+      <span role="tooltip" className={`pointer-events-none absolute left-1/2 z-50 w-max max-w-[320px] -translate-x-1/2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-left text-[14.5px] font-normal leading-snug text-base-content opacity-0 shadow-[var(--shadow-overlay)] transition-opacity group-hover/tip:opacity-100 ${side === "top" ? "bottom-full mb-2" : "top-full mt-2"}`}>{text}</span>
     </span>
   );
 }
@@ -98,10 +98,10 @@ export function SideDrawer({ title, icon, onClose, footer, children, width = 640
 export function RadioCard({ on, onSelect, title, subtitle, badge, children }: { on: boolean; onSelect: () => void; title: ReactNode; subtitle?: ReactNode; badge?: ReactNode; children?: ReactNode }) {
   return (
     <div className={`relative rounded-[12px] border transition-colors ${on ? "border-primary/50 bg-primary/[0.04]" : "border-[var(--border-subtle)] bg-base-100"}`}>
-      {badge && <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[1px] text-primary-content">{badge}</span>}
+      {badge && <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-2.5 py-0.5 text-[12.5px] font-semibold uppercase tracking-[1px] text-primary-content">{badge}</span>}
       <button type="button" onClick={onSelect} className="flex w-full items-start gap-3 px-5 py-4 text-left">
         <span className={`mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-primary" : "border-base-content/25"}`}>{on && <span className="h-2 w-2 rounded-full bg-primary" />}</span>
-        <span className="min-w-0"><span className="block font-medium text-base-content">{title}</span>{subtitle && <span className="mt-0.5 block text-sm text-base-content/55">{subtitle}</span>}</span>
+        <span className="min-w-0"><span className="block font-medium text-base-content">{title}</span>{subtitle && <span className="mt-0.5 block text-[15px] text-base-content/55">{subtitle}</span>}</span>
       </button>
       {on && children && <div className="px-5 pb-5">{children}</div>}
     </div>

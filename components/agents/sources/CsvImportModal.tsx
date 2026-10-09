@@ -18,7 +18,7 @@ function Stepper({ step }: { step: number }) {
         const n = i + 1, done = n < step, on = n === step;
         return (
           <li key={s} className={`flex items-center gap-3 ${i < STEPS.length - 1 ? "flex-1" : ""}`} aria-current={on ? "step" : undefined}>
-            <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-medium ${on ? "bg-neutral text-neutral-content" : done ? "bg-primary/15 text-primary" : "bg-base-200 text-base-content/50"}`}>{n}</span>
+            <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[14.5px] font-medium ${on ? "bg-neutral text-neutral-content" : done ? "bg-primary/15 text-primary" : "bg-base-200 text-base-content/50"}`}>{n}</span>
             <span className={`text-[15px] ${on ? "text-base-content" : done ? "text-primary" : "text-base-content/45"}`}>{s}</span>
             {i < STEPS.length - 1 && <span className={`h-px flex-1 ${done ? "bg-primary/40" : "bg-[var(--border-subtle)]"}`} />}
           </li>
@@ -110,9 +110,9 @@ export default function CsvImportModal({ agentId, agentName, autoEnrichEmails, o
   }
 
   const footer = step === 1
-    ? <button type="button" onClick={close} className="h-10 rounded-[8px] px-4 text-sm font-medium text-base-content/75 hover:bg-base-200">Cancel</button>
+    ? <button type="button" onClick={close} className="h-10 rounded-[8px] px-4 text-[15px] font-medium text-base-content/75 hover:bg-base-200">Cancel</button>
     : <>
-        <button type="button" disabled={importing} onClick={() => setStep(step - 1)} className="inline-flex h-10 items-center gap-1 rounded-[8px] px-4 text-sm font-medium text-base-content/75 hover:bg-base-200"><RiArrowLeftSLine size={16} /> Back</button>
+        <button type="button" disabled={importing} onClick={() => setStep(step - 1)} className="inline-flex h-10 items-center gap-1 rounded-[8px] px-4 text-[15px] font-medium text-base-content/75 hover:bg-base-200"><RiArrowLeftSLine size={16} /> Back</button>
         {step === 2
           ? <button type="button" className={primaryBtn} disabled={!canReview} onClick={() => setStep(3)}>Continue to review</button>
           : <button type="button" className={primaryBtn} disabled={!ready || importing} onClick={runImport}>
@@ -138,8 +138,8 @@ export default function CsvImportModal({ agentId, agentName, autoEnrichEmails, o
                 <p className="text-[15px] text-base-content/55">or click to browse your computer</p>
                 <button type="button" className={primaryBtn} onClick={() => input.current?.click()}><RiUpload2Line size={16} /> Choose CSV File</button>
                 <input ref={input} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void take(e.target.files?.[0]); e.target.value = ""; }} />
-                <p className="text-[13px] text-base-content/50">Supported format: CSV · Max size: 10MB</p>
-                {error && <p role="alert" className="text-sm text-error">{error}</p>}
+                <p className="text-[14.5px] text-base-content/50">Supported format: CSV · Max size: 10MB</p>
+                {error && <p role="alert" className="text-[15px] text-error">{error}</p>}
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-[12px] border border-[var(--border-subtle)] p-5">
@@ -150,7 +150,7 @@ export default function CsvImportModal({ agentId, agentName, autoEnrichEmails, o
                 </div>
                 <div className="rounded-[12px] border border-[var(--border-subtle)] p-5">
                   <h4 className="flex items-center gap-2 font-medium text-base-content"><RiInformationLine size={18} className="text-primary" /> Format Guidelines</h4>
-                  <ul className="mt-3 space-y-2 text-sm text-base-content/70">
+                  <ul className="mt-3 space-y-2 text-[15px] text-base-content/70">
                     <li className="flex gap-2"><RiCodeSSlashLine size={15} className="mt-0.5 shrink-0 text-primary" /> <span>Use commas to separate columns. The first line <b className="text-base-content">must be a header row</b> with column names (e.g. first_name, last_name, linkedin_url).</span></li>
                     <li className="flex gap-2"><RiLink size={15} className="mt-0.5 shrink-0 text-primary" /> LinkedIn URLs must look like https://linkedin.com/in/username</li>
                     <li className="flex gap-2"><RiAddLine size={15} className="mt-0.5 shrink-0 text-primary" /> Email, company, title and other columns are optional.</li>

@@ -67,13 +67,13 @@ export default function Listbox({ value, options, onChange, label, className = "
       <button ref={button} type="button" aria-haspopup="listbox" aria-expanded={open} aria-label={`${label}: ${current?.label ?? placeholder ?? ""}`}
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={(e) => { if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); show(); } }}
-        className={`flex h-10 w-full items-center justify-between gap-2 rounded-[8px] border bg-base-100 px-3 text-left text-sm text-base-content outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${open ? "border-[var(--border-focus)]" : "border-[var(--border-subtle)] hover:bg-base-200/60"}`}>
+        className={`flex h-10 w-full items-center justify-between gap-2 rounded-[8px] border bg-base-100 px-3 text-left text-[15px] text-base-content outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${open ? "border-[var(--border-focus)]" : "border-[var(--border-subtle)] hover:bg-base-200/60"}`}>
         <span className="truncate">{current?.label ?? placeholder ?? "Select"}</span>
         <RiArrowDownSLine size={18} className={`shrink-0 text-base-content/45 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <ul ref={list} role="listbox" tabIndex={-1} aria-label={label} aria-activedescendant={`${id}-${active}`} onKeyDown={onListKey}
-          className="absolute left-0 right-0 z-50 mt-1.5 max-h-72 min-w-[200px] overflow-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 text-sm shadow-[var(--shadow-overlay)] outline-none">
+          className="absolute left-0 right-0 z-50 mt-1.5 max-h-72 min-w-[200px] overflow-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 text-[15px] shadow-[var(--shadow-overlay)] outline-none">
           {options.map((o, i) => {
             const on = o.value === value;
             return (
@@ -81,7 +81,7 @@ export default function Listbox({ value, options, onChange, label, className = "
                 onMouseEnter={() => setActive(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(o.value)}
                 className={`flex cursor-pointer items-center justify-between gap-3 rounded-[8px] px-3 py-2.5 ${on ? "bg-primary/10 text-primary" : i === active ? "bg-base-200 text-base-content" : "text-base-content/80"}`}>
                 <span className="truncate">{o.label}</span>
-                {on ? <RiCheckLine size={16} className="shrink-0" aria-hidden="true" /> : o.count !== undefined && <span className="shrink-0 text-[13px] tabular-nums text-base-content/45">{o.count}</span>}
+                {on ? <RiCheckLine size={16} className="shrink-0" aria-hidden="true" /> : o.count !== undefined && <span className="shrink-0 text-[14.5px] tabular-nums text-base-content/45">{o.count}</span>}
               </li>
             );
           })}

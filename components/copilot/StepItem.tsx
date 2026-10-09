@@ -124,7 +124,7 @@ function DraftEditor({ draft, onChange, sender }: { draft: DraftRow; onChange: (
               <div className="text-[15px] font-semibold">{sender.name}</div>
               {email && subject && <div className="mt-1 text-[15px] font-medium">{subject}</div>}
               <div className="mt-2 whitespace-pre-wrap rounded-[12px] bg-primary/[0.07] px-5 py-4 text-[15px] leading-relaxed">{body}</div>
-              <div className="mt-2 flex items-center gap-2 text-[13px] text-base-content/45">Just now <RiCheckDoubleLine size={16} className="text-[#5b4fd6]" /></div>
+              <div className="mt-2 flex items-center gap-2 text-[14.5px] text-base-content/45">Just now <RiCheckDoubleLine size={16} className="text-[#5b4fd6]" /></div>
             </div>
           </div>
         </div>

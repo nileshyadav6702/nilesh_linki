@@ -68,7 +68,7 @@ export function CompetitorPanel({ draft, onChange, budgetLeft, suggestions }: Pa
                 <li key={o.url}>
                   <button type="button" onClick={() => add(o.url)} className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left hover:bg-base-200 focus-visible:bg-base-200 focus-visible:outline-none">
                     <InitialTile label={o.name} size={32} />
-                    <span className="min-w-0 flex-1"><span className="block truncate text-[15px] text-base-content">{o.name}</span><span className="block truncate text-[13px] text-base-content/50">{shortLinkedIn(o.url)}</span></span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-[15px] text-base-content">{o.name}</span><span className="block truncate text-[14.5px] text-base-content/50">{shortLinkedIn(o.url)}</span></span>
                     <RiAddLine size={16} className="text-base-content/40" />
                   </button>
                 </li>
@@ -76,14 +76,14 @@ export function CompetitorPanel({ draft, onChange, budgetLeft, suggestions }: Pa
             </ul>
           )}
         </div>
-        {error ? <p className="text-[13px] text-error">{error}</p>
-          : <p className="text-[13px] text-base-content/55">Type at least 3 characters to search, or paste a LinkedIn company URL and press Enter.</p>}
+        {error ? <p className="text-[14.5px] text-error">{error}</p>
+          : <p className="text-[14.5px] text-base-content/55">Type at least 3 characters to search, or paste a LinkedIn company URL and press Enter.</p>}
       </div>
       <div>
         <SubHeading>Tracked competitors ({urls.length})</SubHeading>
         <div className="mt-2">
           {urls.map((u) => <TrackedRow key={u} lead={<InitialTile label={nameFor(u)} />} title={nameFor(u)} sub={shortLinkedIn(u)} onRemove={() => onChange(withUrls(draft, urls.filter((x) => x !== u)))} />)}
-          {!urls.length && <p className="py-3 text-sm text-base-content/45">No competitors tracked yet.</p>}
+          {!urls.length && <p className="py-3 text-[15px] text-base-content/45">No competitors tracked yet.</p>}
         </div>
       </div>
     </div>
@@ -120,28 +120,28 @@ export function TopicPanel({ draft, onChange, budgetLeft, suggestions }: PanelPr
             if (err) { setError(err); return; }
             if (addTopics(parsed)) setText("");
           }} />
-        {error ? <p className="text-[13px] text-error">{error}</p>
-          : <p className="text-[13px] text-base-content/55">Press Enter to add. Separate several topics with commas; 3 words max each.</p>}
+        {error ? <p className="text-[14.5px] text-error">{error}</p>
+          : <p className="text-[14.5px] text-base-content/55">Press Enter to add. Separate several topics with commas; 3 words max each.</p>}
       </div>
       {suggested.length > 0 && (
         <div className="space-y-2.5">
-          <SubHeading><span className="inline-flex items-center gap-2">Suggested topics <span className="inline-flex items-center gap-1 rounded-full bg-[#efe8fd] px-2 py-0.5 text-[12px] font-medium text-[#7c3aed]"><RiMagicLine size={12} /> AI</span></span></SubHeading>
+          <SubHeading><span className="inline-flex items-center gap-2">Suggested topics <span className="inline-flex items-center gap-1 rounded-full bg-[#efe8fd] px-2 py-0.5 text-[13.5px] font-medium text-[#7c3aed]"><RiMagicLine size={12} /> AI</span></span></SubHeading>
           <div className="flex flex-wrap gap-2">
             {suggested.map((s) => (
               <button key={s} type="button" onClick={() => addTopics([s])}
-                className="inline-flex items-center gap-1.5 rounded-[8px] bg-primary/10 px-3 py-1.5 text-sm text-base-content/80 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
+                className="inline-flex items-center gap-1.5 rounded-[8px] bg-primary/10 px-3 py-1.5 text-[15px] text-base-content/80 hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
                 <RiAddLine size={15} /> {s}
               </button>
             ))}
           </div>
-          <p className="text-xs text-base-content/45">From the keywords in this agent&apos;s ICP.</p>
+          <p className="text-[13.5px] text-base-content/45">From the keywords in this agent&apos;s ICP.</p>
         </div>
       )}
       <div>
         <SubHeading>Tracked topics ({topics.length})</SubHeading>
         <div className="mt-1">
           {topics.map((t) => <TrackedRow key={t} title={t} onRemove={() => set(topics.filter((x) => x !== t))} />)}
-          {!topics.length && <p className="py-3 text-sm text-base-content/45">No topics tracked yet.</p>}
+          {!topics.length && <p className="py-3 text-[15px] text-base-content/45">No topics tracked yet.</p>}
         </div>
       </div>
     </div>
@@ -173,8 +173,8 @@ export function ExpertsPanel({ draft, onChange, budgetLeft }: PanelProps) {
             <RiAddLine size={18} /> Add
           </button>
         </div>
-        {error ? <p className="text-[13px] text-error">{error}</p>
-          : <p className="text-[13px] text-base-content/55">Each expert uses 1 signal · Add experts, creators, or influencers in your market.</p>}
+        {error ? <p className="text-[14.5px] text-error">{error}</p>
+          : <p className="text-[14.5px] text-base-content/55">Each expert uses 1 signal · Add experts, creators, or influencers in your market.</p>}
       </div>
       {urls.length > 0 && (
         <div>

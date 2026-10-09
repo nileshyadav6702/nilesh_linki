@@ -2,8 +2,9 @@ import Link from "next/link";
 import { useState } from "react";
 import { SiGmail } from "react-icons/si";
 import { RiArrowRightSLine, RiDeleteBinLine, RiFileCopyLine, RiLinkedinFill, RiMailLine, RiMore2Fill } from "react-icons/ri";
+import { LuBot, LuHeart, LuMessageCircleReply, LuSend, LuUserCheck } from "react-icons/lu";
 import { FloatingMenu } from "@/components/agents/leads/Menu";
-import { Avatar, Panel, primaryBtn, senderLine } from "@/components/agents/ui";
+import { Avatar, IconTile, primaryBtn, senderLine, type Tone } from "@/components/agents/ui";
 import AgentStatusMenu, { agentState } from "./AgentStatusMenu";
 
 export interface AgentRow {
@@ -19,14 +20,14 @@ const created = (iso: string) => {
   return Number.isNaN(t) ? "" : new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 };
 
-function Metric({ label, value, of, hint }: { label: string; value: string | null; of?: string; hint: string }) {
+function Metric({ label, value, of, hint, icon, tone }: { label: string; value: string | null; of?: string; hint: string; icon: React.ReactNode; tone: Tone }) {
   return (
     <div className="min-w-0">
-      <div className="text-[13px] uppercase tracking-[0.04em] text-base-content/60">{label}</div>
+      <div className="flex items-center gap-2 text-[15px] font-medium text-base-content/70"><IconTile icon={icon} tone={tone} size={32} />{label}</div>
       <div className="mt-1.5 flex items-baseline gap-1">
         {value === null
           ? <span className="mt-3 block h-[3px] w-6 rounded-full bg-base-content/80" aria-label="none yet" />
-          : <span className="text-[28px] font-medium leading-none tabular-nums text-base-content">{value}</span>}
+          : <span className="text-[30px] font-semibold leading-none tabular-nums text-base-content">{value}</span>}
         {of && <span className="text-[15px] tabular-nums text-base-content/40">{of}</span>}
       </div>
       <div className="mt-2 truncate text-[14px] text-base-content/55">{hint}</div>
@@ -51,10 +52,10 @@ export default function AgentCard({ a, onPatch, onDuplicate, onDelete }: {
   const replied = pct(p.replied, p.contacted);
 
   return (
-    <Panel className="flex flex-col transition-shadow hover:shadow-[0_1px_3px_rgba(20,20,19,0.08)]">
-      <div className="flex items-center gap-3 px-8 pt-7">
-        <Link href={`/agents/${a.id}`} title={a.name}
-          className={`min-w-0 flex-1 truncate text-[17px] transition-colors hover:text-primary ${state === "paused" || state === "draft" ? "text-base-content" : "text-primary"}`}>
+    <div className="wizard-rise flex flex-col rounded-[16px] border border-[var(--border-subtle)] bg-base-100 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(20,20,19,0.25)]">
+      <div className="flex items-center gap-3 px-7 pt-6">
+        <IconTile icon={<LuBot size={22} />} tone={state === "paused" || state === "draft" ? "ink" : "coral"} size={40} />
+        <Link href={`/agents/${a.id}`} title={a.name} className="min-w-0 flex-1 truncate text-[20px] font-semibold text-base-content transition-colors hover:text-primary">
           {a.name}
         </Link>
         <AgentStatusMenu status={a.status} outreachOn={outreach}
@@ -73,11 +74,11 @@ export default function AgentCard({ a, onPatch, onDuplicate, onDelete }: {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-6 px-8 pb-7 pt-8 sm:grid-cols-4">
-        <Metric label="Contacted" value={String(p.contacted)} of={`/ ${p.found}`} hint={`${pct(p.contacted, p.found) ?? "0%"} contacted`} />
-        <Metric label="Accepted" value={pct(p.accepted, p.contacted)} hint="accept rate" />
-        <Metric label="Replied" value={replied} hint={`${replied ?? "—"} reply rate`} />
-        <Metric label="Interested" value={p.interested ? String(p.interested) : null} hint="interested leads" />
+      <div className="grid grid-cols-2 gap-x-4 gap-y-6 px-7 pb-7 pt-7 sm:grid-cols-4">
+        <Metric label="Contacted" icon={<LuSend size={16} />} tone="coral" value={String(p.contacted)} of={`/ ${p.found}`} hint={`${pct(p.contacted, p.found) ?? "0%"} contacted`} />
+        <Metric label="Accepted" icon={<LuUserCheck size={16} />} tone="linkedin" value={pct(p.accepted, p.contacted)} hint="accept rate" />
+        <Metric label="Replied" icon={<LuMessageCircleReply size={16} />} tone="amber" value={replied} hint={`${replied ?? "—"} reply rate`} />
+        <Metric label="Interested" icon={<LuHeart size={16} />} tone="success" value={p.interested ? String(p.interested) : null} hint="interested leads" />
       </div>
 
       <div className="mt-auto flex items-center justify-between gap-3 border-t border-[var(--border-subtle)] px-8 py-4">
@@ -97,6 +98,6 @@ export default function AgentCard({ a, onPatch, onDuplicate, onDelete }: {
           <Link href={`/agents/${a.id}`} className={`${primaryBtn} !h-10 !px-4 shadow-[0_4px_12px_-4px_rgba(204,120,92,0.6)]`}>Open <RiArrowRightSLine size={16} /></Link>
         </div>
       </div>
-    </Panel>
+    </div>
   );
 }

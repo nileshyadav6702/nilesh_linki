@@ -57,7 +57,7 @@ export function Modal({ title, subtitle, onClose, children, footer, labelId, wid
         <header className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-6 py-5">
           <div className="min-w-0">
             <h2 id={labelId} className="text-[20px] font-medium leading-tight text-base-content">{title}</h2>
-            <p className="mt-1 text-sm text-base-content/55">{subtitle}</p>
+            <p className="mt-1 text-[15px] text-base-content/55">{subtitle}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-base-content/50 hover:bg-base-200 hover:text-base-content">
             <RiCloseLine size={20} />
@@ -72,11 +72,11 @@ export function Modal({ title, subtitle, onClose, children, footer, labelId, wid
 }
 
 export function SoonPill() {
-  return <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-base-200 px-2 py-0.5 text-[12px] font-medium text-base-content/50">Coming soon</span>;
+  return <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-base-200 px-2 py-0.5 text-[13.5px] font-medium text-base-content/50">Coming soon</span>;
 }
 
 export function NewPill() {
-  return <span className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#3a8c4f]">New</span>;
+  return <span className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[12.5px] font-semibold uppercase tracking-wide text-[#3a8c4f]">New</span>;
 }
 
 /** Panel title row: "Competitor engagement [1 tracked]" + description. */
@@ -85,7 +85,7 @@ export function PanelHeader({ title, count, description }: { title: string; coun
     <div className="space-y-1">
       <h3 className="flex flex-wrap items-center gap-2 text-[19px] font-medium text-base-content">
         {title}
-        {count !== undefined && count > 0 && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[13px] font-normal text-primary">{count} tracked</span>}
+        {count !== undefined && count > 0 && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[14.5px] font-normal text-primary">{count} tracked</span>}
       </h3>
       <p className="text-[15px] text-base-content/55">{description}</p>
     </div>
@@ -105,7 +105,7 @@ export function CheckRow({ label, hint, checked, onChange, disabled, pill, soon 
         className="checkbox checkbox-sm checkbox-primary mt-0.5 rounded-[5px]" />
       <span className={`min-w-0 flex-1 ${off ? "opacity-55" : ""}`}>
         <span className="flex flex-wrap items-center gap-2 text-[15px] text-base-content">{label}{pill}</span>
-        <span className="block text-[13px] text-base-content/55">{hint}</span>
+        <span className="block text-[14.5px] text-base-content/55">{hint}</span>
       </span>
       {soon && <SoonPill />}
     </label>
@@ -128,7 +128,7 @@ export function TrackedRow({ lead, title, sub, onRemove }: { lead?: ReactNode; t
       {lead}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[15px] text-base-content">{title}</div>
-        {sub && <div className="truncate text-[13px] text-base-content/50">{sub}</div>}
+        {sub && <div className="truncate text-[14.5px] text-base-content/50">{sub}</div>}
       </div>
       <button type="button" onClick={onRemove} aria-label={`Remove ${title}`}
         className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-base-content/45 hover:bg-base-200 hover:text-error"><RiCloseLine size={18} /></button>
@@ -196,7 +196,7 @@ export function SearchSelect({ value, options, onChange, placeholder, label, sea
                 </button>
               </li>
             ))}
-            {!shown.length && <li className="px-3 py-3 text-sm text-base-content/45">No matches</li>}
+            {!shown.length && <li className="px-3 py-3 text-[15px] text-base-content/45">No matches</li>}
           </ul>
         </div>
       )}

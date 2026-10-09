@@ -46,18 +46,18 @@ export default function LeadsToolbar({ filters, patch, clearFilters, q, search, 
           options={STATUS_OPTIONS.map((o) => ({ ...o, count: facets?.status[o.value] }))} />
         <div className="relative">
           <button ref={filterBtn} type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-            className={`inline-flex h-10 items-center gap-2 rounded-[8px] border px-3.5 text-sm font-medium transition-colors ${lit ? "border-primary bg-primary/5 text-primary" : "border-[var(--border-subtle)] bg-base-100 text-base-content/75 hover:bg-base-200"}`}>
+            className={`inline-flex h-10 items-center gap-2 rounded-[8px] border px-3.5 text-[15px] font-medium transition-colors ${lit ? "border-primary bg-primary/5 text-primary" : "border-[var(--border-subtle)] bg-base-100 text-base-content/75 hover:bg-base-200"}`}>
             <RiFilter3Line size={15} /> Add filters
-            {active > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-semibold tabular-nums text-primary-content">{active}</span>}
+            {active > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[12.5px] font-semibold tabular-nums text-primary-content">{active}</span>}
             <RiArrowDownSLine size={16} className={`transition-transform ${open ? "rotate-180" : ""}`} />
           </button>
           {open && <FilterPopover filters={filters} facets={facets} onChange={patch} onClear={clearFilters} onClose={() => setOpen(false)} anchorRef={filterBtn} />}
         </div>
-        <span className="px-1 text-[13px] tabular-nums text-base-content/45" aria-live="polite">{total} lead{total === 1 ? "" : "s"}</span>
+        <span className="px-1 text-[14.5px] tabular-nums text-base-content/45" aria-live="polite">{total} lead{total === 1 ? "" : "s"}</span>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           {actions.selected > 0 && (
             <button type="button" disabled={actions.busy} onClick={actions.rejectSelected}
-              className="inline-flex h-10 items-center gap-1.5 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3.5 text-sm font-medium text-base-content/75 transition-colors hover:border-error/40 hover:text-error disabled:opacity-50">
+              className="inline-flex h-10 items-center gap-1.5 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3.5 text-[15px] font-medium text-base-content/75 transition-colors hover:border-error/40 hover:text-error disabled:opacity-50">
               <RiCloseLine size={15} /> Reject ({actions.selected})
             </button>
           )}
@@ -74,12 +74,12 @@ export default function LeadsToolbar({ filters, patch, clearFilters, q, search, 
       {chips.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {chips.map((c) => (
-            <span key={c.key} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 pl-3 pr-1.5 text-[13px] font-medium text-primary">
+            <span key={c.key} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/25 bg-primary/10 pl-3 pr-1.5 text-[14.5px] font-medium text-primary">
               {c.label}
               <button type="button" aria-label={`Remove ${c.label}`} onClick={() => patch({ [c.key]: c.reset })} className="rounded-full p-0.5 hover:bg-primary/15"><RiCloseCircleLine size={16} /></button>
             </span>
           ))}
-          <button type="button" onClick={clearFilters} className="px-1.5 text-[13px] font-medium text-base-content/65 hover:text-base-content">Clear all</button>
+          <button type="button" onClick={clearFilters} className="px-1.5 text-[14.5px] font-medium text-base-content/65 hover:text-base-content">Clear all</button>
         </div>
       )}
     </div>

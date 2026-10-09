@@ -45,7 +45,7 @@ export default function VoicePlayer({ src, durationMs }: { src: string; duration
           <span key={i} style={{ height: h }} className={`w-[2px] shrink-0 rounded-full ${i / BARS.length <= progress ? "bg-primary" : "bg-base-content/20"}`} />
         ))}
       </div>
-      <span className="shrink-0 font-mono text-xs tabular-nums text-base-content/55">{fmt(pos)} / {fmt(total)}</span>
+      <span className="shrink-0 font-mono text-[13.5px] tabular-nums text-base-content/55">{fmt(pos)} / {fmt(total)}</span>
     </div>
   );
 }

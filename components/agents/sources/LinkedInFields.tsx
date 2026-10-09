@@ -25,7 +25,7 @@ export const accountConnected = (a: AccountRow | undefined) => !!a?.is_authentic
 
 export function AccountField({ accounts, value, onChange, hint, loading }: { accounts: AccountRow[]; value: string; onChange: (id: string) => void; hint?: string; loading: boolean }) {
   const current = accounts.find((a) => a.id === value);
-  const notConnected = <span className="rounded-full border border-error/30 bg-error/10 px-2 py-0.5 text-[12px] text-error">Not connected</span>;
+  const notConnected = <span className="rounded-full border border-error/30 bg-error/10 px-2 py-0.5 text-[13.5px] text-error">Not connected</span>;
   return (
     <FormField label="LinkedIn account" required hint={hint}
       error={current && !accountConnected(current) ? "This LinkedIn account is disconnected. Please select a connected LinkedIn account." : !loading && !accounts.length ? "No LinkedIn account yet. Connect one in Settings → LinkedIn accounts." : null}>
@@ -61,14 +61,14 @@ export function ListField({ lists, value, onChange, onCreated }: { lists: ListRo
         <div className="flex gap-2 pt-1">
           <input autoFocus className={textCls} value={name} placeholder="New list name" aria-label="New list name" maxLength={200}
             onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void create(); } if (e.key === "Escape") { e.stopPropagation(); setCreating(false); } }} />
-          <button type="button" disabled={!name.trim() || busy} onClick={create} className="inline-flex h-12 shrink-0 items-center gap-1.5 rounded-[8px] bg-primary px-4 text-sm font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-[#e6dfd8] disabled:text-[#8e8b82]">
+          <button type="button" disabled={!name.trim() || busy} onClick={create} className="inline-flex h-12 shrink-0 items-center gap-1.5 rounded-[8px] bg-primary px-4 text-[15px] font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-[#e6dfd8] disabled:text-[#8e8b82]">
             {busy ? <RiLoader4Line size={16} className="animate-spin" /> : "Create"}
           </button>
-          <button type="button" onClick={() => setCreating(false)} className="h-12 shrink-0 rounded-[8px] px-3 text-sm text-base-content/70 hover:bg-base-200">Cancel</button>
+          <button type="button" onClick={() => setCreating(false)} className="h-12 shrink-0 rounded-[8px] px-3 text-[15px] text-base-content/70 hover:bg-base-200">Cancel</button>
         </div>
       ) : (
         <div className="flex justify-end">
-          <button type="button" onClick={() => setCreating(true)} className="inline-flex items-center gap-1 rounded-[8px] px-2 py-1 text-sm text-base-content/80 hover:bg-base-200"><RiAddLine size={16} /> New list</button>
+          <button type="button" onClick={() => setCreating(true)} className="inline-flex items-center gap-1 rounded-[8px] px-2 py-1 text-[15px] text-base-content/80 hover:bg-base-200"><RiAddLine size={16} /> New list</button>
         </div>
       )}
     </FormField>

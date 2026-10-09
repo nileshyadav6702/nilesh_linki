@@ -12,10 +12,10 @@ import { SIGNAL_BUDGET } from "@/lib/agents/lead-source-rules";
 export const MIN_SIGNALS = 4;
 
 const KINDS = [
-  { kind: "signals", title: "High-intent signals", why: "People showing buying or social signals", icon: RiFocus3Line, recommended: true, ai: true },
-  { kind: "lookalike", title: "Warm Lookalike", why: "People similar to your best customers.", icon: RiGroupLine, ai: true },
-  { kind: "existing", title: "Existing leads", why: "Lists and CSV.", icon: RiFolderOpenLine },
-  { kind: "linkedin_import", title: "Import from LinkedIn", why: "Import leads directly from LinkedIn or Sales Navigator", icon: RiLinkedinBoxLine },
+  { kind: "signals", title: "High-intent signals", why: "People showing buying or social signals", icon: RiFocus3Line, tint: "bg-primary/10 text-primary", recommended: true, ai: true },
+  { kind: "lookalike", title: "Warm Lookalike", why: "People similar to your best customers.", icon: RiGroupLine, tint: "bg-accent/15 text-[#2f8a78]", ai: true },
+  { kind: "existing", title: "Existing leads", why: "Lists and CSV.", icon: RiFolderOpenLine, tint: "bg-[#e8a55a]/15 text-[#b8742a]" },
+  { kind: "linkedin_import", title: "Import from LinkedIn", why: "Import leads directly from LinkedIn or Sales Navigator", icon: RiLinkedinBoxLine, tint: "bg-[#0a66c2]/10 text-[#0a66c2]" },
 ] as const;
 
 /** Why the Sources step can't continue yet, or null when it can. */
@@ -43,7 +43,6 @@ export function sourcesReady(s: WizardState): string | null {
   return null;
 }
 
-const tile = "flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary/10 text-base-content";
 
 export default function SourcesStep({ state, set, setLookalike, hasLinkedIn, ensureAgent }: {
   state: WizardState; set: (p: Partial<WizardState>) => void; setLookalike: (p: Partial<LookalikeState>) => void; hasLinkedIn: boolean;
@@ -68,7 +67,7 @@ export default function SourcesStep({ state, set, setLookalike, hasLinkedIn, ens
         <div className="mx-auto grid max-w-[740px] gap-5 sm:grid-cols-2">
           {KINDS.map((k) => (
             <OptionCard key={k.kind} selected={false} onClick={() => set({ sourceKind: k.kind })} iconBelow className="wizard-rise"
-              icon={<span className={tile}><k.icon size={22} /></span>}
+              icon={<span className={`flex h-12 w-12 items-center justify-center rounded-[12px] ${k.tint}`}><k.icon size={24} /></span>}
               badge={"recommended" in k && k.recommended ? <RecommendedBadge /> : undefined}
               corner={"ai" in k && k.ai ? <span className="inline-flex items-center gap-1.5 rounded-[6px] bg-primary/10 px-2.5 py-1 text-[14px] text-primary"><RiSparkling2Line size={15} /> AI agent</span> : undefined}
               title={k.title} text={k.why} />

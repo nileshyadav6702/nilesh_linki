@@ -40,7 +40,7 @@ export default function RejectMenu({ onSave, onClose }: { onSave: (reason: strin
         </div>
         {GROUPS.map((g, gi) => (
           <div key={gi} className={gi ? "border-t border-[var(--border-subtle)] pt-1" : "pt-1"}>
-            {g.label && <div className="px-5 pb-1 pt-2 text-[13px] font-medium uppercase tracking-[0.04em] text-base-content/45">{g.label}</div>}
+            {g.label && <div className="px-5 pb-1 pt-2 text-[14.5px] font-medium uppercase tracking-[0.04em] text-base-content/45">{g.label}</div>}
             {g.items.map((it) => (
               <button key={it} type="button" role="menuitem" onClick={() => pick(it)}
                 className={`flex w-full items-center justify-between px-5 py-2.5 text-left text-[17px] transition-colors ${category === it ? "bg-primary/10 text-primary" : "text-base-content/85 hover:bg-base-200"}`}>

@@ -12,16 +12,16 @@ export default function ActivityRow({ item, onViewLeads }: { item: ActivityFeedI
   const icon = o ? outcomeIcon(o.icon) : null;
   const signal = item.signal_type;
   return (
-    <li className="grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-4 gap-y-2 border-b border-[var(--border-subtle)] px-5 py-4 last:border-b-0 md:grid-cols-[40px_minmax(0,3fr)_minmax(0,2fr)_96px]">
+    <li className="wizard-rise grid grid-cols-[40px_minmax(0,1fr)] items-center gap-x-4 gap-y-2 border-b border-[var(--border-subtle)] px-5 py-4 last:border-b-0 md:grid-cols-[40px_minmax(0,3fr)_minmax(0,2fr)_96px]">
       {item.lead
         ? <Avatar name={item.lead.name} src={item.lead.photo} size={40} />
-        : <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-base-200 text-base-content/55" aria-hidden="true">{markIcon(item.mark ?? "source")}</span>}
+        : <span className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] ${cat.tint}`} aria-hidden="true">{markIcon(item.mark ?? "source")}</span>}
 
       <div className="min-w-0">
         <p className="truncate text-[15px] font-medium text-base-content" title={item.title}>{item.title}</p>
-        {item.subtitle && <p className="truncate text-[13px] text-base-content/55" title={item.subtitle}>{item.subtitle}</p>}
-        <div className="mt-1.5 flex items-center gap-1.5 text-[13px] text-base-content/45">
-          <span className="inline-flex items-center gap-1 rounded-[6px] bg-base-200 px-2 py-0.5 text-[12px] font-medium text-base-content/70">
+        {item.subtitle && <p className="truncate text-[14.5px] text-base-content/55" title={item.subtitle}>{item.subtitle}</p>}
+        <div className="mt-1.5 flex items-center gap-1.5 text-[14.5px] text-base-content/45">
+          <span className={`inline-flex items-center gap-1 rounded-[6px] px-2 py-0.5 text-[13.5px] font-medium ${cat.tint}`}>
             {cat.icon(13)} {cat.label}
           </span>
           <time dateTime={item.at} title={new Date(item.at).toLocaleString()}>· {shortAgo(item.at)}</time>
@@ -40,7 +40,7 @@ export default function ActivityRow({ item, onViewLeads }: { item: ActivityFeedI
       {signal && onViewLeads && (
         <div className="col-start-2 md:col-start-4 md:justify-self-end">
           <button type="button" onClick={() => onViewLeads(signal)}
-            className="inline-flex h-8 items-center rounded-[6px] border border-[var(--border-subtle)] bg-base-100 px-3 text-[12px] font-medium text-base-content/75 transition-colors hover:bg-base-200 hover:text-base-content">
+            className="inline-flex h-8 items-center rounded-[6px] border border-[var(--border-subtle)] bg-base-100 px-3 text-[13.5px] font-medium text-base-content/75 transition-colors hover:bg-base-200 hover:text-base-content">
             View leads
           </button>
         </div>

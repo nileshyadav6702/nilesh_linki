@@ -17,7 +17,7 @@ export default function HowItWorks() {
   return (
     <div ref={wrap} className="relative">
       <button type="button" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-primary/40 px-3 text-[13px] font-medium uppercase tracking-[0.02em] text-primary hover:bg-primary/5">
+        className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-primary/40 px-3 text-[14.5px] font-medium uppercase tracking-[0.02em] text-primary hover:bg-primary/5">
         <RiQuestionLine size={14} /> How it works?
       </button>
       {open && (
@@ -25,8 +25,8 @@ export default function HowItWorks() {
           <ol className="space-y-3.5">
             {STEPS.map(([t, body], i) => (
               <li key={t} className="flex gap-3">
-                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[12px] font-semibold text-primary">{i + 1}</span>
-                <div><div className="text-[14px] font-medium text-base-content">{t}</div><p className="text-[13px] leading-snug text-base-content/55">{body}</p></div>
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[13.5px] font-semibold text-primary">{i + 1}</span>
+                <div><div className="text-[14px] font-medium text-base-content">{t}</div><p className="text-[14.5px] leading-snug text-base-content/55">{body}</p></div>
               </li>
             ))}
           </ol>

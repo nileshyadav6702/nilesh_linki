@@ -15,7 +15,7 @@ function Collapse({ title, meta, action, children, defaultOpen = false }: { titl
         <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="inline-flex items-center gap-1.5 text-[14px] font-semibold uppercase tracking-[0.06em] text-primary hover:opacity-80">
           <RiArrowRightSFill size={16} className={`text-base-content/60 transition-transform ${open ? "rotate-90" : ""}`} /> {title}
         </button>
-        <span className="text-sm text-base-content/50">{meta}</span>
+        <span className="text-[15px] text-base-content/50">{meta}</span>
         {action}
       </div>
       {open && children}
@@ -50,7 +50,7 @@ export function MapStep({ csv, map, setMap, unmapped, custom, setCustom }: {
       <div>
         <h3 className="text-[22px] font-semibold text-base-content">Map CSV columns</h3>
         <p className="mt-1 text-[15px] text-base-content/55">Match each contact field to a column from your file. Required fields are marked with an asterisk.</p>
-        <p className="mt-1 text-[13px] text-base-content/45">{csv.name} · {csv.rows.length} row{csv.rows.length === 1 ? "" : "s"} · {csv.headers.length} columns</p>
+        <p className="mt-1 text-[14.5px] text-base-content/45">{csv.name} · {csv.rows.length} row{csv.rows.length === 1 ? "" : "s"} · {csv.headers.length} columns</p>
       </div>
       <div className="space-y-3">
         <div className="text-[14px] font-semibold uppercase tracking-[0.06em] text-base-content/60">Mandatory <span className="text-error">*</span></div>
@@ -60,21 +60,21 @@ export function MapStep({ csv, map, setMap, unmapped, custom, setCustom }: {
         <div className="rounded-[12px] border border-[var(--border-subtle)]">{OPTIONAL_FIELDS.map((f) => row(f, false))}</div>
       </Collapse>
       <Collapse title="Custom fields" meta={`${enabled} of ${unmapped.length} enabled`}
-        action={unmapped.length > 0 && <button type="button" className="text-sm font-medium text-primary hover:underline" onClick={() => setCustom(Object.fromEntries(unmapped.map((h) => [h, enabled < unmapped.length])))}>{enabled < unmapped.length ? "Select all" : "Clear all"}</button>}>
+        action={unmapped.length > 0 && <button type="button" className="text-[15px] font-medium text-primary hover:underline" onClick={() => setCustom(Object.fromEntries(unmapped.map((h) => [h, enabled < unmapped.length])))}>{enabled < unmapped.length ? "Select all" : "Clear all"}</button>}>
         {unmapped.length ? (
           <div className="rounded-[12px] border border-[var(--border-subtle)]">
             {unmapped.map((h) => (
               <label key={h} className="flex cursor-pointer items-center gap-4 border-b border-[var(--border-subtle)] px-5 py-3 last:border-0 hover:bg-base-200/40">
                 <input type="checkbox" className="checkbox checkbox-sm checkbox-primary rounded-[5px]" checked={!!custom[h]} onChange={(e) => setCustom({ ...custom, [h]: e.target.checked })} />
-                <span className="w-[200px] truncate font-mono text-sm text-base-content">{h}</span>
+                <span className="w-[200px] truncate font-mono text-[15px] text-base-content">{h}</span>
                 <RiArrowRightLine size={14} className="text-base-content/40" aria-hidden="true" />
-                <span className="truncate rounded-[6px] bg-primary/10 px-2 py-1 font-mono text-xs text-base-content/60">{customKeyFor(h)}</span>
+                <span className="truncate rounded-[6px] bg-primary/10 px-2 py-1 font-mono text-[13.5px] text-base-content/60">{customKeyFor(h)}</span>
               </label>
             ))}
           </div>
-        ) : <p className="text-sm text-base-content/45">Every column is mapped.</p>}
+        ) : <p className="text-[15px] text-base-content/45">Every column is mapped.</p>}
       </Collapse>
-      <p className="text-[13px] text-base-content/55">Enabled columns are imported as custom fields on each contact and can be used later for personalization.</p>
+      <p className="text-[14.5px] text-base-content/55">Enabled columns are imported as custom fields on each contact and can be used later for personalization.</p>
     </div>
   );
 }
@@ -90,7 +90,7 @@ export function ReviewStep({ rows, total, agentName, autoEnrichEmails, bare = fa
   const stat = (label: string, n: number, cls: string) => (
     <div className={`rounded-[12px] border px-4 py-4 text-center ${cls}`}>
       <div className="text-[24px] tabular-nums">{n}</div>
-      <div className="text-[13px] font-semibold uppercase tracking-[0.06em]">{label}</div>
+      <div className="text-[14.5px] font-semibold uppercase tracking-[0.06em]">{label}</div>
     </div>
   );
   // Problems first, so a skipped row is never hidden past the preview.
@@ -108,26 +108,26 @@ export function ReviewStep({ rows, total, agentName, autoEnrichEmails, bare = fa
         {stat("Skipped", count("skipped"), "border-error/25 bg-error/8 text-error")}
       </div>
       <div className="overflow-x-auto rounded-[12px] border border-[var(--border-subtle)]">
-        <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="bg-base-200/50 text-[12px] font-semibold uppercase tracking-[0.06em] text-base-content/55">
+        <table className="w-full min-w-[720px] text-left text-[15px]">
+          <thead className="bg-base-200/50 text-[13.5px] font-semibold uppercase tracking-[0.06em] text-base-content/55">
             <tr><th className="px-5 py-3">Contact</th><th className="px-3 py-3">LinkedIn URL</th><th className="px-3 py-3">Company</th><th className="px-3 py-3">Custom</th><th className="px-5 py-3 text-right">Status</th></tr>
           </thead>
           <tbody>
             {shown.map((r) => (
               <tr key={r.index} className="border-t border-[var(--border-subtle)]">
-                <td className="px-5 py-3"><div className="text-[15px] text-base-content">{r.name}</div>{r.email && <div className="text-[13px] text-base-content/50">{r.email}</div>}</td>
-                <td className="max-w-[240px] truncate px-3 py-3 font-mono text-xs text-base-content/75">{r.linkedinPath ?? "—"}</td>
+                <td className="px-5 py-3"><div className="text-[15px] text-base-content">{r.name}</div>{r.email && <div className="text-[14.5px] text-base-content/50">{r.email}</div>}</td>
+                <td className="max-w-[240px] truncate px-3 py-3 font-mono text-[13.5px] text-base-content/75">{r.linkedinPath ?? "—"}</td>
                 <td className="px-3 py-3 text-[15px] text-base-content/80">{r.company ?? ""}</td>
-                <td className="px-3 py-3 text-[13px] text-base-content/55">{r.custom ? `${r.custom} field${r.custom === 1 ? "" : "s"}` : ""}</td>
+                <td className="px-3 py-3 text-[14.5px] text-base-content/55">{r.custom ? `${r.custom} field${r.custom === 1 ? "" : "s"}` : ""}</td>
                 <td className="px-5 py-3 text-right">
-                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[12px] font-medium capitalize ${STATUS_PILL[r.status]}`}>{r.status}</span>
-                  {r.reason && <div className="mt-0.5 text-[12px] text-base-content/50">{r.reason}</div>}
+                  <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[13.5px] font-medium capitalize ${STATUS_PILL[r.status]}`}>{r.status}</span>
+                  {r.reason && <div className="mt-0.5 text-[13.5px] text-base-content/50">{r.reason}</div>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        <div className="border-t border-[var(--border-subtle)] bg-base-200/40 px-5 py-2.5 text-[13px] text-base-content/55">
+        <div className="border-t border-[var(--border-subtle)] bg-base-200/40 px-5 py-2.5 text-[14.5px] text-base-content/55">
           {total > shown.length ? `${total - shown.length} more rows in this file · ${total} total` : `${total} total`}
         </div>
       </div>
@@ -136,7 +136,7 @@ export function ReviewStep({ rows, total, agentName, autoEnrichEmails, bare = fa
         <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-primary/10 text-primary"><RiLink size={18} /></span>
         <div>
           <div className="text-[15px] font-medium text-base-content">CSV Import will be added to <span className="text-primary">{agentName}</span></div>
-          <p className="text-[13px] text-base-content/55">Contacts go to the list &quot;{listName}&quot; (created on your first CSV import for this agent), which is attached to this agent.</p>
+          <p className="text-[14.5px] text-base-content/55">Contacts go to the list &quot;{listName}&quot; (created on your first CSV import for this agent), which is attached to this agent.</p>
         </div>
       </div>
       <div className="flex items-start gap-3 rounded-[12px] bg-primary/5 px-5 py-4 text-[15px] text-base-content/75">

@@ -116,8 +116,8 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
     return (
       <Panel className="flex flex-col items-center gap-3 px-6 py-14 text-center">
         <IconTile icon={<RiFocus3Line size={22} />} size={48} />
-        <div className="font-display text-[22px] leading-tight">This agent has no sequence yet</div>
-        <p className="max-w-md text-sm text-base-content/55">Create the LinkedIn and email steps this agent will send. You can change every step here.</p>
+        <div className="font-medium text-[22px] leading-tight">This agent has no sequence yet</div>
+        <p className="max-w-md text-[15px] text-base-content/55">Create the LinkedIn and email steps this agent will send. You can change every step here.</p>
         <button className={primaryBtn} disabled={busy} onClick={async () => { setBusy(true); await onCreate(); setBusy(false); }}><RiAddLine size={16} /> Create the sequence</button>
       </Panel>
     );
@@ -145,8 +145,8 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
 
       <div className="relative mx-auto max-w-3xl space-y-6 px-4 pb-10 pt-2 sm:px-8">
         <div className="flex flex-wrap gap-2">
-          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-base-100 px-4 text-sm"><span className="h-2 w-2 rounded-full bg-primary" />{items.length} steps</span>
-          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-base-100 px-4 text-sm"><span className="h-2 w-2 rounded-full bg-base-content/35" />{leadCount} leads</span>
+          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-base-100 px-4 text-[15px]"><span className="h-2 w-2 rounded-full bg-primary" />{items.length} steps</span>
+          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-base-100 px-4 text-[15px]"><span className="h-2 w-2 rounded-full bg-base-content/35" />{leadCount} leads</span>
         </div>
 
         <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-5">
@@ -155,36 +155,36 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="font-medium text-base-content">Lead sources</span>
-                <span className="text-[13px] text-base-content/55">{sources.count} source{sources.count === 1 ? "" : "s"} <span className="text-base-content/30">•</span> <span className="font-medium text-success">{sources.leads}</span> total leads found</span>
+                <span className="text-[14.5px] text-base-content/55">{sources.count} source{sources.count === 1 ? "" : "s"} <span className="text-base-content/30">•</span> <span className="font-medium text-success">{sources.leads}</span> total leads found</span>
               </div>
-              <p className="mt-0.5 text-sm text-base-content/55">This agent continuously finds qualified leads and adds them to the campaign.</p>
+              <p className="mt-0.5 text-[15px] text-base-content/55">This agent continuously finds qualified leads and adds them to the campaign.</p>
               <div className="mt-3 flex items-center justify-between gap-2">
                 <Pill tone="coral"><RiFocus3Line size={12} /> High-intent signals</Pill>
-                <button type="button" onClick={onEditSources} className="inline-flex items-center gap-1 text-[13px] font-medium text-base-content/60 hover:text-base-content"><RiPencilLine size={13} /> Edit</button>
+                <button type="button" onClick={onEditSources} className="inline-flex items-center gap-1 text-[14.5px] font-medium text-base-content/60 hover:text-base-content"><RiPencilLine size={13} /> Edit</button>
               </div>
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-center text-xs text-base-content/45">Qualified leads enter campaign<RiArrowDownLine size={14} className="mt-1" /></div>
+        <div className="flex flex-col items-center text-[13.5px] text-base-content/45">Qualified leads enter campaign<RiArrowDownLine size={14} className="mt-1" /></div>
 
-        {steps === null ? <p className="text-center text-sm text-base-content/40">Loading…</p> : (
+        {steps === null ? <p className="text-center text-[15px] text-base-content/40">Loading…</p> : (
           <ol className="relative space-y-6">
             {items.length > 0 && <span className="absolute bottom-6 left-[19px] top-5 w-px bg-[var(--border-subtle)]" aria-hidden="true" />}
             {items.map((it, idx) => {
               const s = it.step; const n = idx + 1;
               return (
                 <li key={s.id} className="relative pl-14">
-                  <span className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-content ring-4 ring-base-100">{n}</span>
+                  <span className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-[15px] font-semibold text-primary-content ring-4 ring-base-100">{n}</span>
                   {it.delayBefore !== null && (
                     <div className="relative mb-3 flex h-10 items-center">
                       <button type="button" disabled={editing || busy} onClick={() => setDelayMenu(delayMenu === s.id ? null : s.id)}
-                        className="inline-flex items-center gap-1.5 rounded-full border-2 border-dotted border-[#e8a55a] bg-[#e8a55a]/10 px-3.5 py-1 text-[13px] font-medium text-[#b8742a] enabled:hover:bg-[#e8a55a]/20">
+                        className="inline-flex items-center gap-1.5 rounded-full border-2 border-dotted border-[#e8a55a] bg-[#e8a55a]/10 px-3.5 py-1 text-[14.5px] font-medium text-[#b8742a] enabled:hover:bg-[#e8a55a]/20">
                         <RiTimeLine size={14} /> {delayLabel(it.delayBefore)} after
                       </button>
                       {delayMenu === s.id && (
                         <div className="absolute left-0 top-full z-40 mt-1 max-h-72 w-44 overflow-y-auto rounded-[10px] border border-[var(--border-subtle)] bg-base-100 py-1 shadow-[var(--shadow-overlay)]">
                           {Array.from(new Set([...DELAY_OPTIONS, it.delayBefore])).sort((a, b) => a - b).map((sec) => (
-                            <button key={sec} type="button" className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-sm hover:bg-base-200 ${sec === it.delayBefore ? "bg-primary/10 text-primary" : ""}`}
+                            <button key={sec} type="button" className={`flex w-full items-center justify-between px-3.5 py-2 text-left text-[15px] hover:bg-base-200 ${sec === it.delayBefore ? "bg-primary/10 text-primary" : ""}`}
                               onClick={() => { setDelayMenu(null); if (sec !== it.delayBefore) void putAll(restructure(steps, s.id, { delaySeconds: sec }), "Wait updated"); }}>
                               {delayLabel(sec)}{sec === it.delayBefore && <RiCheckLine size={15} />}
                             </button>
@@ -207,17 +207,17 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
                 <span className="absolute left-0 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-base-200 text-base-content/50 ring-4 ring-base-100"><RiAddLine size={18} /></span>
                 <button type="button" onClick={() => setAdding(!adding)} className="flex w-full items-center gap-3 rounded-[12px] border border-dashed border-base-content/20 bg-base-100/70 p-5 text-left hover:border-primary/40">
                   <IconTile icon={<RiAddLine size={18} />} tone="ink" />
-                  <span><span className="block font-medium text-base-content/70">Add a step</span><span className="text-[13px] text-base-content/45">Message, invitation, profile visit…</span></span>
+                  <span><span className="block font-medium text-base-content/70">Add a step</span><span className="text-[14.5px] text-base-content/45">Message, invitation, profile visit…</span></span>
                 </button>
                 {adding && (
                   <div className="absolute bottom-full left-14 z-40 mb-2 w-80 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-2 shadow-[var(--shadow-overlay)]">
-                    <div className="px-3 pb-2 pt-1"><div className="font-medium text-base-content">Add a step</div><div className="text-[13px] text-base-content/50">What should happen next in your sequence?</div></div>
+                    <div className="px-3 pb-2 pt-1"><div className="font-medium text-base-content">Add a step</div><div className="text-[14.5px] text-base-content/50">What should happen next in your sequence?</div></div>
                     {ADDABLE.map((o) => (
                       <div key={o.type}>
-                        {o.group === "Email" && <div className="px-3 pb-1 pt-2 text-center text-[11px] font-semibold uppercase tracking-[1.2px] text-base-content/40">Email</div>}
+                        {o.group === "Email" && <div className="px-3 pb-1 pt-2 text-center text-[12.5px] font-semibold uppercase tracking-[1.2px] text-base-content/40">Email</div>}
                         <button type="button" onClick={() => addStep(o.type)} className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left hover:bg-base-200">
                           <IconTile icon={o.icon} tone={o.tone} size={36} />
-                          <span className="min-w-0"><span className="block text-sm font-medium text-base-content">{o.title}</span><span className="block text-xs text-base-content/50">{o.sub}</span></span>
+                          <span className="min-w-0"><span className="block text-[15px] font-medium text-base-content">{o.title}</span><span className="block text-[13.5px] text-base-content/50">{o.sub}</span></span>
                         </button>
                       </div>
                     ))}
@@ -230,7 +230,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
               <span className="absolute left-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-success text-white ring-4 ring-base-100"><RiCheckLine size={18} /></span>
               <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-4">
                 <IconTile icon={<RiCheckboxCircleLine size={18} />} tone="success" size={36} />
-                <div><div className="font-medium text-base-content">Campaign complete</div><div className="text-xs text-base-content/50">Leads finish here once every step has run.</div></div>
+                <div><div className="font-medium text-base-content">Campaign complete</div><div className="text-[13.5px] text-base-content/50">Leads finish here once every step has run.</div></div>
               </div>
             </li>
           </ol>

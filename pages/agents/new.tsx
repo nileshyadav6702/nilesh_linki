@@ -289,9 +289,9 @@ export default function NewAgent() {
   return (
     <>
       <Head><title>New agent — Kairo</title></Head>
-      <div className="mb-8 border-b border-[var(--border-subtle)] pb-5">
-        <div className="flex items-center gap-3"><RiBroadcastLine size={20} className="text-primary" /><h1 className="text-[22px] font-medium text-base-content">Outreach Agents</h1></div>
-        <p className="mt-1 pl-1 text-[15px] text-base-content/65">Manage your automated outreach agents</p>
+      <div className="-mx-4 -mt-6 mb-8 border-b border-[var(--border-subtle)] px-4 pb-6 pt-6 md:-mx-10 md:-mt-9 md:px-10 md:pt-8">
+        <div className="flex items-center gap-3"><RiBroadcastLine size={24} className="text-primary" /><h1 className="text-[24px] font-semibold text-base-content">Create an agent</h1></div>
+        <p className="mt-1.5 pl-[36px] text-[16px] text-base-content/65">Pick where leads come from, who to target and how to reach out</p>
       </div>
 
       <div className="space-y-10 pb-32">

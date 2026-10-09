@@ -10,7 +10,7 @@ export function Stepper({ steps, current }: { steps: readonly string[]; current:
         const on = i === current;
         return (
           <li key={label} className={`flex items-center gap-2.5 text-[15px] ${i < steps.length - 1 ? "flex-1" : ""}`} aria-current={on ? "step" : undefined}>
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold tabular-nums transition-colors duration-300 ${on ? "bg-base-content text-base-100" : done ? "bg-primary/10 text-primary" : "bg-base-200 text-base-content/55"}`}>
+            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[14.5px] font-semibold tabular-nums transition-colors duration-300 ${on ? "bg-base-content text-base-100" : done ? "bg-primary/10 text-primary" : "bg-base-200 text-base-content/55"}`}>
               {i + 1}
             </span>
             <span className={`whitespace-nowrap transition-colors duration-300 ${on ? "font-medium text-base-content" : done ? "text-primary" : "text-base-content/50"}`}>{label}</span>
@@ -39,11 +39,11 @@ export function Caps({ children, className = "" }: { children: ReactNode; classN
 }
 
 export function RecommendedBadge() {
-  return <span className="rounded-[4px] bg-primary px-2.5 py-0.5 text-[13px] font-medium text-primary-content">Recommended</span>;
+  return <span className="rounded-[4px] bg-primary px-2.5 py-0.5 text-[14.5px] font-medium text-primary-content">Recommended</span>;
 }
 
 export function SoonBadge() {
-  return <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-base-200 px-2 py-0.5 text-[12px] font-medium text-base-content/55">Coming soon</span>;
+  return <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-base-200 px-2 py-0.5 text-[13.5px] font-medium text-base-content/55">Coming soon</span>;
 }
 
 /** A selectable card: coral hairline + tint when chosen. */
@@ -71,7 +71,7 @@ export function RadioCard({ selected, onClick, title, text }: { selected: boolea
       <span className={`mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2 transition-colors ${selected ? "border-primary/60" : "border-primary/40"}`}>
         {selected && <span className="h-3 w-3 rounded-full bg-primary" />}
       </span>
-      <span className="min-w-0"><span className="block text-[17px] font-medium text-base-content">{title}</span>{text && <span className="mt-1 block text-sm text-base-content/55">{text}</span>}</span>
+      <span className="min-w-0"><span className="block text-[17px] font-medium text-base-content">{title}</span>{text && <span className="mt-1 block text-[15px] text-base-content/55">{text}</span>}</span>
     </button>
   );
 }

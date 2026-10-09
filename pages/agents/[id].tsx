@@ -43,8 +43,8 @@ interface Detail {
 
 const TABS = ["Overview", "Leads", "Sources", "Campaign", "Activity", "Settings"] as const;
 const TAB_ICONS: Partial<Record<(typeof TABS)[number], ReactNode>> = {
-  Overview: <RiDashboardLine size={15} />, Leads: <RiTeamLine size={15} />, Sources: <RiRadarLine size={15} />,
-  Campaign: <RiFlowChart size={15} />, Activity: <RiHistoryLine size={15} />, Settings: <RiSettings3Line size={15} />,
+  Overview: <RiDashboardLine size={19} />, Leads: <RiTeamLine size={19} />, Sources: <RiRadarLine size={19} />,
+  Campaign: <RiFlowChart size={19} />, Activity: <RiHistoryLine size={19} />, Settings: <RiSettings3Line size={19} />,
 };
 
 
@@ -125,7 +125,7 @@ export default function AgentDetail() {
     router.push("/agents");
   }
 
-  if (!d) return <p className="text-sm text-base-content/40">Loading…</p>;
+  if (!d) return <p className="text-[15px] text-base-content/40">Loading…</p>;
   const a = d.agent;
   const finding = a.status === "active";
   const sending = !!a.outreach_enabled;
@@ -154,7 +154,7 @@ export default function AgentDetail() {
           <Panel className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
             <div className="flex items-center gap-3">
               <IconTile icon={<RiPlayLine size={18} />} size={40} />
-              <div><div className="font-medium text-base-content">Your outreach is paused</div><div className="text-sm text-base-content/55">{waiting} approved contact(s) are waiting to be contacted.</div></div>
+              <div><div className="font-medium text-base-content">Your outreach is paused</div><div className="text-[15px] text-base-content/55">{waiting} approved contact(s) are waiting to be contacted.</div></div>
             </div>
             <button className={primaryBtn} onClick={() => patch({ outreach_enabled: true }, "Outreach started")}><RiPlayLine size={16} /> Restart outreach</button>
           </Panel>

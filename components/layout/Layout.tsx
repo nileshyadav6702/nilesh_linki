@@ -28,7 +28,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       </header>
       {/* The margin follows the sidebar (300px open, 92px collapsed) with the same easing. */}
       <main className={`min-h-screen px-4 pb-28 pt-6 transition-[margin] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:px-10 md:pb-14 md:pt-9 ${collapsed ? "md:ml-[92px]" : "md:ml-[300px]"}`}>
-        <div className={`mx-auto w-full ${WIDE_ROUTES.has(router.pathname) ? "" : "max-w-[1240px]"}`}>{children}</div>
+        <div className={`app-sans mx-auto w-full ${WIDE_ROUTES.has(router.pathname) ? "" : "max-w-[1240px]"}`}>{children}</div>
       </main>
     </div>
   );

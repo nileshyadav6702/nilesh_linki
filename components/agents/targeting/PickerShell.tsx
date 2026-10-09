@@ -39,7 +39,7 @@ export default function PickerShell({ label, query, onQuery, onEnter, placeholde
       </div>
       {header}
       <div ref={body} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">{children}</div>
-      {footer && <div className="border-t border-[var(--border-subtle)] px-4 py-3 text-[13px] text-base-content/55">{footer}</div>}
+      {footer && <div className="border-t border-[var(--border-subtle)] px-4 py-3 text-[14.5px] text-base-content/55">{footer}</div>}
     </div>
   );
 }

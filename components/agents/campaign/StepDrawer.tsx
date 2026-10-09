@@ -42,16 +42,16 @@ function insertAt(el: HTMLInputElement | HTMLTextAreaElement | null, value: stri
 function VariableMenu({ open, onToggle, onPick }: { open: boolean; onToggle: () => void; onPick: (key: string) => void }) {
   return (
     <div className="relative">
-      <button type="button" onClick={onToggle} className="inline-flex h-8 items-center gap-1 rounded-[8px] px-2 text-[13px] font-medium text-base-content/75 hover:bg-base-200">
+      <button type="button" onClick={onToggle} className="inline-flex h-8 items-center gap-1 rounded-[8px] px-2 text-[14.5px] font-medium text-base-content/75 hover:bg-base-200">
         <RiAddLine size={15} /> Insert variable <RiArrowDownSLine size={14} />
       </button>
       {open && (
         <div className="absolute left-0 top-full z-30 mt-1 w-56 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 p-2 shadow-[var(--shadow-overlay)]">
-          <div className="px-2 pb-1 pt-0.5 text-[11px] font-semibold uppercase tracking-[1px] text-base-content/45">Lead data</div>
+          <div className="px-2 pb-1 pt-0.5 text-[12.5px] font-semibold uppercase tracking-[1px] text-base-content/45">Lead data</div>
           {LEAD_VARIABLES.map((v) => (
             <button key={v.key} type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => onPick(v.key)}
               className="flex w-full items-center rounded-[8px] px-2 py-1.5 text-left hover:bg-base-200">
-              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[13px] font-medium text-primary">{v.label}</span>
+              <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[14.5px] font-medium text-primary">{v.label}</span>
             </button>
           ))}
         </div>
@@ -61,7 +61,7 @@ function VariableMenu({ open, onToggle, onPick }: { open: boolean; onToggle: () 
 }
 
 function Counter({ n, max }: { n: number; max: number }) {
-  return <span className={`text-xs tabular-nums ${n > max * 0.95 ? "text-error" : "text-base-content/45"}`}>{n}/{max}</span>;
+  return <span className={`text-[13.5px] tabular-nums ${n > max * 0.95 ? "text-error" : "text-base-content/45"}`}>{n}/{max}</span>;
 }
 
 export default function StepDrawer(props: Props) {
@@ -153,12 +153,12 @@ export default function StepDrawer(props: Props) {
   const kind = name.replace(/^AI /, "").replace(/ Email$/, "");
   const title = `Edit ${STEP_TITLE[type] ?? "step"} step${writes ? ` (${kind})` : ""}`;
   const delayChoices = delayBefore !== null && !DELAY_OPTIONS.includes(delayBefore) ? [...DELAY_OPTIONS, delayBefore].sort((a, b) => a - b) : DELAY_OPTIONS;
-  const noLead = <p className="text-[13px] text-base-content/50">Add a lead to this agent to preview.</p>;
+  const noLead = <p className="text-[14.5px] text-base-content/50">Add a lead to this agent to preview.</p>;
 
   const toolbar = (field: Field, extra?: ReactNode) => (
     <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-2 py-1.5">
       <VariableMenu open={menu === field} onToggle={() => { setLastField(field); setMenu(menu === field ? null : field); }} onPick={(k) => pick(field, k)} />
-      <span className="text-[13px] text-base-content/40">or type / in the {field === "note" ? "note" : isEmail ? "subject or body" : "message"}</span>
+      <span className="text-[14.5px] text-base-content/40">or type / in the {field === "note" ? "note" : isEmail ? "subject or body" : "message"}</span>
       <span className="ml-auto">{extra}</span>
     </div>
   );
@@ -169,7 +169,7 @@ export default function StepDrawer(props: Props) {
       subtitle={`Your AI writes a unique ${isEmail ? "email" : "message"} for every lead, using their profile, company, and detected buying signals.`}>
       <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-5">
         <div className="font-medium text-base-content">How it works</div>
-        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-base-content/70">
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-[15px] text-base-content/70">
           <li>AI analyzes the lead (profile, company, signals)</li>
           <li>AI generates a personalized {isEmail ? "email" : "message"}</li>
           <li>You can review &amp; edit it before it&apos;s sent (in the lead&apos;s drawer / Copilot)</li>
@@ -192,11 +192,11 @@ export default function StepDrawer(props: Props) {
       {isEmail ? (
         <div className="space-y-4">
           <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-base-content">Subject</span>
+            <span className="text-[15px] font-medium text-base-content">Subject</span>
             <input ref={refs.subject} className={inputCls} value={subject} onFocus={() => setLastField("subject")} onChange={(e) => onType("subject", e.target.value, e.target)} />
           </label>
           <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-base-content">Email Body</span>
+            <span className="text-[15px] font-medium text-base-content">Email Body</span>
             <textarea ref={refs.body} rows={9} className={textareaCls} placeholder="Write your email…" value={body} onFocus={() => setLastField("body")} onChange={(e) => onType("body", e.target.value, e.target)} />
           </label>
           <div className="relative">
@@ -205,22 +205,22 @@ export default function StepDrawer(props: Props) {
         </div>
       ) : (
         <div>
-          <div className="mb-1.5 text-sm font-medium text-base-content">Message Content</div>
+          <div className="mb-1.5 text-[15px] font-medium text-base-content">Message Content</div>
           <textarea ref={refs.message} rows={8} maxLength={MESSAGE_MAX} className={textareaCls} value={message} onFocus={() => setLastField("message")} onChange={(e) => onType("message", e.target.value, e.target)} />
           {toolbar("message", <Counter n={message.length} max={MESSAGE_MAX} />)}
         </div>
       )}
       <div className="mt-3">
         {!sampleTargetId ? noLead : (
-          <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[var(--border-subtle)] px-3 text-[13px] font-medium text-base-content/75 hover:bg-base-200"
+          <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[var(--border-subtle)] px-3 text-[14.5px] font-medium text-base-content/75 hover:bg-base-200"
             disabled={previewing} onClick={() => (showPreview ? setShowPreview(false) : runPreview(false))}>
             {previewing ? <RiLoader4Line size={14} className="animate-spin" /> : showPreview ? <RiEyeOffLine size={14} /> : <RiEyeLine size={14} />} {showPreview ? "Hide preview" : "Preview"}
           </button>
         )}
         {fixed && showPreview && preview && (
           <div className="mt-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-100">
-            <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5 text-sm text-base-content/60">Preview as <span className="font-medium text-base-content">{sampleTargetName ?? "a sample lead"}</span></div>
-            <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5 text-[13px] text-base-content/60"><RiEyeLine size={14} className="text-primary" /> This is how the lead will see your {isEmail ? "email" : "message"}</div>
+            <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5 text-[15px] text-base-content/60">Preview as <span className="font-medium text-base-content">{sampleTargetName ?? "a sample lead"}</span></div>
+            <div className="flex items-center gap-2 border-b border-[var(--border-subtle)] px-4 py-2.5 text-[14.5px] text-base-content/60"><RiEyeLine size={14} className="text-primary" /> This is how the lead will see your {isEmail ? "email" : "message"}</div>
             <div className="p-4"><PreviewBubble preview={preview} isEmail={isEmail} who={null} /></div>
           </div>
         )}
@@ -231,26 +231,26 @@ export default function StepDrawer(props: Props) {
   return (
     <SideDrawer title={title} icon={<RiPencilLine size={18} className="text-base-content/45" />} onClose={onClose}
       footer={<>
-        {(fixedEmpty || noteEmpty) && <span className="mr-auto text-[13px] text-base-content/50">{noteEmpty ? "Write the note, or send the invitation without one." : "Write the text that everyone will receive."}</span>}
-        <button type="button" className="px-3 text-sm font-medium text-base-content/70 hover:text-base-content" onClick={onClose}>Cancel</button>
+        {(fixedEmpty || noteEmpty) && <span className="mr-auto text-[14.5px] text-base-content/50">{noteEmpty ? "Write the note, or send the invitation without one." : "Write the text that everyone will receive."}</span>}
+        <button type="button" className="px-3 text-[15px] font-medium text-base-content/70 hover:text-base-content" onClick={onClose}>Cancel</button>
         <button type="button" className={primaryBtn} disabled={busy || fixedEmpty || noteEmpty} onClick={save}>{busy && <RiLoader4Line size={16} className="animate-spin" />} Save Step</button>
       </>}>
       <div className="space-y-5">
-        <div className="text-xs font-medium uppercase tracking-[1.2px] text-base-content/45">Step {stepNumber}</div>
+        <div className="text-[13.5px] font-medium uppercase tracking-[1.2px] text-base-content/45">Step {stepNumber}</div>
 
         {isConnect && (
           <>
             <RadioCard on={!withNote} onSelect={() => setWithNote(false)} title="Invitation" subtitle="Simple connection request" />
             <RadioCard on={withNote} onSelect={() => setWithNote(true)} title="Invitation + Note" subtitle="Add a personal message">
-              <div className="mb-1.5 text-sm font-medium text-base-content">Invitation Note</div>
+              <div className="mb-1.5 text-[15px] font-medium text-base-content">Invitation Note</div>
               <textarea ref={refs.note} rows={5} maxLength={NOTE_MAX} className={textareaCls} value={note} onFocus={() => setLastField("note")} onChange={(e) => onType("note", e.target.value, e.target)} />
               {toolbar("note", <Counter n={note.length} max={NOTE_MAX} />)}
-              <p className="mt-3 flex items-start gap-1.5 text-[13px] text-error"><RiErrorWarningLine size={15} className="mt-0.5 shrink-0" />If you don&apos;t have Sales Navigator, it&apos;s not recommended to add a note because LinkedIn limits free accounts to a few notes per month.</p>
+              <p className="mt-3 flex items-start gap-1.5 text-[14.5px] text-error"><RiErrorWarningLine size={15} className="mt-0.5 shrink-0" />If you don&apos;t have Sales Navigator, it&apos;s not recommended to add a note because LinkedIn limits free accounts to a few notes per month.</p>
             </RadioCard>
             <div className="flex items-start justify-between gap-4 border-t border-[var(--border-subtle)] pt-5">
               <div>
                 <div className="font-medium text-base-content">Visit profile before sending</div>
-                <p className="mt-0.5 text-sm text-base-content/55">Your LinkedIn profile visits the lead&apos;s profile before the invitation is sent, so they may see you in their &quot;Who viewed my profile&quot;.</p>
+                <p className="mt-0.5 text-[15px] text-base-content/55">Your LinkedIn profile visits the lead&apos;s profile before the invitation is sent, so they may see you in their &quot;Who viewed my profile&quot;.</p>
               </div>
               <Toggle on={visit} onChange={() => setVisit((v) => !v)} label="Visit profile before sending" />
             </div>
@@ -260,7 +260,7 @@ export default function StepDrawer(props: Props) {
         {writes && <>{aiCard}{fixedCard}</>}
 
         {delayBefore !== null && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-subtle)] pt-5 text-sm text-base-content/75">
+          <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border-subtle)] pt-5 text-[15px] text-base-content/75">
             Wait at least
             <select className={`${inputCls} !h-9 !w-auto pr-8`} value={delay} onChange={(e) => setDelay(Number(e.target.value))}>
               {delayChoices.map((s) => <option key={s} value={s}>{delayLabel(s)}</option>)}
@@ -281,11 +281,11 @@ function PreviewBubble({ preview, isEmail, who }: { preview: Preview; isEmail: b
     <div className="mt-4 flex items-start gap-3">
       <Avatar name={who ?? "You"} size={36} />
       <div className="min-w-0 flex-1">
-        <div className="rounded-[12px] bg-primary/[0.07] px-4 py-3 text-sm text-base-content">
+        <div className="rounded-[12px] bg-primary/[0.07] px-4 py-3 text-[15px] text-base-content">
           {isEmail && preview.subject && <div className="mb-1.5 font-medium">{preview.subject}</div>}
           {preview.body ? <p className="whitespace-pre-wrap">{preview.body}</p> : <p className="italic text-base-content/45">(empty {isEmail ? "email" : "message"})</p>}
         </div>
-        <div className="mt-1 flex items-center gap-1 text-xs text-base-content/45">Just now <RiCheckDoubleLine size={13} className="text-primary" /></div>
+        <div className="mt-1 flex items-center gap-1 text-[13.5px] text-base-content/45">Just now <RiCheckDoubleLine size={13} className="text-primary" /></div>
       </div>
     </div>
   );

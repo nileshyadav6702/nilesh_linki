@@ -16,22 +16,22 @@ export default function ContactSignals({ targetId }: { targetId: string }) {
   return (
     <div className="bg-base-300 border border-[var(--border-subtle)] rounded-[12px] p-5 mb-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px] text-base-content/40 uppercase tracking-wide">Buying signals</p>
-        <div className="flex items-center gap-2 text-xs text-base-content/50">
+        <p className="text-[12.5px] text-base-content/40 uppercase tracking-wide">Buying signals</p>
+        <div className="flex items-center gap-2 text-[13.5px] text-base-content/50">
           {d.score?.agent_id && <Link className="underline" href={`/agents/${d.score.agent_id}`}>{d.score.agent_name}</Link>}
           <span>Intent {Math.round(d.score?.intent_score ?? 0)}</span>
           <ScoreBadge score={d.score?.lead_score} verdict={d.score?.fit_verdict} />
         </div>
       </div>
-      {d.score?.fit_reason && <p className="text-sm text-base-content/70">{d.score.fit_reason}</p>}
+      {d.score?.fit_reason && <p className="text-[15px] text-base-content/70">{d.score.fit_reason}</p>}
       <ol className="space-y-2">
         {d.signals.map((s) => (
           <li key={s.id} className="flex gap-3">
             <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-base-content/30" />
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2"><SignalChip type={s.type} /><span className="text-sm font-medium">{s.title}</span><span className="text-xs text-base-content/40">{timeAgo(s.occurred_at)}</span></div>
-              {s.snippet && <p className="mt-0.5 text-sm text-base-content/60">{s.snippet}</p>}
-              {s.source_url && <a className="inline-flex items-center gap-1 text-xs text-base-content/45 underline" href={s.source_url} target="_blank" rel="noreferrer">Source <RiExternalLinkLine size={11} /></a>}
+              <div className="flex flex-wrap items-center gap-2"><SignalChip type={s.type} /><span className="text-[15px] font-medium">{s.title}</span><span className="text-[13.5px] text-base-content/40">{timeAgo(s.occurred_at)}</span></div>
+              {s.snippet && <p className="mt-0.5 text-[15px] text-base-content/60">{s.snippet}</p>}
+              {s.source_url && <a className="inline-flex items-center gap-1 text-[13.5px] text-base-content/45 underline" href={s.source_url} target="_blank" rel="noreferrer">Source <RiExternalLinkLine size={11} /></a>}
             </div>
           </li>
         ))}

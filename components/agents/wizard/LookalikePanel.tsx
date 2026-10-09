@@ -20,7 +20,7 @@ function Dropdown({ label, value, placeholder, children, small }: { label: strin
   return (
     <div ref={wrap} className="relative">
       <button type="button" aria-haspopup="listbox" aria-expanded={open} aria-label={label} onClick={() => setOpen(!open)}
-        className={`flex w-full items-center gap-2 rounded-[8px] border bg-base-100 px-4 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${small ? "h-10 text-sm" : "h-12 text-[17px]"} ${open ? "border-primary/60" : "border-[var(--border-subtle)] hover:bg-base-200/40"}`}>
+        className={`flex w-full items-center gap-2 rounded-[8px] border bg-base-100 px-4 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${small ? "h-10 text-[15px]" : "h-12 text-[17px]"} ${open ? "border-primary/60" : "border-[var(--border-subtle)] hover:bg-base-200/40"}`}>
         <span className={`min-w-0 flex-1 truncate ${value ? "text-base-content" : "text-base-content/55"}`}>{value ?? placeholder}</span>
         <RiArrowDownSLine size={22} className={`shrink-0 text-base-content/55 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>

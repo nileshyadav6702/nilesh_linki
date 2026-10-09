@@ -46,7 +46,7 @@ export function FloatingMenu({ anchor, items, onClose, label, width = 240 }: { a
   return createPortal(
     <div ref={ref} role="menu" aria-label={label} onKeyDown={onKey} onClick={(e) => e.stopPropagation()}
       style={{ position: "fixed", top: -9999, left: -9999, width }}
-      className="z-[60] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 text-left text-sm shadow-[var(--shadow-overlay)]">
+      className="z-[60] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 text-left text-[15px] shadow-[var(--shadow-overlay)]">
       {items.map((it, i) => (
         <button key={i} type="button" role="menuitem" disabled={it.disabled}
           onClick={() => { onClose(); it.onSelect(); }}
@@ -67,7 +67,7 @@ export function MenuButton({ icon, label, items, disabled }: { icon: ReactNode; 
     <>
       <button type="button" aria-haspopup="menu" aria-expanded={!!anchor} disabled={disabled}
         onClick={(e) => setAnchor(anchor ? null : e.currentTarget)}
-        className="inline-flex h-10 shrink-0 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3.5 text-sm font-medium text-base-content/75 transition-colors hover:bg-base-200 disabled:opacity-50">
+        className="inline-flex h-10 shrink-0 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3.5 text-[15px] font-medium text-base-content/75 transition-colors hover:bg-base-200 disabled:opacity-50">
         <span className="text-base-content/45">{icon}</span>{label}<RiArrowDownSLine size={16} className={`text-base-content/40 transition-transform ${anchor ? "rotate-180" : ""}`} />
       </button>
       {anchor && <FloatingMenu anchor={anchor} items={items} label={label} onClose={() => setAnchor(null)} width={260} />}

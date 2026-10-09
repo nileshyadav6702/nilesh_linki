@@ -12,14 +12,14 @@ function host(url: string | null): string | null {
 
 export function SignalCell({ lead }: { lead: LeadRowData }) {
   const s = lead.signals[0];
-  if (!s) return <span className="text-xs text-base-content/30">—</span>;
+  if (!s) return <span className="text-[13.5px] text-base-content/30">—</span>;
   const line = signalLine(s);
   const more = (lead.signal_count ?? lead.signals.length) - 1;
   const sub = line.sub ?? (s.snippet ? `"${s.snippet}"` : null) ?? host(s.source_url) ?? SIGNAL_LABEL[s.type] ?? s.type;
   return (
     <div className="min-w-0">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 truncate text-[13px] text-base-content/80">
+        <span className="min-w-0 truncate text-[14.5px] text-base-content/80">
           {line.lead}
           {line.link && (line.href
             ? <a href={line.href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-primary underline underline-offset-2 hover:opacity-80">{line.link}</a>
@@ -28,7 +28,7 @@ export function SignalCell({ lead }: { lead: LeadRowData }) {
         </span>
         {more > 0 && <Pill className="shrink-0">+{more} signal{more > 1 ? "s" : ""}</Pill>}
       </div>
-      <div className="truncate text-xs text-base-content/45">{sub}</div>
+      <div className="truncate text-[13.5px] text-base-content/45">{sub}</div>
     </div>
   );
 }
@@ -54,12 +54,12 @@ function localTime(iso: string): string {
 
 /** "Invitation · Completed — Step 1 → Message · Next — Step 2 · Waiting for …" (prev → next). */
 export function OutreachCell({ outreach }: { outreach: Outreach | null }) {
-  if (!outreach || (!outreach.prev && !outreach.next)) return <span className="whitespace-nowrap text-[13px] text-base-content/45">Not contacted yet</span>;
+  if (!outreach || (!outreach.prev && !outreach.next)) return <span className="whitespace-nowrap text-[14.5px] text-base-content/45">Not contacted yet</span>;
   const { prev, next } = outreach;
   const waiting = outreach.waiting && outreach.next_at && outreach.waiting.startsWith("Waiting until") ? `Waiting until ${localTime(outreach.next_at)}` : outreach.waiting;
   const ended = !next && outreach.state !== "in_progress" && outreach.state !== "pending";
   return (
-    <div className="flex items-start gap-2.5 text-[13px] leading-snug">
+    <div className="flex items-start gap-2.5 text-[14.5px] leading-snug">
       {prev && (
         <div className="min-w-0 max-w-[140px]">
           <div className="font-medium text-base-content/85">{prev.label}{prev.accepted && <span className="font-normal text-[#3a8c4f]"> (Accepted)</span>}</div>
@@ -80,7 +80,7 @@ export function OutreachCell({ outreach }: { outreach: Outreach | null }) {
   );
 }
 
-const reviewBtn = "inline-flex h-7 items-center rounded-[6px] border border-[var(--border-subtle)] bg-base-100 px-2.5 text-xs font-medium transition-colors";
+const reviewBtn = "inline-flex h-7 items-center rounded-[6px] border border-[var(--border-subtle)] bg-base-100 px-2.5 text-[13.5px] font-medium transition-colors";
 
 export function ApprovalCell({ lead, onReject, onReview }: { lead: LeadRowData; onReject: () => void; onReview: () => void }) {
   const s = lead.agent_status ?? "";
@@ -92,7 +92,7 @@ export function ApprovalCell({ lead, onReject, onReview }: { lead: LeadRowData; 
     : s === "needs_data" ? <span title="Missing headline and about — scored once the profile is enriched"><Pill tone="amber">Needs profile data</Pill></span>
     : s === "qualified" ? <Pill tone="teal">Qualified</Pill>
     : s === "new" ? <Pill tone="ink">Scoring</Pill>
-    : <span className="text-xs text-base-content/35">—</span>;
+    : <span className="text-[13.5px] text-base-content/35">—</span>;
   return (
     <div className="flex items-center gap-2">
       {pill}

@@ -1,11 +1,12 @@
 import Link from "next/link";
+import { LuBot, LuSend, LuShieldCheck, LuSlidersHorizontal } from "react-icons/lu";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   RiArrowDownSLine, RiCheckboxCircleFill, RiDeleteBinLine, RiErrorWarningLine, RiInformationLine, RiLineChartLine, RiLinkedinBoxFill,
   RiMailLine, RiSave3Line, RiSendPlaneLine, RiSettings3Line, RiUserAddLine,
 } from "react-icons/ri";
-import { Avatar, Field, inputCls, Panel, Pill, primaryBtn } from "@/components/agents/ui";
+import { Avatar, Field, IconTile, inputCls, Panel, Pill, primaryBtn } from "@/components/agents/ui";
 import { Tip } from "@/components/agents/campaign/kit";
 import { parseDays } from "@/components/agents/settings/kit";
 import LinkedInAccountDrawer from "@/components/agents/settings/LinkedInAccountDrawer";
@@ -78,12 +79,12 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
   return (
     <div className="space-y-6 pb-24">
       <Panel className="p-6">
-        <h2 className="font-display text-[22px] leading-tight text-base-content">Agent Name</h2>
+        <h2 className="flex items-center gap-3 text-[20px] font-semibold leading-tight text-base-content"><IconTile icon={<LuBot size={20} />} tone="coral" size={40} />Agent Name</h2>
         <input className={`${inputCls} mt-4 max-w-xl`} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
       </Panel>
 
       <Panel className="p-6">
-        <h2 className="font-display text-[22px] leading-tight text-base-content">Senders</h2>
+        <h2 className="flex items-center gap-3 text-[20px] font-semibold leading-tight text-base-content"><IconTile icon={<LuSend size={20} />} tone="linkedin" size={40} />Senders</h2>
         <div className="mt-5 space-y-3">
           {initial.linkedin_account_id ? (
             <SenderRow
@@ -112,12 +113,12 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
       </Panel>
 
       <Panel className="p-6">
-        <h2 className="font-display text-[22px] leading-tight text-base-content">Review Mode</h2>
+        <h2 className="flex items-center gap-3 text-[20px] font-semibold leading-tight text-base-content"><IconTile icon={<LuShieldCheck size={20} />} tone="amber" size={40} />Review Mode</h2>
         <label className="mt-4 flex cursor-pointer items-start gap-3">
           <input type="checkbox" className="checkbox checkbox-sm checkbox-primary mt-0.5" checked={f.mode === "copilot"} onChange={(e) => setF({ ...f, mode: e.target.checked ? "copilot" : "autopilot" })} />
           <span>
             <span className="block font-medium text-base-content">Enable Review Mode</span>
-            <span className="mt-0.5 block text-sm text-base-content/55">When enabled, you approve each lead&apos;s messages before anything is sent. When off, the agent sends on autopilot after the review delay.</span>
+            <span className="mt-0.5 block text-[15px] text-base-content/55">When enabled, you approve each lead&apos;s messages before anything is sent. When off, the agent sends on autopilot after the review delay.</span>
           </span>
         </label>
       </Panel>
@@ -125,8 +126,8 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
       <Panel>
         <button type="button" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced} className="flex w-full items-center justify-between gap-3 px-6 py-5 text-left">
           <span>
-            <span className="block font-display text-[22px] leading-tight text-base-content">Advanced</span>
-            <span className="mt-1 block text-sm text-base-content/55">Lead scoring, daily lead volume, autopilot delay and email finding.</span>
+            <span className="flex items-center gap-3 text-[20px] font-semibold leading-tight text-base-content"><IconTile icon={<LuSlidersHorizontal size={20} />} tone="ink" size={40} />Advanced</span>
+            <span className="mt-1 block text-[15px] text-base-content/55">Lead scoring, daily lead volume, autopilot delay and email finding.</span>
           </span>
           <RiArrowDownSLine size={20} className={`shrink-0 text-base-content/45 transition-transform ${advanced ? "rotate-180" : ""}`} />
         </button>
@@ -138,7 +139,7 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
               <Field label="Leads per day"><input type="number" min={1} max={500} className={inputCls} value={f.daily_lead_cap} onChange={(e) => setF({ ...f, daily_lead_cap: Number(e.target.value) })} /></Field>
               <Field label="Autopilot delay (min)" hint="How long a draft waits for review before autopilot sends it"><input type="number" min={0} className={inputCls} value={f.autopilot_delay_minutes} onChange={(e) => setF({ ...f, autopilot_delay_minutes: Number(e.target.value) })} /></Field>
             </div>
-            <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="checkbox checkbox-sm checkbox-primary" checked={!!f.enrich_emails} onChange={(e) => setF({ ...f, enrich_emails: e.target.checked ? 1 : 0 })} /> Find emails for qualified leads (waterfall)</label>
+            <label className="flex items-center gap-2 text-[15px]"><input type="checkbox" className="checkbox checkbox-sm checkbox-primary" checked={!!f.enrich_emails} onChange={(e) => setF({ ...f, enrich_emails: e.target.checked ? 1 : 0 })} /> Find emails for qualified leads (waterfall)</label>
           </div>
         )}
       </Panel>
@@ -167,13 +168,13 @@ function SenderRow({ lead, name, kind, status, stats, onRemove, onSettings }: {
       {lead}
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2"><span className="truncate font-medium text-base-content">{name}</span>{status}</div>
-        <div className="text-[13px] text-base-content/50">{kind}</div>
+        <div className="text-[14.5px] text-base-content/50">{kind}</div>
       </div>
       {stats.length > 0 && <span className="hidden h-8 w-px bg-[var(--border-subtle)] sm:block" />}
-      <div className="flex flex-wrap gap-2">{stats.map((s, i) => <span key={i} className="inline-flex items-center gap-1 rounded-[6px] bg-primary/[0.07] px-2 py-1 text-[13px] tabular-nums text-base-content/75">{s}</span>)}</div>
+      <div className="flex flex-wrap gap-2">{stats.map((s, i) => <span key={i} className="inline-flex items-center gap-1 rounded-[6px] bg-primary/[0.07] px-2 py-1 text-[14.5px] tabular-nums text-base-content/75">{s}</span>)}</div>
       <div className="ml-auto flex items-center gap-4">
-        <button type="button" onClick={onRemove} className="inline-flex items-center gap-1 text-sm font-medium text-error hover:underline"><RiDeleteBinLine size={15} /> Remove</button>
-        <button type="button" onClick={onSettings} className="inline-flex items-center gap-1 text-sm font-medium text-base-content hover:text-primary"><RiSettings3Line size={15} /> Settings &amp; Limits</button>
+        <button type="button" onClick={onRemove} className="inline-flex items-center gap-1 text-[15px] font-medium text-error hover:underline"><RiDeleteBinLine size={15} /> Remove</button>
+        <button type="button" onClick={onSettings} className="inline-flex items-center gap-1 text-[15px] font-medium text-base-content hover:text-primary"><RiSettings3Line size={15} /> Settings &amp; Limits</button>
       </div>
     </div>
   );
@@ -190,7 +191,7 @@ function SenderPicker({ kind, onPick }: { kind: "linkedin" | "email"; onPick: (i
   const label = kind === "linkedin" ? "Select a LinkedIn sender for this campaign" : "Select an email sender for this campaign";
   return (
     <div className="relative">
-      <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-center gap-2 rounded-[12px] border border-dashed border-base-content/20 bg-base-100/60 px-5 py-4 text-sm text-base-content/55 hover:border-primary/40 hover:text-base-content">
+      <button type="button" onClick={() => setOpen(!open)} className="flex w-full items-center justify-center gap-2 rounded-[12px] border border-dashed border-base-content/20 bg-base-100/60 px-5 py-4 text-[15px] text-base-content/55 hover:border-primary/40 hover:text-base-content">
         {kind === "linkedin" ? <RiLinkedinBoxFill size={18} className="text-[#0a66c2]" /> : <RiMailLine size={18} className="text-error" />}
         {label}
         <Tip text={kind === "linkedin" ? "Invitations, messages, visits and likes are sent from this LinkedIn account." : "Email steps are sent from this mailbox. Without one, email steps are skipped."}>
@@ -199,14 +200,14 @@ function SenderPicker({ kind, onPick }: { kind: "linkedin" | "email"; onPick: (i
       </button>
       {open && (
         <div className="absolute left-1/2 z-30 mt-1 w-80 -translate-x-1/2 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 py-1 shadow-[var(--shadow-overlay)]">
-          {options === null ? <p className="px-4 py-3 text-sm text-base-content/45">Loading…</p>
+          {options === null ? <p className="px-4 py-3 text-[15px] text-base-content/45">Loading…</p>
             : options.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-base-content/60">No {kind === "linkedin" ? "LinkedIn account" : "mailbox"} connected yet. <Link href="/settings" className="font-medium text-primary hover:underline">Connect one in Settings</Link></p>
+              <p className="px-4 py-3 text-[15px] text-base-content/60">No {kind === "linkedin" ? "LinkedIn account" : "mailbox"} connected yet. <Link href="/settings" className="font-medium text-primary hover:underline">Connect one in Settings</Link></p>
             ) : options.map((o) => (
-              <button key={o.id} type="button" onClick={() => { setOpen(false); onPick(o.id); }} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-base-200">
+              <button key={o.id} type="button" onClick={() => { setOpen(false); onPick(o.id); }} className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-[15px] hover:bg-base-200">
                 {kind === "linkedin" ? <Avatar name={o.name || o.email || "L"} size={28} /> : <RiMailLine size={18} className="text-error" />}
                 <span className="min-w-0 flex-1 truncate">{kind === "linkedin" ? (o.name || o.email) : (o.from_email || o.name)}</span>
-                {kind === "linkedin" && o.is_authenticated === 0 && <span className="text-xs text-error">Logged out</span>}
+                {kind === "linkedin" && o.is_authenticated === 0 && <span className="text-[13.5px] text-error">Logged out</span>}
               </button>
             ))}
         </div>

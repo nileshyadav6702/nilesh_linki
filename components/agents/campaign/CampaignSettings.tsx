@@ -17,8 +17,8 @@ const TONES = [
 function Caption({ title, sub }: { title: string; sub?: string }) {
   return (
     <div className="mb-4">
-      <div className="text-[12px] font-medium uppercase tracking-[1.5px] text-base-content/50">{title}</div>
-      {sub && <div className="mt-0.5 text-sm text-base-content/55">{sub}</div>}
+      <div className="text-[13.5px] font-medium uppercase tracking-[1.5px] text-base-content/50">{title}</div>
+      {sub && <div className="mt-0.5 text-[15px] text-base-content/55">{sub}</div>}
     </div>
   );
 }
@@ -43,7 +43,7 @@ export default function CampaignSettings({ agentId, initial, onClose, onSaved }:
   return (
     <SideDrawer title="Campaign settings" icon={<RiSettings3Line size={20} className="text-base-content/70" />} onClose={onClose} width={620}
       footer={<>
-        <button type="button" className="h-10 px-4 text-sm font-medium text-base-content/70 hover:text-base-content" onClick={onClose}>Cancel</button>
+        <button type="button" className="h-10 px-4 text-[15px] font-medium text-base-content/70 hover:text-base-content" onClick={onClose}>Cancel</button>
         <button type="button" className={primaryBtn} disabled={busy} onClick={save}>Save settings</button>
       </>}>
       <section className="border-b border-[var(--border-subtle)] pb-6">
@@ -57,7 +57,7 @@ export default function CampaignSettings({ agentId, initial, onClose, onSaved }:
                 <button key={g.value} type="button" onClick={() => setGoal(g.value)} aria-pressed={on}
                   className={`rounded-[10px] border px-4 py-3 text-left transition-colors ${on ? "border-primary/60 bg-primary/[0.06]" : "border-[var(--border-subtle)] bg-base-100 hover:bg-base-200/60"}`}>
                   <span className={`flex items-center gap-1.5 text-[15px] font-medium ${on ? "text-primary" : "text-base-content"}`}>{on && <RiCheckLine size={16} />}{g.title}</span>
-                  <span className="mt-0.5 block text-[13px] text-base-content/55">{g.sub}</span>
+                  <span className="mt-0.5 block text-[14.5px] text-base-content/55">{g.sub}</span>
                 </button>
               );
             })}
@@ -80,7 +80,7 @@ export default function CampaignSettings({ agentId, initial, onClose, onSaved }:
         <div className="flex items-center justify-between gap-4 rounded-[12px] border border-[var(--border-subtle)] px-5 py-4">
           <div className="min-w-0">
             <div className="font-medium text-base-content">Automatically exclude first-degree connections</div>
-            <div className="mt-0.5 text-sm text-base-content/55">Skips people already in your LinkedIn network</div>
+            <div className="mt-0.5 text-[15px] text-base-content/55">Skips people already in your LinkedIn network</div>
           </div>
           <Toggle on={exclude} onChange={() => setExclude((v) => !v)} label="Automatically exclude first-degree connections" />
         </div>

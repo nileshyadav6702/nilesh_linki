@@ -25,7 +25,7 @@ export function ChipInput({ values, onChange, placeholder, validate }: { values:
       {values.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {values.map((v) => (
-            <span key={v} className="inline-flex max-w-full items-center gap-1.5 rounded-[8px] border border-primary/30 bg-primary/5 px-2.5 py-1 text-[13px] text-primary">
+            <span key={v} className="inline-flex max-w-full items-center gap-1.5 rounded-[8px] border border-primary/30 bg-primary/5 px-2.5 py-1 text-[14.5px] text-primary">
               <span className="truncate">{v}</span>
               <button type="button" onClick={() => onChange(values.filter((x) => x !== v))} aria-label={`Remove ${v}`} className="text-primary/60 hover:text-error"><RiCloseLine size={13} /></button>
             </span>
@@ -34,9 +34,9 @@ export function ChipInput({ values, onChange, placeholder, validate }: { values:
       )}
       <div className="flex gap-2">
         <input className={inputCls} placeholder={placeholder} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }} />
-        <button type="button" className={ghostBtn + " !h-10 border border-[var(--border-subtle)] bg-base-200 px-4 !text-sm"} disabled={!text.trim()} onClick={add}><RiAddLine size={14} /> Add</button>
+        <button type="button" className={ghostBtn + " !h-10 border border-[var(--border-subtle)] bg-base-200 px-4 !text-[15px]"} disabled={!text.trim()} onClick={add}><RiAddLine size={14} /> Add</button>
       </div>
-      {error && <p className="text-xs text-error">{error}</p>}
+      {error && <p className="text-[13.5px] text-error">{error}</p>}
     </div>
   );
 }
@@ -55,7 +55,7 @@ function Group({ icon, tone, title, subtitle, active, children, defaultOpen, act
           <IconTile icon={icon} tone={tone} />
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2 text-[15px] font-medium text-base-content">{title}{active > 0 && <Pill tone="coral">{active} active</Pill>}</span>
-            <span className="block text-[13px] text-base-content/50">{subtitle}</span>
+            <span className="block text-[14.5px] text-base-content/50">{subtitle}</span>
           </span>
         </button>
         {open && action}
@@ -71,7 +71,7 @@ function Group({ icon, tone, title, subtitle, active, children, defaultOpen, act
 function SwitchRow({ label, hint, checked, onChange, disabled }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <div className={`flex items-start justify-between gap-4 ${disabled ? "opacity-50" : ""}`}>
-      <span><span className="block text-sm font-medium text-base-content">{label}</span>{hint && <span className="block text-xs text-base-content/50">{hint}</span>}</span>
+      <span><span className="block text-[15px] font-medium text-base-content">{label}</span>{hint && <span className="block text-[13.5px] text-base-content/50">{hint}</span>}</span>
       <Toggle on={checked} disabled={disabled} label={label} onChange={() => onChange(!checked)} />
     </div>
   );
@@ -110,11 +110,11 @@ export default function SourcePicker({ value, onChange, hasLinkedIn, suggestions
 
   return (
     <div className="space-y-3">
-      {li && <p className="rounded-[12px] bg-[#e8a55a]/15 px-4 py-3 text-[13px] text-[#8a5a1f]">Connect a LinkedIn account in Settings to track LinkedIn signals. Job boards and news work without one.</p>}
+      {li && <p className="rounded-[12px] bg-[#e8a55a]/15 px-4 py-3 text-[14.5px] text-[#8a5a1f]">Connect a LinkedIn account in Settings to track LinkedIn signals. Job boards and news work without one.</p>}
 
       <Group icon={<RiPriceTag3Line size={18} />} tone="coral" title="Keyword engagement" subtitle="People engaging with topics related to your solution" active={kw.length} defaultOpen
         action={suggestions?.keywords?.length ? (
-          <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-primary px-3 text-xs font-medium text-primary-content hover:bg-[var(--primary-hover)]" onClick={() => put("keyword_engagement", { keywords: [...new Set([...kw, ...suggestions.keywords!])].slice(0, 15) })}>
+          <button type="button" className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-primary px-3 text-[13.5px] font-medium text-primary-content hover:bg-[var(--primary-hover)]" onClick={() => put("keyword_engagement", { keywords: [...new Set([...kw, ...suggestions.keywords!])].slice(0, 15) })}>
             <RiSparkling2Line size={14} /> Generate with AI
           </button>
         ) : undefined}>
@@ -130,7 +130,7 @@ export default function SourcePicker({ value, onChange, hasLinkedIn, suggestions
           <button type="button" className={ghostBtn} onClick={() => put("competitor_engagement", { urls: [...new Set([...urls("competitor_engagement"), ...suggestions.competitorUrls!])] })}><RiMagicLine size={13} /> Add competitors from your ICP</button>
         ) : null}
         <ChipInput values={urls("competitor_engagement")} onChange={(v) => put("competitor_engagement", { urls: v })} placeholder="https://www.linkedin.com/company/competitor" validate={linkedinUrl("any")} />
-        <p className="text-xs text-base-content/45">Competitors&apos; own employees are filtered out automatically.</p>
+        <p className="text-[13.5px] text-base-content/45">Competitors&apos; own employees are filtered out automatically.</p>
       </Group>
 
       <Group icon={<RiEyeLine size={18} />} tone="success" title="People aware of your brand" subtitle="Re-engage people who engage with you and your company" active={urls("own_content_engagement").length}>

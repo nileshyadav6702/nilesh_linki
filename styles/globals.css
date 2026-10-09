@@ -148,6 +148,20 @@ h4, h5, h6 {
   letter-spacing: -0.02em;
 }
 
+/* daisyUI checkboxes render borderless (invisible) when unchecked on this theme. */
+.checkbox:not(:checked) {
+  border: 1.5px solid var(--border-strong);
+  background-color: var(--color-base-100);
+}
+
+/* Inside the app shell, headings use the clean sans of Settings / Integrations; the serif stays for
+   marketing-style screens (login, onboarding) that live outside the shell. */
+.app-sans h1, .app-sans h2, .app-sans h3, .app-sans .font-display {
+  font-family: var(--font-sans);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
 .onboard-title,
 .onboard-title h2,
 .onboard-title p {

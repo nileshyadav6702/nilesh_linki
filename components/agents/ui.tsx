@@ -1,20 +1,21 @@
 import type { ReactNode } from "react";
+import { motion } from "motion/react";
 
 /** Shared building blocks for the AI SDR screens, following the Linki design system. */
 
-export const inputCls = "w-full h-10 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-sm text-base-content outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)] transition";
-export const textareaCls = "w-full rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-sm text-base-content outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)] transition";
-export const primaryBtn = "inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-[8px] text-sm font-medium bg-primary text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-[#e6dfd8] disabled:text-[#8e8b82] transition-colors shrink-0";
-export const secondaryBtn = "inline-flex items-center justify-center gap-1.5 h-10 px-5 rounded-[8px] text-sm font-medium border border-[var(--border-subtle)] bg-base-100 text-base-content hover:bg-base-200 disabled:opacity-50 transition-colors shrink-0";
-export const ghostBtn = "inline-flex items-center justify-center gap-1 h-8 px-2.5 rounded-[8px] text-xs font-medium text-base-content/60 hover:text-base-content hover:bg-base-200 disabled:opacity-50 transition-colors";
+export const inputCls = "w-full h-11 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3 text-[15px] text-base-content outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)] transition";
+export const textareaCls = "w-full rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-[15px] text-base-content outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)] transition";
+export const primaryBtn = "inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-[10px] text-[15.5px] font-semibold bg-primary shadow-[0_6px_16px_-8px_var(--color-primary)] text-primary-content hover:bg-[var(--primary-hover)] disabled:bg-[#e6dfd8] disabled:text-[#8e8b82] transition-colors shrink-0";
+export const secondaryBtn = "inline-flex items-center justify-center gap-1.5 h-11 px-5 rounded-[10px] text-[15.5px] font-medium border border-[var(--border-subtle)] bg-base-100 text-base-content hover:bg-base-200 disabled:opacity-50 transition-colors shrink-0";
+export const ghostBtn = "inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-[8px] text-[14.5px] font-medium text-base-content/60 hover:text-base-content hover:bg-base-200 disabled:opacity-50 transition-colors";
 
 export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow: string; title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
       <div className="min-w-0">
-        <p className="mb-2 text-[13px] font-medium text-base-content/45">{eyebrow}</p>
-        <h1 className="font-display text-[32px] leading-[1.1] text-base-content">{title}</h1>
-        {subtitle && <p className="mt-2 text-[15px] text-base-content/50">{subtitle}</p>}
+        <p className="mb-2 text-[14.5px] font-medium text-base-content/45">{eyebrow}</p>
+        <h1 className="text-[26px] font-semibold leading-[1.15] text-base-content">{title}</h1>
+        {subtitle && <p className="mt-1.5 text-[16px] text-base-content/65">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -22,19 +23,19 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: { eyebrow: str
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-[12px] border border-[var(--border-subtle)] bg-base-300 p-5 ${className}`}>{children}</div>;
+  return <div className={`rounded-[16px] border border-[var(--border-subtle)] bg-base-300 p-6 ${className}`}>{children}</div>;
 }
 
 /** Canvas card with a hairline border, for data-dense content (tables, lists, forms). Card is the cream feature card. */
 export function Panel({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`rounded-[12px] border border-[var(--border-subtle)] bg-base-100 ${className}`}>{children}</div>;
+  return <div className={`rounded-[16px] border border-[var(--border-subtle)] bg-base-100 ${className}`}>{children}</div>;
 }
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-300 px-6 py-14 text-center">
-      <p className="text-sm font-medium text-base-content/70">{title}</p>
-      {children && <div className="mt-2 text-sm text-base-content/45">{children}</div>}
+    <div className="rounded-[16px] border border-dashed border-[var(--border-strong)] bg-base-100 px-6 py-14 text-center">
+      <p className="text-[18px] font-medium text-base-content/80">{title}</p>
+      {children && <div className="mt-2 text-[15px] text-base-content/45">{children}</div>}
     </div>
   );
 }
@@ -42,9 +43,9 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
 export function Field({ label, hint, required, children }: { label: string; hint?: ReactNode; required?: boolean; children: ReactNode }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-[13px] font-medium text-base-content/70">{label}{required && <span className="text-primary"> *</span>}</span>
+      <span className="text-[15.5px] font-medium text-base-content/80">{label}{required && <span className="text-primary"> *</span>}</span>
       {children}
-      {hint && <span className="block text-xs text-base-content/45">{hint}</span>}
+      {hint && <span className="block text-[13.5px] text-base-content/45">{hint}</span>}
     </label>
   );
 }
@@ -56,9 +57,9 @@ const VERDICT: Record<string, string> = {
 };
 
 export function ScoreBadge({ score, verdict }: { score: number | null | undefined; verdict?: string | null }) {
-  if (score === null || score === undefined) return <span className="text-xs text-base-content/35">Unscored</span>;
+  if (score === null || score === undefined) return <span className="text-[13.5px] text-base-content/35">Unscored</span>;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${VERDICT[verdict ?? ""] ?? "bg-base-200 text-base-content/70"}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[13.5px] font-semibold tabular-nums ${VERDICT[verdict ?? ""] ?? "bg-base-200 text-base-content/70"}`}>
       {Math.round(score)}
       {verdict && <span className="font-medium capitalize opacity-80">· {verdict}</span>}
     </span>
@@ -67,7 +68,7 @@ export function ScoreBadge({ score, verdict }: { score: number | null | undefine
 
 /** Lead score as 1-3 flames, the way sales teams scan a list. */
 export function Flames({ score }: { score: number | null | undefined }) {
-  if (score === null || score === undefined) return <span className="text-xs text-base-content/30">—</span>;
+  if (score === null || score === undefined) return <span className="text-[13.5px] text-base-content/30">—</span>;
   const n = score >= 70 ? 3 : score >= 50 ? 2 : 1;
   return (
     <span className="inline-flex items-center gap-0.5" title={`Lead score ${Math.round(score)}`} aria-label={`Lead score ${Math.round(score)}`}>
@@ -98,7 +99,7 @@ export const SIGNAL_LABEL: Record<string, string> = {
 };
 
 export function SignalChip({ type }: { type: string }) {
-  return <span className="inline-flex items-center rounded-full border border-[var(--border-subtle)] bg-base-200 px-2 py-0.5 text-[11px] font-medium text-base-content/70">{SIGNAL_LABEL[type] ?? type}</span>;
+  return <span className="inline-flex items-center rounded-full border border-[var(--border-subtle)] bg-base-200 px-2 py-0.5 text-[12.5px] font-medium text-base-content/70">{SIGNAL_LABEL[type] ?? type}</span>;
 }
 
 const STATUS: Record<string, string> = {
@@ -112,7 +113,7 @@ const STATUS_TEXT: Record<string, string> = { needs_data: "Needs profile data" }
 export function StatusDot({ status }: { status: string | null | undefined }) {
   const s = status ?? "new";
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${STATUS_TEXT[s] ? "" : "capitalize"} ${STATUS[s] ?? "text-base-content/60"}`}>
+    <span className={`inline-flex items-center gap-1.5 text-[13.5px] font-medium ${STATUS_TEXT[s] ? "" : "capitalize"} ${STATUS[s] ?? "text-base-content/60"}`}>
       <span className="h-1.5 w-1.5 rounded-full bg-current" />{STATUS_TEXT[s] ?? s}
     </span>
   );
@@ -151,7 +152,7 @@ export function IconTile({ icon, tone = "coral", size = 40, className = "" }: { 
 /** badge-pill: small cream label. `tone` tints it for status. */
 export function Pill({ children, tone, className = "" }: { children: ReactNode; tone?: Tone; className?: string }) {
   const cls = tone ? TONE[tone] : "bg-base-200 text-base-content/70";
-  return <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-medium ${cls} ${className}`}>{children}</span>;
+  return <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-[14px] font-medium ${cls} ${className}`}>{children}</span>;
 }
 
 /** Serif section heading with an optional subtitle and right-side actions. */
@@ -159,8 +160,8 @@ export function SectionHeading({ title, subtitle, actions, className = "" }: { t
   return (
     <div className={`flex flex-wrap items-end justify-between gap-3 ${className}`}>
       <div className="min-w-0">
-        <h2 className="font-display text-[22px] leading-[1.2] text-base-content">{title}</h2>
-        {subtitle && <p className="mt-1 text-sm text-base-content/55">{subtitle}</p>}
+        <h2 className="text-[21px] font-semibold leading-[1.25] text-base-content">{title}</h2>
+        {subtitle && <p className="mt-1 text-[16px] text-base-content/65">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -170,15 +171,16 @@ export function SectionHeading({ title, subtitle, actions, className = "" }: { t
 /** Underlined tab row. `counts` shows a small number chip after a tab label. */
 export function TabBar<T extends string>({ tabs, value, onChange, counts = {}, icons = {} }: { tabs: readonly T[]; value: T; onChange: (t: T) => void; counts?: Partial<Record<T, number>>; icons?: Partial<Record<T, ReactNode>> }) {
   return (
-    <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-[var(--border-subtle)]">
+    <div role="tablist" className="flex gap-2 overflow-x-auto border-b border-[var(--border-subtle)]">
       {tabs.map((t) => {
         const on = t === value;
         return (
           <button key={t} role="tab" aria-selected={on} type="button" onClick={() => onChange(t)}
-            className={`-mb-px inline-flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3.5 py-3 text-sm font-medium transition-colors ${on ? "border-primary text-base-content" : "border-transparent text-base-content/45 hover:text-base-content/75"}`}>
+            className={`relative inline-flex items-center gap-2 whitespace-nowrap px-4 pb-3.5 pt-2 text-[16.5px] transition-colors ${on ? "font-medium text-base-content" : "text-base-content/50 hover:text-base-content/80"}`}>
             {icons[t] && <span className={on ? "text-primary" : ""}>{icons[t]}</span>}
             {t}
-            {counts[t] !== undefined && <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${on ? "bg-primary/10 text-primary" : "bg-base-200 text-base-content/55"}`}>{counts[t]}</span>}
+            {counts[t] !== undefined && <span className={`rounded-full px-2 py-px text-[13px] tabular-nums ${on ? "bg-primary/12 text-primary" : "bg-base-200 text-base-content/55"}`}>{counts[t]}</span>}
+            {on && <motion.span layoutId="agent-tab-underline" transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }} className="absolute inset-x-2 -bottom-px h-[2.5px] rounded-full bg-primary" />}
           </button>
         );
       })}
@@ -194,9 +196,9 @@ export function Segmented<T extends string>({ options, value, onChange, counts =
         const on = o === value;
         return (
           <button key={o} type="button" onClick={() => onChange(o)}
-            className={`inline-flex h-8 items-center gap-1.5 rounded-[8px] border px-3 text-[13px] font-medium transition-colors ${on ? "border-primary/40 bg-primary/10 text-primary" : "border-[var(--border-subtle)] bg-base-100 text-base-content/65 hover:text-base-content"}`}>
+            className={`inline-flex h-9 items-center gap-1.5 rounded-[9px] border px-3.5 text-[15px] font-medium transition-colors ${on ? "border-primary/40 bg-primary/10 text-primary" : "border-[var(--border-subtle)] bg-base-100 text-base-content/65 hover:text-base-content"}`}>
             {labels[o] ?? <span className="capitalize">{o}</span>}
-            {counts[o] !== undefined && <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${on ? "bg-primary/15" : "bg-base-200"}`}>{counts[o]}</span>}
+            {counts[o] !== undefined && <span className={`rounded-full px-1.5 text-[12.5px] tabular-nums ${on ? "bg-primary/15" : "bg-base-200"}`}>{counts[o]}</span>}
           </button>
         );
       })}
@@ -215,14 +217,14 @@ export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChang
 }
 
 /** A KPI tile: label, big tabular number, optional hint and corner icon. */
-export function StatTile({ label, value, hint, icon, className = "" }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode; className?: string }) {
+export function StatTile({ label, value, hint, icon, tone = "ink", className = "" }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode; tone?: Tone; className?: string }) {
   return (
-    <div className={`rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-5 ${className}`}>
-      <div className="flex items-center justify-between gap-2 text-[13px] font-medium text-base-content/55">
-        <span>{label}</span>{icon && <span className="text-base-content/35">{icon}</span>}
+    <div className={`wizard-rise rounded-[16px] border border-[var(--border-subtle)] bg-base-100 p-5 transition-shadow hover:shadow-[0_8px_24px_-14px_rgba(0,0,0,0.2)] ${className}`}>
+      <div className="flex items-center justify-between gap-2 text-[15px] font-medium text-base-content/65">
+        <span>{label}</span>{icon && <IconTile icon={icon} tone={tone} size={36} />}
       </div>
-      <div className="mt-3 font-display text-[32px] leading-none tabular-nums text-base-content">{value}</div>
-      {hint && <div className="mt-2 text-xs text-base-content/50">{hint}</div>}
+      <div className="mt-3 text-[34px] font-semibold leading-none tabular-nums text-base-content">{value}</div>
+      {hint && <div className="mt-2 text-[14px] text-base-content/55">{hint}</div>}
     </div>
   );
 }
@@ -241,7 +243,7 @@ export function Avatar({ name, src, size = 36 }: { name: string | null | undefin
 /** Coral-tinted note band ("Nothing is sent without your green light…"). */
 export function Callout({ icon, title, children, tone = "coral" }: { icon?: ReactNode; title?: ReactNode; children?: ReactNode; tone?: Tone }) {
   return (
-    <div className={`flex items-start gap-3 rounded-[12px] px-4 py-3.5 text-sm ${TONE[tone]}`}>
+    <div className={`flex items-start gap-3 rounded-[12px] px-5 py-4 text-[16px] ${TONE[tone]}`}>
       {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
       <div className="min-w-0 leading-relaxed">{title && <span className="font-semibold">{title} </span>}<span className="opacity-90">{children}</span></div>
     </div>
@@ -285,8 +287,8 @@ export function RunSwitch({ label, on, onChange }: { label: string; on: boolean;
   return (
     <label className={`inline-flex h-10 items-center gap-2 rounded-[8px] border px-3 ${on ? "border-success/30 bg-success/10" : "border-[var(--border-subtle)] bg-base-100"}`}>
       <span className={`h-1.5 w-1.5 rounded-full ${on ? "bg-success" : "bg-base-content/25"}`} />
-      <span className="text-sm font-medium text-base-content">{label}</span>
-      <span className={`text-xs font-medium ${on ? "text-success" : "text-base-content/40"}`}>{on ? "On" : "Off"}</span>
+      <span className="text-[15px] font-medium text-base-content">{label}</span>
+      <span className={`text-[13.5px] font-medium ${on ? "text-success" : "text-base-content/40"}`}>{on ? "On" : "Off"}</span>
       <input type="checkbox" className="toggle toggle-sm toggle-success" checked={on} onChange={onChange} aria-label={label} />
     </label>
   );

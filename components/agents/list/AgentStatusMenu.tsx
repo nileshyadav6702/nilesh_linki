@@ -30,9 +30,9 @@ function Row({ icon, title, on, body, onToggle }: { icon: ReactNode; title: stri
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[15px] font-medium text-base-content">{title}</span>
-          <span className={`rounded-[4px] px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.06em] ${on ? "bg-success/10 text-success" : "bg-base-200 text-base-content/50"}`}>{on ? "Active" : "Paused"}</span>
+          <span className={`rounded-[4px] px-1.5 py-0.5 text-[12.5px] font-medium uppercase tracking-[0.06em] ${on ? "bg-success/10 text-success" : "bg-base-200 text-base-content/50"}`}>{on ? "Active" : "Paused"}</span>
         </div>
-        <p className="mt-0.5 text-[13px] leading-snug text-base-content/50">{body}</p>
+        <p className="mt-0.5 text-[14.5px] leading-snug text-base-content/50">{body}</p>
       </div>
       <Toggle on={on} onChange={onToggle} label={`${title} ${on ? "on" : "off"}`} />
     </div>
@@ -54,7 +54,7 @@ export default function AgentStatusMenu({ status, outreachOn, onSourcing, onOutr
   return (
     <div ref={wrap} className="relative shrink-0">
       <button type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        className={`inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 text-[13px] transition-colors ${PILL[state]}`}>
+        className={`inline-flex h-8 items-center gap-1.5 rounded-[6px] border px-2.5 text-[14.5px] transition-colors ${PILL[state]}`}>
         {state !== "paused" && state !== "draft" && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
         {LABEL[state]}
         <RiArrowDownSLine size={15} className={`transition-transform ${open ? "rotate-180" : ""}`} />
@@ -63,11 +63,11 @@ export default function AgentStatusMenu({ status, outreachOn, onSourcing, onOutr
         <div role="dialog" aria-label="Agent status" className="absolute left-0 top-full z-40 mt-2 w-[min(540px,calc(100vw-32px))] rounded-[14px] border border-[var(--border-subtle)] bg-base-100 p-5 shadow-[var(--shadow-overlay)]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <div className="text-[12px] font-medium uppercase tracking-[0.12em] text-base-content/45">Agent status</div>
+              <div className="text-[13.5px] font-medium uppercase tracking-[0.12em] text-base-content/45">Agent status</div>
               <div className="mt-0.5 text-[17px] text-base-content">{LABEL[state]}</div>
             </div>
             <button type="button" onClick={() => onAll(!anyOn)}
-              className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-base-content/60 px-4 text-sm text-base-content hover:bg-base-200">
+              className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-base-content/60 px-4 text-[15px] text-base-content hover:bg-base-200">
               {anyOn ? <><RiPauseLine size={15} /> Pause</> : <><RiPlayLine size={15} /> Resume</>}
             </button>
           </div>
