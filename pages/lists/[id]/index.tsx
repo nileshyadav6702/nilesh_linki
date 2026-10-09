@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { RiArrowDownSLine, RiArrowLeftSLine, RiDeleteBin6Line, RiDownload2Line, RiListUnordered, RiLoader4Line, RiPencilLine, RiSearchLine, RiSettings3Line } from "react-icons/ri";
+import { RiArrowDownSLine, RiArrowLeftSLine, RiDeleteBin6Line, RiDownload2Line, RiListUnordered, RiLoader4Line, RiPencilLine, RiSearchLine } from "react-icons/ri";
 import LeadDrawer from "@/components/agents/LeadDrawer";
 import { useDismiss } from "@/components/agents/leads/Listbox";
 import Confirm from "@/components/contacts/Confirm";
@@ -180,9 +180,6 @@ export default function ListDetail() {
             className="inline-flex h-11 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] px-4 text-[15px] hover:bg-base-200 disabled:text-base-content/40 disabled:hover:bg-transparent">
             <RiDownload2Line size={18} /> Export ({sel.length})
           </button>
-          <Link href={`/lists/${id}/manage`} title="Imports, enrichment and campaign history" className="inline-flex h-11 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] px-4 text-[15px] hover:bg-base-200">
-            <RiSettings3Line size={18} /> More tools
-          </Link>
         </div>
       </div>
 
@@ -208,7 +205,7 @@ export default function ListDetail() {
             : rows.length === 0 ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                 <div className="text-[18px]">{c.q ? "No contacts match your search" : "This list is empty"}</div>
-                <div className="text-[15px] text-base-content/55">{c.q ? "Try another name or company." : <>Import contacts from <Link href={`/lists/${id}/manage`} className="text-[#4f46e5] hover:underline">More tools</Link>.</>}</div>
+                <div className="text-[15px] text-base-content/55">{c.q ? "Try another name or company." : <>Add contacts from <Link href="/contacts" className="text-[#4f46e5] hover:underline">All contacts</Link> with Add to list.</>}</div>
               </div>
             ) : (
               <ContactsTable rows={rows} selected={selected} toggle={toggle} toggleAll={toggleAll} onOpen={setDrawer} onDecide={decide}
