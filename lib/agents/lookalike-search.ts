@@ -2,7 +2,8 @@ import { z } from "zod";
 import { aiJson } from "@/lib/ai/client";
 import { getDb } from "@/lib/db";
 import {
-  lookalikeSearchUrl, parseFlagshipProfile, publicIdFromUrl, rankLookalikes, type LookalikeLead, type LookalikeProfile, type LookalikeScope,
+  companyFacts, currentRoleFromExperience, lookalikeSearchUrl, parseFlagshipProfile, publicIdFromUrl, rankLookalikes,
+  type LookalikeLead, type LookalikeProfile, type LookalikeScope,
 } from "@/lib/agents/lookalike-rules";
 
 /**
@@ -58,18 +59,106 @@ export async function fetchLookalikeProfile(workspaceId: string, url: string, ac
   const profile = await onSession(account, async (ctx) => {
     const client = new VoyagerClient(ctx, account);
     try {
-      const bodies = await client.capturePage(`https://www.linkedin.com/in/${encodeURIComponent(publicId)}/`, { match: /\/voyager\/api\//, scrolls: 1 });
-      let found = parseFlagshipProfile(bodies, publicId, (img) => linkedInImageUrl(img));
-      // Fallback when the page rendered server-side: ask the profile endpoint directly.
+      // LinkedIn renders the profile's Experience server-side, so the page text is the reliable source for the current role.
+      const page = await readPage(ctx, account, `https://www.linkedin.com/in/${encodeURIComponent(publicId)}/`, PROFILE_DOM);
+      let found = parseFlagshipProfile(page.bodies, publicId, (img) => linkedInImageUrl(img));
       if (!found) {
-        const json = await client.get(`/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=${encodeURIComponent(publicId)}&decorationId=com.linkedin.voyager.dash.deco.identity.profile.WebTopCardCore-18`, { normalized: true });
+        const json = await client.get(`/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=${encodeURIComponent(publicId)}&decorationId=com.linkedin.voyager.dash.deco.identity.profile.WebTopCardCore-18`, { normalized: true }).catch(() => null);
         if (json) found = parseFlagshipProfile([JSON.stringify(json)], publicId, (img) => linkedInImageUrl(img));
       }
-      return found;
+      const dom = page.dom as ProfileDom | null;
+      const name = found?.name ?? dom?.name ?? null;
+      if (!name) return null;
+      const role = currentRoleFromExperience(dom?.experience ?? []);
+      const out: LookalikeProfile = found ?? {
+        name, headline: dom?.headline ?? null, title: null, company: null, location: null, geoId: null, industry: null, industryId: null,
+        photo: null, linkedinUrl: `https://www.linkedin.com/in/${publicId}/`,
+      };
+      out.location = out.location ?? dom?.location ?? null;
+      out.photo = out.photo ?? dom?.photo ?? null;
+      out.headline = out.headline ?? dom?.headline ?? null;
+      if (role?.title) out.title = role.title;
+      if (role?.company) out.company = role.company;
+      out.companyUrl = role?.companyUrl ?? null;
+      // The person's page no longer shows an industry; their employer's page does, with its headcount.
+      if (out.companyUrl) {
+        const company = await readPage(ctx, account, out.companyUrl, COMPANY_DOM).catch(() => null);
+        const facts = companyFacts((company?.dom as string[] | null) ?? []);
+        out.industry = out.industry ?? facts.industry;
+        out.companySize = facts.size;
+      }
+      return out;
     } finally { await client.close(); }
   });
   if (!profile) throw new LookalikeError(PROFILE_NOT_FOUND, 404);
   return profile;
+}
+
+interface ProfileDom { name: string | null; headline: string | null; location: string | null; photo: string | null; experience: Array<{ href: string; text: string }> }
+
+/** Runs in the page: name, headline, and every company link's text (Experience entries among them). */
+const PROFILE_DOM = (): ProfileDom => {
+  const name = document.querySelector("main h1")?.textContent?.trim() || document.title.replace(/^\(\d+\)\s*/, "").split("|")[0].trim() || null;
+  const lines = ((document.querySelector("main") as HTMLElement | null)?.innerText ?? "").split("\n").map((x) => x.trim()).filter(Boolean);
+  const at = name ? lines.indexOf(name) : -1;
+  const headline = at >= 0 ? lines.slice(at + 1, at + 5).find((l) => !/^(·|He\/Him|She\/Her|They\/Them|· \d(st|nd|rd))/.test(l) && l.length > 2) ?? null : null;
+  // Top card: "Name / pronouns / · 2nd / Headline / Location / · / Contact info".
+  const contact = lines.indexOf("Contact info");
+  const location = contact > 0 ? lines.slice(Math.max(at + 1, contact - 3), contact).reverse().find((l) => l !== "·" && l !== headline && l.length > 2) ?? null : null;
+  const img = Array.from(document.querySelectorAll("main img")).find((i) => /profile-displayphoto/.test((i as HTMLImageElement).src)) as HTMLImageElement | undefined;
+  const experience = Array.from(document.querySelectorAll("main a[href*='/company/']"))
+    .map((a) => ({ href: (a as HTMLAnchorElement).href, text: (a as HTMLElement).innerText ?? "" }))
+    .filter((x) => x.text.trim());
+  return { name, headline, location, photo: img?.src ?? null, experience };
+};
+
+/** Runs in the page: the company top card's separate items (industry, location, followers, employees). */
+const COMPANY_DOM = (): string[] => {
+  const els = Array.from(document.querySelectorAll("main *")) as HTMLElement[];
+  const box = els
+    .filter((e) => /followers/i.test(e.innerText ?? "") && /employees/i.test(e.innerText ?? "") && (e.innerText ?? "").length < 400)
+    .sort((a, b) => (a.innerText ?? "").length - (b.innerText ?? "").length)[0];
+  // The smallest match is the "city · followers · employees" group; the industry sits one level up.
+  const list = document.querySelector("main .org-top-card-summary-info-list") ?? box?.parentElement ?? box;
+  if (!list) return [];
+  // Text nodes, not leaf elements: the industry sits as bare text beside the linked city and counts.
+  const walker = document.createTreeWalker(list, NodeFilter.SHOW_TEXT);
+  const items: string[] = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const t = (n.textContent ?? "").replace(/\s+/g, " ").trim();
+    if (t && t !== "·" && t !== "•") items.push(t);
+  }
+  return items.length > 1 ? items : ((list as HTMLElement).innerText ?? "").split("\n");
+};
+
+/**
+ * Open a LinkedIn page the way a person would (charged to the account's daily read budget),
+ * keep the voyager responses it loads and run `extract` on the rendered page.
+ */
+async function readPage<T>(ctx: import("playwright").BrowserContext, accountId: string, url: string, extract: () => T): Promise<{ bodies: string[]; dom: T | null }> {
+  const { consume } = await import("@/lib/linkedin/budget");
+  const { VoyagerBlockedError, VoyagerBudgetExceeded } = await import("@/lib/linkedin/voyager");
+  if (!consume(accountId, "voyager_read")) throw new VoyagerBudgetExceeded("voyager_read");
+  const page = await ctx.newPage();
+  const bodies: string[] = [];
+  const pending: Array<Promise<void>> = [];
+  page.on("response", (resp) => {
+    if (!/\/voyager\/api\//.test(resp.url()) || resp.status() !== 200) return;
+    pending.push(resp.text().then((t) => { bodies.push(t); }, () => {}));
+  });
+  try {
+    const nav = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    if (/\/(login|checkpoint|authwall)/.test(page.url())) throw new VoyagerBlockedError(401);
+    if (nav && [429, 999].includes(nav.status())) throw new VoyagerBlockedError(nav.status());
+    await page.waitForTimeout(4500 + Math.random() * 2000);
+    await page.mouse.wheel(0, 1800 + Math.random() * 600);
+    await page.waitForTimeout(2000 + Math.random() * 1200);
+    await Promise.all(pending);
+    const dom = await page.evaluate(extract).catch(() => null);
+    return { bodies, dom };
+  } finally {
+    await page.close().catch(() => {});
+  }
 }
 
 /** First page of the lookalike search, ranked by match. Retries without the industry filter when it finds no one. */

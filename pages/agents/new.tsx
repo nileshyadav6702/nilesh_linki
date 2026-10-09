@@ -38,7 +38,7 @@ function icpFromLookalike(base: Icp, scope: LookalikeScope): Icp {
 
 const scopeFor = (p: LookalikeProfile): LookalikeScope => ({
   title: p.title ?? "", similarTitles: [], includeSimilarRoles: true, location: p.location, geoId: p.geoId,
-  industry: p.industry, industryId: p.industryId, relatedIndustries: false, sizes: [],
+  industry: p.industry, industryId: p.industryId, relatedIndustries: false, sizes: p.companySize ? [p.companySize] : [],
 });
 
 async function api(url: string, method: string, body?: unknown) {

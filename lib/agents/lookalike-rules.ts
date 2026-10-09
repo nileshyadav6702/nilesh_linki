@@ -4,6 +4,8 @@
  * DB imports: the wizard uses the types and the URL check in the browser.
  */
 
+import { INDUSTRY_TREE } from "@/lib/icp/data/industries";
+
 export interface LookalikeProfile {
   name: string;
   headline: string | null;
@@ -17,6 +19,10 @@ export interface LookalikeProfile {
   industryId: string | null;
   photo: string | null;
   linkedinUrl: string;
+  /** The current employer's LinkedIn page, when the Experience section links it. */
+  companyUrl?: string | null;
+  /** The employer's headcount as a SIZE_PRESETS value ("201-500"). */
+  companySize?: string | null;
 }
 
 export interface LookalikeScope {
@@ -52,6 +58,8 @@ export interface LookalikeCandidate {
   salesNavUrn: string; salesNavUrl: string; fullName: string | null; title: string | null; company: string | null;
   location: string | null; companyIndustry: string | null; profileImageUrl: string | null; linkedinUrl: string | null;
 }
+
+const INDUSTRIES = new Set(INDUSTRY_TREE.flatMap((n) => [n.label, ...(n.children ?? [])]).map((x) => x.toLowerCase()));
 
 const PROFILE_RE = /^(?:https?:\/\/)?(?:[a-z]{2,3}\.)?linkedin\.com\/in\/([^/?#\s]+)\/?(?:[?#].*)?$/i;
 
@@ -119,6 +127,54 @@ export function parseFlagshipProfile(bodies: string[], publicId: string, image: 
     name: name || publicId, headline, title, company, location, geoId: idOf(geoUrn), industry, industryId: idOf(industryUrn),
     photo: image(profile.profilePicture), linkedinUrl: `https://www.linkedin.com/in/${publicId}/`,
   };
+}
+
+/** An Experience entry on a profile page: the company link and the text inside it. */
+export interface ExperienceLink { href: string; text: string }
+
+const DATES = /\b(19|20)\d{2}\b|\bPresent\b/;
+const DURATION = /\b\d+\s+(yrs?|mos?)\b/g;
+
+/**
+ * Current role from the profile's Experience links. A single role reads "Title / Company ·
+ * Full-time / Sep 2025 - Present"; several roles at one company read "Company / Full-time ·
+ * 5 yrs / Title / dates…". Links without dates (people/pages suggestions) are ignored.
+ */
+export function currentRoleFromExperience(links: ExperienceLink[]): { title: string | null; company: string | null; companyUrl: string | null } | null {
+  const entries = links
+    .map((l) => ({ href: l.href, lines: l.text.split("\n").map((x) => x.trim()).filter(Boolean) }))
+    .filter((e) => e.lines.length >= 2 && DATES.test(e.lines.join(" ")) && !/followers/i.test(e.lines.join(" ")));
+  const pick = entries.find((e) => /\bPresent\b/.test(e.lines.join(" "))) ?? entries[0];
+  if (!pick) return null;
+  const [a, b, c] = pick.lines;
+  // Grouped roles: the second line is "Full-time · 5 yrs", a duration with no date range in it.
+  const grouped = new RegExp(DURATION.source).test(b) && !DATES.test(b.replace(DURATION, ""));
+  const base = pick.href.match(/^https?:\/\/(?:www\.)?linkedin\.com\/company\/[^/?#]+/i)?.[0];
+  const companyUrl = base ? `${base}/` : null;
+  return grouped
+    ? { title: c && !DATES.test(c) ? c : null, company: a, companyUrl }
+    : { title: a, company: b.split(" · ")[0].trim() || null, companyUrl };
+}
+
+/** "201-500 employees" / "10,001+ employees" / "2-10 employees" → the SIZE_PRESETS value it falls in. */
+export function sizeBucket(text: string | null | undefined): string | null {
+  const m = (text ?? "").replace(/,/g, "").match(/(\d+)\s*(?:[-–]\s*(\d+)|\+)?\s*employees/i);
+  if (!m) return null;
+  const n = Number(m[2] ?? m[1]);
+  return n <= 10 ? "1-10" : n <= 50 ? "11-50" : n <= 200 ? "51-200" : n <= 500 ? "201-500" : n <= 1000 ? "501-1000" : n <= 5000 ? "1001-5000" : n <= 10000 ? "5001-10000" : "10000+";
+}
+
+/** Industry and headcount from a company page's top-card items ("IT Services…", "New Delhi", "5K followers", "201-500 employees"). */
+export function companyFacts(items: string[]): { industry: string | null; size: string | null } {
+  const clean = items.map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean);
+  const size = sizeBucket(clean.find((x) => /employees/i.test(x)));
+  // The card also holds the name, a "formerly known as" line and the HQ city, so trust LinkedIn's
+  // industry list first; else take the item just before the city ("Industry · City · followers").
+  const known = clean.find((x) => INDUSTRIES.has(x.toLowerCase()));
+  const followersAt = clean.findIndex((x) => /followers/i.test(x));
+  const beforeCity = followersAt >= 2 ? clean[followersAt - 2] : null;
+  const industry = known ?? (beforeCity && !/followers|employees|formerly/i.test(beforeCity) && beforeCity.length <= 80 ? beforeCity : null);
+  return { industry, size };
 }
 
 /** Titles the search uses: the seed's, plus similar roles when switched on. */

@@ -92,3 +92,30 @@ describe("ranking", () => {
     expect(leads.map((l) => l.name)).toEqual(["Strong", "Weak"]);
   });
 });
+
+describe("profile page parsing", () => {
+  it("reads the current role and company link from Experience, ignoring suggestion links", async () => {
+    const { currentRoleFromExperience } = await import("@/lib/agents/lookalike-rules");
+    const role = currentRoleFromExperience([
+      { href: "https://www.linkedin.com/company/6442668/", text: "VP of Sales\n\nIntensity Global Technologies Limited · Full-time\n\nSep 2025 - Present · 1 yr 2 mos\n\nNew Delhi, Delhi, India · On-site" },
+      { href: "https://www.linkedin.com/company/529134/", text: "Regional Business Head\n\nCubix Networks Pvt Ltd · Full-time\n\nJan 2006 - Sep 2025 · 19 yrs 9 mos" },
+      { href: "https://www.linkedin.com/company/amazon/", text: "Amazon\n\nSoftware Development\n\n37,483,472 followers" },
+    ]);
+    expect(role).toEqual({ title: "VP of Sales", company: "Intensity Global Technologies Limited", companyUrl: "https://www.linkedin.com/company/6442668/" });
+  });
+
+  it("handles several roles grouped under one company", async () => {
+    const { currentRoleFromExperience } = await import("@/lib/agents/lookalike-rules");
+    expect(currentRoleFromExperience([
+      { href: "https://www.linkedin.com/company/acme/?x=1", text: "Acme Corp\nFull-time · 5 yrs 2 mos\nHead of Sales\nJan 2023 - Present · 2 yrs" },
+    ])).toEqual({ title: "Head of Sales", company: "Acme Corp", companyUrl: "https://www.linkedin.com/company/acme/" });
+  });
+
+  it("reads industry and headcount from a company top card", async () => {
+    const { companyFacts, sizeBucket } = await import("@/lib/agents/lookalike-rules");
+    expect(companyFacts(["IT Services and IT Consulting", "New Delhi, New Delhi", "5K followers", "201-500 employees"])).toEqual({ industry: "IT Services and IT Consulting", size: "201-500" });
+    expect(sizeBucket("10,001+ employees")).toBe("10000+");
+    expect(sizeBucket("2-10 employees")).toBe("1-10");
+    expect(sizeBucket("no headcount")).toBeNull();
+  });
+});
