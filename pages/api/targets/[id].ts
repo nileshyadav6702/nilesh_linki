@@ -33,7 +33,27 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       "email", "phone", "headline", "summary", "notes",
     ] as const;
 
-    const body = req.body as Record<string, unknown>;
+    const body = { ...(req.body as Record<string, unknown>) };
+    for (const col of EDITABLE) {
+      const v = body[col];
+      if (v !== undefined && v !== null && (typeof v !== "string" || v.length > (col === "notes" || col === "summary" ? 20_000 : 500))) {
+        return res.status(400).json({ error: `${col.replace("_", " ")} must be text` });
+      }
+    }
+    if (typeof body.email === "string" && body.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email.trim())) {
+      return res.status(400).json({ error: "That doesn't look like an email address" });
+    }
+    if (typeof body.phone === "string" && body.phone.trim() && !/^[+()\d\s.-]{5,30}$/.test(body.phone.trim())) {
+      return res.status(400).json({ error: "That doesn't look like a phone number" });
+    }
+    // Renaming via first / last name keeps full_name in step (lists, search and messages use it).
+    if ((body.first_name !== undefined || body.last_name !== undefined) && body.full_name === undefined) {
+      const cur = db.prepare("SELECT first_name, last_name FROM targets WHERE id = ?").get(id) as { first_name: string | null; last_name: string | null };
+      const first = body.first_name !== undefined ? String(body.first_name ?? "").trim() : cur.first_name ?? "";
+      const last = body.last_name !== undefined ? String(body.last_name ?? "").trim() : cur.last_name ?? "";
+      if (!first && !last) return res.status(400).json({ error: "A contact needs a name" });
+      body.full_name = [first, last].filter(Boolean).join(" ");
+    }
     const fields: string[] = [];
     const params: unknown[] = [];
     for (const col of EDITABLE) {

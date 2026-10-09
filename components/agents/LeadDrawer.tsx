@@ -8,6 +8,7 @@ import {
   RiUserAddLine, RiUserStarLine,
 } from "react-icons/ri";
 import SequenceEditor, { type Draft, type Step } from "@/components/agents/SequenceEditor";
+import { InlineEdit, PencilButton } from "@/components/agents/InlineEdit";
 import { signalLine } from "@/components/agents/signal-line";
 import { Avatar, Flames, IconTile, primaryBtn, ScoreBadge, secondaryBtn, StatusDot, textareaCls, timeAgo, type Tone } from "@/components/agents/ui";
 
@@ -96,7 +97,9 @@ type SectionKey = "signals" | "company" | "sequence" | "other" | "notes" | "acti
 export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onOpen }: { targetId: string | null; onClose: () => void; onChanged?: () => void; siblings?: string[]; onOpen?: (id: string) => void }) {
   const [d, setD] = useState<LeadDetail | null>(null);
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState<Record<SectionKey, boolean>>({ signals: true, company: false, sequence: false, other: false, notes: false, activity: false });
+  const [open, setOpen] = useState<Record<SectionKey, boolean>>({ signals: true, company: false, sequence: true, other: false, notes: false, activity: false });
+  const [editing, setEditing] = useState({ name: false, role: false, contact: false });
+  const edit = (k: keyof typeof editing, on: boolean) => setEditing((e) => ({ ...e, [k]: on }));
   const [step, setStep] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
   const [moreAbout, setMoreAbout] = useState(false);
@@ -113,7 +116,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
   }, [targetId, show]);
   useEffect(() => {
     let alive = true;
-    if (targetId) fetch(`/api/leads/${targetId}`).then((r) => r.ok ? r.json() : null).then((x) => { if (alive) { setStep(null); setMoreAbout(false); show(x); } });
+    if (targetId) fetch(`/api/leads/${targetId}`).then((r) => r.ok ? r.json() : null).then((x) => { if (alive) { setStep(null); setMoreAbout(false); setEditing({ name: false, role: false, contact: false }); show(x); } });
     return () => { alive = false; };
   }, [targetId, show]);
 
@@ -150,6 +153,16 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
     toast.success(decision === "approve" ? (x.enrolled ? "Approved — added to the sequence" : "Approved") : "Rejected");
     await load();
     onChanged?.();
+  }
+
+  /** Header edits (name, title / company, email / phone): one PATCH, then reload. */
+  async function saveFields(values: Record<string, string>): Promise<boolean> {
+    const r = await fetch(`/api/targets/${targetId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(values) });
+    if (!r.ok) { toast.error((await r.json().catch(() => ({}))).error ?? "Could not save"); return false; }
+    toast.success("Contact updated");
+    await load();
+    onChanged?.();
+    return true;
   }
 
   async function saveNotes() {
@@ -197,17 +210,45 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
                   <img src={logo} alt="" className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-base-100 object-cover ring-2 ring-base-100" />
                 )}
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 space-y-2">
+                {editing.name ? (
+                  <InlineEdit onCancel={() => edit("name", false)} onSave={saveFields} fields={[
+                    { key: "first_name", label: "First name", value: str(c.first_name) ?? str(c.full_name)?.split(" ")[0] ?? "" },
+                    { key: "last_name", label: "Last name", value: str(c.last_name) ?? str(c.full_name)?.split(" ").slice(1).join(" ") ?? "" },
+                  ]} />
+                ) : (
+                  <div className="group/n flex items-center gap-2">
+                    <h2 className="truncate font-display text-[26px] leading-tight text-base-content">{str(c.full_name) ?? "Unknown"}</h2>
+                    {str(c.linkedin_url) && <a href={String(c.linkedin_url)} target="_blank" rel="noreferrer" className="shrink-0 text-[#0a66c2] hover:opacity-80" aria-label="LinkedIn profile"><RiLinkedinBoxFill size={22} /></a>}
+                    <PencilButton label="Edit name" onClick={() => edit("name", true)} />
+                  </div>
+                )}
+                {editing.role ? (
+                  <InlineEdit onCancel={() => edit("role", false)} onSave={saveFields} fields={[
+                    { key: "title", label: "Job title", value: str(c.title) ?? "" },
+                    { key: "company", label: "Company", value: str(c.company) ?? companyName ?? "" },
+                  ]} />
+                ) : (
+                  <div className="flex items-start gap-1">
+                    <p className="min-w-0 pt-1 text-sm text-base-content/60">{str(c.title) || companyName ? [str(c.title), companyName].filter(Boolean).join(" @ ") : str(c.headline) ?? "Add a job title and company"}</p>
+                    <PencilButton label="Edit title and company" onClick={() => edit("role", true)} />
+                  </div>
+                )}
+                {editing.contact ? (
+                  <InlineEdit onCancel={() => edit("contact", false)} onSave={saveFields} fields={[
+                    { key: "email", label: "Email", value: str(c.email) ?? "", type: "email", placeholder: "name@company.com" },
+                    { key: "phone", label: "Phone", value: str(c.phone) ?? "", type: "tel", placeholder: "+1 555 123 4567" },
+                  ]} />
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {str(c.email)
+                      ? <a href={`mailto:${c.email}`} className="inline-flex h-7 items-center gap-1.5 rounded-full bg-success/12 px-3 text-[13px] font-medium text-[#3a8c4f]"><RiAtLine size={14} />{String(c.email)}</a>
+                      : <button type="button" className="inline-flex h-7 items-center gap-1.5 rounded-full bg-base-200 px-3 text-[13px] font-medium text-base-content/75 hover:bg-base-300" onClick={() => act("find_email")}><RiAtLine size={14} /> Find email</button>}
+                    {str(c.phone) && <a href={`tel:${c.phone}`} className="inline-flex h-7 items-center gap-1.5 rounded-full bg-base-200 px-3 text-[13px] font-medium text-base-content/75"><RiPhoneLine size={14} />{String(c.phone)}</a>}
+                    <PencilButton label="Edit email and phone" onClick={() => edit("contact", true)} />
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="truncate font-display text-[26px] leading-tight text-base-content">{str(c.full_name) ?? "Unknown"}</h2>
-                  {str(c.linkedin_url) && <a href={String(c.linkedin_url)} target="_blank" rel="noreferrer" className="text-[#0a66c2] hover:opacity-80" aria-label="LinkedIn profile"><RiLinkedinBoxFill size={22} /></a>}
-                </div>
-                <p className="mt-1 text-sm text-base-content/60">{str(c.headline) ?? [str(c.title), companyName].filter(Boolean).join(" @ ")}</p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {str(c.email)
-                    ? <span className="inline-flex h-7 items-center gap-1.5 rounded-full bg-success/12 px-3 text-[13px] font-medium text-[#3a8c4f]"><RiAtLine size={14} />{String(c.email)}</span>
-                    : <button type="button" className="inline-flex h-7 items-center gap-1.5 rounded-full bg-base-200 px-3 text-[13px] font-medium text-base-content/75 hover:bg-base-300" onClick={() => act("find_email")}><RiAtLine size={14} /> Find email</button>}
-                  {str(c.phone) && <a href={`tel:${c.phone}`} className="inline-flex h-7 items-center gap-1.5 rounded-full bg-base-200 px-3 text-[13px] font-medium text-base-content/75"><RiPhoneLine size={14} />{String(c.phone)}</a>}
                   <StatusDot status={str(c.agent_status)} />
                   <Flames score={c.lead_score as number | null} />
                 </div>
