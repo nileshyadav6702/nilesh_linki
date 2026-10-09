@@ -8,6 +8,7 @@ import { recordAudit, requireWorkspace, requireWorkspaceEntity } from "@/lib/wor
 
 // GET  /api/copilot/:targetId → the contact with its full sequence and drafts
 // POST /api/copilot/:targetId { decision: 'approve' | 'reject', reason? } → decide every pending step at once
+// POST /api/copilot/:targetId { action: 'reason', reason } → why a rejected lead wasn't a fit
 // POST /api/copilot/:targetId { action: 'generate', step_id } → this step's draft, written now if missing ("View message")
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const ctx = requireWorkspace(req, res, req.method === "GET" ? "viewer" : "member");
@@ -16,6 +17,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!requireWorkspaceEntity(res, ctx, "targets", targetId)) return;
   const db = getDb();
   if (req.method === "GET") return res.json(getLeadDetail(db, ctx.workspaceId, targetId));
+  if (req.method === "POST" && req.body?.action === "reason") {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 300) : "";
+    if (!reason) return res.status(400).json({ error: "reason is required" });
+    db.prepare("UPDATE targets SET skip_reason = ? WHERE id = ? AND workspace_id = ?").run(reason, targetId, ctx.workspaceId);
+    recordAudit(ctx, "lead.reject_reason", "contact", targetId, { reason });
+    return res.json({ ok: true });
+  }
   if (req.method === "POST" && req.body?.action === "generate") {
     const stepId = typeof req.body?.step_id === "string" ? req.body.step_id : "";
     if (!stepId) return res.status(400).json({ error: "step_id is required" });

@@ -5,6 +5,7 @@ import { RiArrowDownSLine, RiArrowRightDoubleLine, RiCheckLine, RiCloseLine, RiK
 import { useDismiss } from "@/components/agents/leads/Listbox";
 import { Avatar, SIGNAL_LABEL } from "@/components/agents/ui";
 import StepItem from "@/components/copilot/StepItem";
+import RejectMenu from "@/components/copilot/RejectMenu";
 import type { DraftRow, LeadDetail } from "@/lib/agents/copilot";
 
 /** Right pane of Copilot: who the lead is, why now, and the campaign they're about to receive. */
@@ -65,13 +66,19 @@ function ExportMenu({ detail }: { detail: LeadDetail }) {
   );
 }
 
-export default function LeadPanel({ targetId, mode, firstLaunch, sender, onDecided }: {
+export default function LeadPanel({ targetId, mode, firstLaunch, sender, onDecided, onOpenLead, reloadKey = 0 }: {
   targetId: string; mode: "autopilot" | "copilot"; firstLaunch: string | null; sender: { name: string; photo: string | null };
   onDecided: (targetId: string, decision: "approve" | "reject") => void;
+  /** Opens the full lead drawer (profile, notes, activity). */
+  onOpenLead: (targetId: string) => void;
+  /** Bump to refetch after the drawer changed the lead. */
+  reloadKey?: number;
 }) {
   const [detail, setDetail] = useState<LeadDetail | null>(null);
   const [more, setMore] = useState(false);
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const [rejected, setRejected] = useState(false);
+  const [asking, setAsking] = useState(false);
   useEffect(() => {
     let alive = true;
     // Fetch-on-select: the lead detail is external data, not derived state.
@@ -81,7 +88,7 @@ export default function LeadPanel({ targetId, mode, firstLaunch, sender, onDecid
       if (alive) setDetail(d);
     })();
     return () => { alive = false; };
-  }, [targetId]);
+  }, [targetId, reloadKey]);
 
   if (!detail) return <div className="flex flex-1 items-center justify-center"><RiLoader4Line size={28} className="animate-spin text-primary" /></div>;
 
@@ -93,6 +100,8 @@ export default function LeadPanel({ targetId, mode, firstLaunch, sender, onDecid
   const place = str(co?.location) ?? str(c.company_location);
   const about = str(co?.description) ?? str(c.company_description);
   const companyUrl = str(co?.linkedin_url) ?? str(c.company_linkedin_url);
+  // Rejected now or earlier (the lead is skipped): its drafts are gone, so don't read that as approved.
+  const isRejected = rejected || c.agent_status === "skipped";
   const pending = detail.sequence.some((s) => s.draft?.status === "pending") || detail.loose_drafts.some((d) => d.status === "pending");
   const steps = detail.sequence.filter((s) => s.step_type !== "delay");
   const signal = detail.signals[0];
@@ -104,7 +113,8 @@ export default function LeadPanel({ targetId, mode, firstLaunch, sender, onDecid
       const r = await fetch(`/api/copilot/${targetId}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ decision, reason: decision === "reject" ? "Rejected in Copilot" : undefined }) });
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d.error ?? "Could not update the lead");
-      toast.success(decision === "approve" ? "Approved: outreach will start on schedule" : "Lead rejected");
+      if (decision === "approve") toast.success("Approved: outreach will start on schedule");
+      else { setRejected(true); setAsking(true); }
       onDecided(targetId, decision);
       if (decision === "approve") setDetail((cur) => cur && { ...cur, sequence: cur.sequence.map((s) => (s.draft?.status === "pending" ? { ...s, draft: { ...s.draft, status: "approved" } } : s)) });
     } catch (err) { toast.error(err instanceof Error ? err.message : "Could not update the lead"); }
@@ -114,10 +124,12 @@ export default function LeadPanel({ targetId, mode, firstLaunch, sender, onDecid
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-start gap-5 border-b border-[var(--border-subtle)] bg-gradient-to-r from-primary/[0.04] to-primary/[0.09] px-8 py-7">
-        <Avatar name={str(c.full_name)} src={str(c.profile_image_url)} size={64} />
+        <button type="button" onClick={() => onOpenLead(targetId)} aria-label="Open lead details" className="shrink-0 rounded-full transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
+          <Avatar name={str(c.full_name)} src={str(c.profile_image_url)} size={64} />
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="truncate text-[24px] text-[#5b4fd6]">{str(c.full_name) ?? "Unknown"}</span>
+            <button type="button" onClick={() => onOpenLead(targetId)} className="truncate text-left text-[24px] text-[#5b4fd6] hover:underline">{str(c.full_name) ?? "Unknown"}</button>
             {str(c.linkedin_url) && <a href={str(c.linkedin_url)!} target="_blank" rel="noreferrer" aria-label="LinkedIn profile" className="text-[#3730a3] hover:opacity-80"><RiLinkedinBoxFill size={24} /></a>}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[17px] text-base-content/80">
@@ -181,13 +193,22 @@ export default function LeadPanel({ targetId, mode, firstLaunch, sender, onDecid
       </div>
 
       <footer className="flex items-center justify-between gap-4 border-t border-[var(--border-subtle)] bg-gradient-to-r from-primary/[0.03] to-primary/[0.08] px-8 py-5">
-        <div className="flex items-center gap-3">
-          {pending ? (
+        <div className="relative flex items-center gap-3">
+          {asking && (
+            <RejectMenu onClose={() => setAsking(false)} onSave={(reason) => {
+              setAsking(false);
+              void fetch(`/api/copilot/${targetId}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reason", reason }) })
+                .then((r) => { if (r.ok) toast.success("Thanks, your agent will learn from it"); else toast.error("Could not save the reason"); });
+            }} />
+          )}
+          {isRejected ? (
+            <span className="inline-flex h-11 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-200/60 px-4 text-[17px] text-base-content/70"><RiCheckLine size={20} /> Rejected</span>
+          ) : pending ? (
             <button type="button" onClick={() => void decide("approve")} disabled={!!busy} className="inline-flex h-11 items-center gap-2 rounded-[8px] bg-primary px-5 text-[17px] font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:opacity-60">
               {busy === "approve" ? <RiLoader4Line size={18} className="animate-spin" /> : <RiCheckLine size={20} />} Approve
             </button>
           ) : <span className="inline-flex items-center gap-1.5 px-1 text-[20px] text-success"><RiCheckLine size={22} /> Approved</span>}
-          {pending && (
+          {pending && !isRejected && (
             <button type="button" onClick={() => void decide("reject")} disabled={!!busy} className="inline-flex h-11 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-4 text-[17px] hover:bg-base-200 disabled:opacity-60">
               {busy === "reject" ? <RiLoader4Line size={18} className="animate-spin" /> : <RiCloseLine size={20} />} Reject
             </button>

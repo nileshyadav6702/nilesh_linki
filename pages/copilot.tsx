@@ -6,6 +6,7 @@ import { RiBrainLine, RiCheckLine, RiCloseLine, RiInbox2Line, RiLoader4Line, RiR
 import { SearchSelect } from "@/components/agents/sources/kit";
 import { Avatar } from "@/components/agents/ui";
 import LeadPanel from "@/components/copilot/LeadPanel";
+import LeadDrawer from "@/components/agents/LeadDrawer";
 import type { BoardItem, CopilotBoard } from "@/lib/agents/copilot-board";
 import { requireSignedIn } from "@/lib/agents/page-auth";
 
@@ -21,8 +22,8 @@ function hoursUntil(iso: string | null): string {
   return h <= 0 ? "now" : h < 48 ? `in ${h} hour${h === 1 ? "" : "s"}` : `in ${Math.round(h / 24)} days`;
 }
 
-function Row({ item, on, onClick }: { item: BoardItem; on: boolean; onClick: () => void }) {
-  const approved = item.pending === 0;
+function Row({ item, on, rejected, onClick }: { item: BoardItem; on: boolean; rejected: boolean; onClick: () => void }) {
+  const approved = item.pending === 0 && !rejected;
   return (
     <li>
       <button type="button" onClick={onClick} aria-current={on ? "true" : undefined}
@@ -33,6 +34,7 @@ function Row({ item, on, onClick }: { item: BoardItem; on: boolean; onClick: () 
           <span className="block truncate text-[15px] text-base-content/60">{[item.title ?? item.headline, item.company].filter(Boolean).join(" · ")}</span>
         </span>
         {approved && <RiCheckLine size={22} className="shrink-0 text-success" aria-label="Approved" />}
+        {rejected && <RiCloseLine size={22} className="shrink-0 text-base-content/40" aria-label="Rejected" />}
       </button>
     </li>
   );
@@ -46,6 +48,10 @@ export default function Copilot() {
   const [account, setAccount] = useState("");
   const [board, setBoard] = useState<CopilotBoard | null>(null);
   const [selected, setSelected] = useState<string | null>(typeof router.query.contact === "string" ? router.query.contact : null);
+  /** Rejected this session: they stay listed (marked) until the next load, so the reason can still be given. */
+  const [rejected, setRejected] = useState<Set<string>>(new Set());
+  const [drawer, setDrawer] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     fetch("/api/accounts").then((r) => r.json()).then((a: Account[]) => {
@@ -68,12 +74,8 @@ export default function Copilot() {
   }, [load, mode, account]);
 
   function decided(targetId: string, decision: "approve" | "reject") {
-    setBoard((b) => {
-      if (!b) return b;
-      const items = decision === "reject" ? b.items.filter((i) => i.id !== targetId) : b.items.map((i) => (i.id === targetId ? { ...i, pending: 0, approved: i.approved + i.pending } : i));
-      if (decision === "reject") setSelected(items[0]?.id ?? null);
-      return { ...b, items };
-    });
+    if (decision === "reject") { setRejected((cur) => new Set(cur).add(targetId)); return; }
+    setBoard((b) => b && { ...b, items: b.items.map((i) => (i.id === targetId ? { ...i, pending: 0, approved: i.approved + i.pending } : i)) });
   }
 
   const sender = accounts.find((a) => a.id === account);
@@ -122,7 +124,7 @@ export default function Copilot() {
           )}
           <div className="min-h-0 flex-1 overflow-y-auto">
             {!board ? <div className="flex justify-center py-16"><RiLoader4Line size={26} className="animate-spin text-primary" /></div>
-              : items.length ? <ul>{items.map((i) => <Row key={i.id} item={i} on={i.id === selected} onClick={() => setSelected(i.id)} />)}</ul>
+              : items.length ? <ul>{items.map((i) => <Row key={i.id} item={i} on={i.id === selected} rejected={rejected.has(i.id)} onClick={() => setSelected(i.id)} />)}</ul>
               : (
                 <div className="flex flex-col items-center gap-3 px-8 py-16 text-center">
                   <RiInbox2Line size={44} className="text-base-content/35" />
@@ -135,7 +137,7 @@ export default function Copilot() {
         <section className="flex min-h-[560px] min-w-0 flex-1 flex-col overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-base-100">
           {selected && items.some((i) => i.id === selected) ? (
             <LeadPanel key={selected} targetId={selected} mode={mode} firstLaunch={items.find((i) => i.id === selected)?.auto_approve_at ?? board?.nextLaunch ?? null}
-              sender={{ name: sender?.name ?? "You", photo: null }} onDecided={decided} />
+              sender={{ name: sender?.name ?? "You", photo: null }} onDecided={decided} onOpenLead={setDrawer} reloadKey={reloadKey} />
           ) : board ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
               <RiRocket2Line size={56} className="text-base-content/30" />
@@ -146,6 +148,9 @@ export default function Copilot() {
           ) : null}
         </section>
       </div>
+
+      <LeadDrawer targetId={drawer} onClose={() => setDrawer(null)} onChanged={() => setReloadKey((k) => k + 1)}
+        siblings={items.map((i) => i.id)} onOpen={(id) => { setDrawer(id); setSelected(id); }} />
     </>
   );
 }
