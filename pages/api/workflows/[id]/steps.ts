@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { applyPlaces, capturePlaces } from "@/lib/linkedin/campaign/sequence-remap";
 import { getDb } from "@/lib/db";
 import { randomUUID } from "crypto";
 import { requireWorkspace, requireWorkspaceEntity, templatesBelongToWorkspace } from "@/lib/workspace";
@@ -120,6 +121,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const reconcile = db.transaction(() => {
       for (const track of ["linkedin", "email"] as const) {
         const existing = db.prepare("SELECT id FROM workflow_steps WHERE workflow_id = ? AND track = ? ORDER BY step_order").all(workflowId, track) as Array<{ id: string }>;
+        // Where every active lead stands, by step id, so the edit doesn't move them (lib/linkedin/campaign/sequence-remap.ts).
+        const places = capturePlaces(db, workflowId, track, existing.map((e) => e.id));
+        const newIds: string[] = [];
         const rows = byTrack[track];
         // A step keeps its own id when the client sends it, so its branches, recorded voice
         // message and sent-action history stay with it when steps above it are added or
@@ -140,10 +144,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             clampInt(s.like_count, 1, 3, 1), clampInt(s.skip_after_days, 0, 60, 7), clampInt(s.withdraw_after_days, 0, 90, 30),
             aiTemplate(s.ai_template_id),
           ];
-          let stepId: string | undefined = typeof s.id === "string" && claimed.has(s.id) ? s.id : spare.shift();
+          // A new step (an id the server doesn't know, like "new-…") always gets a fresh id: reusing a deleted
+          // step's id would make it look already sent (send history and approved drafts are keyed by step id).
+          let stepId: string | undefined = typeof s.id === "string" && claimed.has(s.id) ? s.id : typeof s.id === "string" ? undefined : spare.shift();
           if (stepId) updateStmt.run(...vals, stepId);
           else { stepId = randomUUID(); insertStmt.run(stepId, workflowId, ...vals); }
           used.add(stepId);
+          newIds.push(stepId);
           clearLinks.run(stepId);
           if (Array.isArray(s.template_ids)) for (const tid of s.template_ids as string[]) addLink.run(stepId, tid);
           clearEmailVariants.run(stepId);
@@ -155,6 +162,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         }
         // Delete the steps no longer in the list (their branches cascade — the step is gone).
         for (const e of existing) if (!used.has(e.id)) delStmt.run(e.id);
+        applyPlaces(db, places, newIds);
       }
     });
     reconcile();

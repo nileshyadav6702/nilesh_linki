@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { applyPlaces, capturePlaces, stepIds } from "@/lib/linkedin/campaign/sequence-remap";
 import { getDb } from "@/lib/db";
 import { requireWorkspace, requireWorkspaceEntity, templatesBelongToWorkspace } from "@/lib/workspace";
 
@@ -48,7 +49,18 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   if (req.method === "DELETE") {
-    db.prepare("DELETE FROM workflow_steps WHERE id = ?").run(stepId);
+    // Keep step_order dense and move no lead (lib/linkedin/campaign/sequence-remap.ts).
+    const row = db.prepare("SELECT workflow_id, track FROM workflow_steps WHERE id = ?").get(stepId) as { workflow_id: string; track: string } | undefined;
+    if (!row) return res.json({ ok: true });
+    db.transaction(() => {
+      const oldIds = stepIds(db, row.workflow_id, row.track);
+      const places = capturePlaces(db, row.workflow_id, row.track, oldIds);
+      db.prepare("DELETE FROM workflow_steps WHERE id = ?").run(stepId);
+      const newIds = oldIds.filter((id) => id !== stepId);
+      const order = db.prepare("UPDATE workflow_steps SET step_order = ? WHERE id = ?");
+      newIds.forEach((id, i) => order.run(i + 1, id));
+      applyPlaces(db, places, newIds);
+    })();
     return res.json({ ok: true });
   }
 
