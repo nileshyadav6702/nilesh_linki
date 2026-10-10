@@ -252,6 +252,11 @@ const STATEMENTS: string[] = [
   "ALTER TABLE run_profile_tracks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0",
   // LinkedIn's weekly invitation limit hit on this account: no invitations until then (ISO).
   "ALTER TABLE accounts ADD COLUMN connects_blocked_until TEXT",
+  // The agent a campaign run belongs to (pause / resume / delete act on all of its runs).
+  "ALTER TABLE runs ADD COLUMN agent_id TEXT",
+  `UPDATE runs SET agent_id = (SELECT a.id FROM agents a WHERE a.workspace_id = runs.workspace_id AND a.workflow_id = runs.workflow_id AND a.list_id IS runs.list_id ORDER BY a.created_at LIMIT 1)
+    WHERE agent_id IS NULL`,
+  "CREATE INDEX IF NOT EXISTS idx_runs_agent ON runs(agent_id, status)",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

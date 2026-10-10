@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { billingSummary } from "@/lib/credits/ledger";
 import { sourceItems } from "@/lib/agents/source-items";
 import { agentInputSchema, checkAgentRefs, deleteAgent, getAgent, listSources, updateAgent } from "@/lib/agents/store";
-import { activateAgentRuns, pauseAgentRuns } from "@/lib/agents/enroll";
+import { activateAgentRuns, endAgentRuns, moveAgentMailbox, pauseAgentRuns } from "@/lib/agents/enroll";
 import { agentActivity, agentCounts, agentPerformance, agentSeries, dueToday, nextOutreachAt, nextSourceRun, signalFunnel, stepOccupancy } from "@/lib/agents/analytics";
 import { budgetSnapshot } from "@/lib/linkedin/budget";
 import { createDefaultCampaign } from "@/lib/agents/default-campaign";
@@ -86,10 +86,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const updated = updateAgent(id, ctx.workspaceId, patch);
     if (updated && outreach_enabled === true) activateAgentRuns(db, updated);
     if (updated && outreach_enabled === false) pauseAgentRuns(db, updated);
+    // A new mailbox takes over the agent's queued email leads (LinkedIn sender / campaign changes
+    // start a fresh run for new leads instead: lib/agents/enroll.ts).
+    if (updated && fields.email_account_id !== undefined && (fields.email_account_id ?? null) !== (agent.email_account_id ?? null)) moveAgentMailbox(db, updated, (fields.email_account_id as string | null) ?? null);
     recordAudit(ctx, "agent.updated", "agent", id, { fields: Object.keys(body) });
     return res.json(updated);
   }
   if (req.method === "DELETE") {
+    // Its leads' sequences end with it: the approved drafts they'd send are deleted with the agent.
+    endAgentRuns(db, agent);
     deleteAgent(id, ctx.workspaceId);
     recordAudit(ctx, "agent.deleted", "agent", id);
     return res.status(204).end();

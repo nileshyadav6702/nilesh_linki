@@ -28,14 +28,17 @@ export function enrollLead(db: Database.Database, agent: Agent, targetId: string
   if (listId) db.prepare("INSERT OR IGNORE INTO list_targets (list_id, target_id) VALUES (?, ?)").run(listId, targetId);
 
   return db.transaction(() => {
+    // This agent's open run for its CURRENT campaign and senders: after a sender or campaign change
+    // new leads start a fresh run, while leads already mid-sequence finish where they are.
     let run = db.prepare(`SELECT id, status FROM runs WHERE workspace_id = ? AND workflow_id = ? AND list_id IS ? AND status IN ('pending','running','paused')
-      ORDER BY created_at DESC LIMIT 1`).get(agent.workspace_id, agent.workflow_id, listId) as { id: string; status: string } | undefined;
+        AND (agent_id = ? OR agent_id IS NULL) AND account_id IS ? AND email_account_id IS ?
+      ORDER BY created_at DESC LIMIT 1`).get(agent.workspace_id, agent.workflow_id, listId, agent.id, agent.linkedin_account_id, agent.email_account_id) as { id: string; status: string } | undefined;
     if (!run) {
       // Leads can be queued while outreach is off; the run starts when outreach is switched on.
       const status = agent.outreach_enabled ? "running" : "pending";
       run = { id: randomUUID(), status };
-      db.prepare(`INSERT INTO runs (id, workspace_id, workflow_id, list_id, account_id, email_account_id, status, started_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(run.id, agent.workspace_id, agent.workflow_id, listId, agent.linkedin_account_id, agent.email_account_id, status, status === "running" ? new Date().toISOString() : null);
+      db.prepare(`INSERT INTO runs (id, workspace_id, workflow_id, list_id, account_id, email_account_id, status, started_at, agent_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(run.id, agent.workspace_id, agent.workflow_id, listId, agent.linkedin_account_id, agent.email_account_id, status, status === "running" ? new Date().toISOString() : null, agent.id);
     }
     if (db.prepare("SELECT 1 FROM run_profiles WHERE run_id = ? AND target_id = ?").get(run.id, targetId)) return { enrolled: true };
 
@@ -55,14 +58,45 @@ export function enrollLead(db: Database.Database, agent: Agent, targetId: string
   })();
 }
 
-/** Outreach switched on: start the agent's pending or paused run so enrolled leads begin moving. */
+/** The agent's runs: recorded on the run, or (older runs) its campaign + list. */
+const AGENT_RUNS = "workspace_id = ? AND (agent_id = ? OR (agent_id IS NULL AND workflow_id IS ? AND list_id IS ?))";
+const agentRunArgs = (a: Agent) => [a.workspace_id, a.id, a.workflow_id, a.list_id];
+
+/** Outreach switched on: start the agent's pending or paused runs so enrolled leads begin moving. */
 export function activateAgentRuns(db: Database.Database, agent: Agent): void {
-  db.prepare("UPDATE runs SET status = 'running', started_at = COALESCE(started_at, ?) WHERE workspace_id = ? AND workflow_id = ? AND list_id IS ? AND status IN ('pending','paused')")
-    .run(new Date().toISOString(), agent.workspace_id, agent.workflow_id, agent.list_id);
+  db.prepare(`UPDATE runs SET status = 'running', started_at = COALESCE(started_at, ?) WHERE ${AGENT_RUNS} AND status IN ('pending','paused')`)
+    .run(new Date().toISOString(), ...agentRunArgs(agent));
 }
 
-/** Outreach switched off: hold the agent's running campaign. Lead finding keeps going. */
+/** Outreach switched off: hold every running campaign run of the agent (old ones included). Lead finding keeps going. */
 export function pauseAgentRuns(db: Database.Database, agent: Agent): void {
-  db.prepare("UPDATE runs SET status = 'paused' WHERE workspace_id = ? AND workflow_id IS ? AND list_id IS ? AND status = 'running'")
-    .run(agent.workspace_id, agent.workflow_id, agent.list_id);
+  db.prepare(`UPDATE runs SET status = 'paused' WHERE ${AGENT_RUNS} AND status = 'running'`).run(...agentRunArgs(agent));
+}
+
+/**
+ * The agent's mailbox changed: its open runs and the leads still waiting on email move to the new
+ * mailbox (email steps continue from it). A LinkedIn sender or campaign change needs nothing here:
+ * new leads start a fresh run, and leads mid-sequence finish on the account that invited them.
+ */
+export function moveAgentMailbox(db: Database.Database, agent: Agent, mailboxId: string | null): number {
+  const runs = (db.prepare(`SELECT id FROM runs WHERE ${AGENT_RUNS} AND status IN ('pending','running','paused')`).all(...agentRunArgs(agent)) as Array<{ id: string }>).map((r) => r.id);
+  if (!runs.length) return 0;
+  const ph = runs.map(() => "?").join(",");
+  db.prepare(`UPDATE runs SET email_account_id = ? WHERE id IN (${ph})`).run(mailboxId, ...runs);
+  return db.prepare(`UPDATE run_profiles SET email_account_id = ? WHERE run_id IN (${ph}) AND id IN (
+      SELECT run_profile_id FROM run_profile_tracks WHERE track = 'email' AND state IN ('pending','in_progress'))`).run(mailboxId, ...runs).changes;
+}
+
+/** The agent is being deleted: its leads' sequences stop and its runs end (they'd lose the approved drafts). */
+export function endAgentRuns(db: Database.Database, agent: Agent): number {
+  const runs = (db.prepare(`SELECT id FROM runs WHERE ${AGENT_RUNS} AND status IN ('pending','running','paused')`).all(...agentRunArgs(agent)) as Array<{ id: string }>).map((r) => r.id);
+  if (!runs.length) return 0;
+  const ph = runs.map(() => "?").join(",");
+  db.transaction(() => {
+    db.prepare(`UPDATE run_profile_tracks SET state = 'skipped', error_message = 'Agent deleted', next_step_at = NULL
+      WHERE state IN ('pending','in_progress') AND run_profile_id IN (SELECT id FROM run_profiles WHERE run_id IN (${ph}))`).run(...runs);
+    db.prepare(`UPDATE email_jobs SET status = 'cancelled', last_error = 'Agent deleted', updated_at = datetime('now') WHERE status = 'pending' AND source = 'campaign' AND run_id IN (${ph})`).run(...runs);
+    db.prepare(`UPDATE runs SET status = 'completed', completed_at = COALESCE(completed_at, datetime('now')) WHERE id IN (${ph})`).run(...runs);
+  })();
+  return runs.length;
 }
