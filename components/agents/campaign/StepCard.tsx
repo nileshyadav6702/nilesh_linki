@@ -54,8 +54,10 @@ function SkipPill({ days, disabled, onSave }: { days: number; disabled: boolean;
 }
 
 /** One action step of the Campaign timeline. */
-export default function StepCard({ item, n, stat, editing, busy, aiLabel, workflowId, onRemove, onEdit, onContacts, onAccepted, onRecord, onSaveSkip }: {
+export default function StepCard({ item, n, stat, editing, busy, aiLabel, workflowId, localVoice, onRemove, onEdit, onContacts, onAccepted, onRecord, onSaveSkip }: {
   item: Item; n: number; stat: StepStat | undefined; editing: boolean; busy: boolean; aiLabel: string; workflowId: string;
+  /** A recording made for this step in the current edit, not uploaded yet. */
+  localVoice?: { url: string; ms: number } | null;
   onRemove: () => void; onEdit: () => void; onContacts: () => void; onAccepted?: () => void; onRecord: () => void; onSaveSkip: (days: number) => void;
 }) {
   const s = item.step;
@@ -86,11 +88,12 @@ export default function StepCard({ item, n, stat, editing, busy, aiLabel, workfl
       {s.step_type === "like_posts" && <p className="mt-4 rounded-[12px] bg-base-200/70 px-5 py-3.5 text-[16.5px] text-base-content/65">Likes {likes} recent LinkedIn post{likes === 1 ? "" : "s"}</p>}
       {s.step_type === "voice" && (
         <div className="mt-4">
-          {s.voice_duration_ms && !isNew
-            ? <VoicePlayer key={`${s.id}:${s.voice_duration_ms}`} src={voiceUrl(workflowId, s.id)} durationMs={s.voice_duration_ms} />
-            : editing || isNew
-              ? <p className="flex items-center gap-2 rounded-[10px] bg-error/[0.06] px-4 py-3 text-[15px] text-error/80"><RiMicLine size={16} /> Save changes, then record your message</p>
-              : <button type="button" onClick={onRecord} className="flex w-full items-center gap-2 rounded-[10px] border border-error/20 bg-error/[0.06] px-4 py-3 text-left text-[15px] text-error hover:bg-error/10"><RiMicLine size={16} /> Click to record a voice message</button>}
+          {localVoice
+            ? <div className="space-y-2"><VoicePlayer key={localVoice.url} src={localVoice.url} durationMs={localVoice.ms} />
+                <button type="button" onClick={onRecord} className="text-[15px] text-base-content/60 hover:text-base-content hover:underline">Re-record</button></div>
+            : s.voice_duration_ms && !isNew
+              ? <VoicePlayer key={`${s.id}:${s.voice_duration_ms}`} src={voiceUrl(workflowId, s.id)} durationMs={s.voice_duration_ms} />
+              : <button type="button" onClick={onRecord} className="flex w-full items-center gap-2.5 rounded-[12px] border border-error/20 bg-error/[0.06] px-5 py-3.5 text-left text-[16px] text-error hover:bg-error/10"><RiMicLine size={19} /> Click to record a voice message</button>}
         </div>
       )}
       {s.step_type === "connect" && (

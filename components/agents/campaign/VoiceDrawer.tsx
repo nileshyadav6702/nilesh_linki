@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { RiCloseLine, RiInformationLine, RiMicLine, RiRefreshLine, RiStopCircleLine } from "react-icons/ri";
 import { primaryBtn } from "@/components/agents/ui";
 import { RadioCard, SideDrawer, voiceUrl, WaitSelect, type CampaignStep } from "@/components/agents/campaign/kit";
-import type { StepSave } from "@/components/agents/campaign/StepDrawer";
+import type { PendingVoice, StepSave } from "@/components/agents/campaign/StepDrawer";
 import VoicePlayer from "@/components/agents/campaign/VoicePlayer";
 
 const MAX_MS = 60_000;
@@ -29,12 +29,17 @@ function toBase64(blob: Blob): Promise<string> {
 type Phase = "idle" | "recording" | "recorded";
 
 /** Edit a Voice Message step: record one message in the browser (max 60 s) that every contact receives. */
-export default function VoiceDrawer({ step, workflowId, delayBefore, busy, onClose, onSave }: {
-  step: CampaignStep; workflowId: string; delayBefore: number | null; busy: boolean; onClose: () => void; onSave: (s: StepSave) => void;
+export default function VoiceDrawer({ step, workflowId, delayBefore, busy, pending = null, onClose, onSave }: {
+  step: CampaignStep; workflowId: string; delayBefore: number | null; busy: boolean;
+  /** A recording made earlier for this (not yet saved) step. */
+  pending?: PendingVoice | null;
+  onClose: () => void; onSave: (s: StepSave) => void;
 }) {
-  const hasServerAudio = !!step.voice_duration_ms;
-  const [phase, setPhase] = useState<Phase>(hasServerAudio ? "recorded" : "idle");
-  const [blob, setBlob] = useState<{ data: Blob; url: string; ms: number } | null>(null);
+  // A step added in this edit isn't saved yet: its recording is kept here and uploaded with the sequence.
+  const unsaved = step.id.startsWith("new-");
+  const hasServerAudio = !!step.voice_duration_ms && !unsaved;
+  const [phase, setPhase] = useState<Phase>(hasServerAudio || pending ? "recorded" : "idle");
+  const [blob, setBlob] = useState<{ data: Blob; url: string; ms: number } | null>(pending);
   const [elapsed, setElapsed] = useState(0);
   const [levels, setLevels] = useState<number[]>(() => Array(LEVEL_BARS).fill(0));
   const [delay, setDelay] = useState(delayBefore ?? 0);
@@ -55,7 +60,9 @@ export default function VoiceDrawer({ step, workflowId, delayBefore, busy, onClo
     if (rec.current) { rec.current.keep = false; if (rec.current.recorder.state !== "inactive") rec.current.recorder.stop(); }
     teardown();
   }, [teardown]);
-  useEffect(() => () => { if (blob) URL.revokeObjectURL(blob.url); }, [blob]);
+  // A recording handed back to the campaign (unsaved step) must outlive the drawer: don't revoke it.
+  const handedOff = useRef(false);
+  useEffect(() => () => { if (blob && !handedOff.current && blob !== pending) URL.revokeObjectURL(blob.url); }, [blob, pending]);
 
   function stop(keep: boolean) {
     const r = rec.current;
@@ -118,6 +125,13 @@ export default function VoiceDrawer({ step, workflowId, delayBefore, busy, onClo
   }
 
   async function save() {
+    if (unsaved) {
+      const out: StepSave = { fields: {} };
+      if (delayBefore !== null && delay !== delayBefore) out.delaySeconds = delay;
+      if (blob) { handedOff.current = true; out.voice = blob; }
+      onSave(out);
+      return;
+    }
     setSaving(true);
     try {
       if (blob) {

@@ -4,9 +4,9 @@ import {
   RiAddLine, RiArrowDownLine, RiCheckLine, RiCheckboxCircleLine, RiCloseLine, RiFilter3Line, RiFocus3Line, RiEditBoxLine, RiSettings3Line, RiTimeLine,
 } from "react-icons/ri";
 import { IconTile, Panel, primaryBtn } from "@/components/agents/ui";
-import { aiName, DELAY_OPTIONS, delayLabel, STEP_TITLE, type CampaignStep } from "@/components/agents/campaign/kit";
+import { aiName, DELAY_OPTIONS, delayLabel, STEP_TITLE, voiceUrl, type CampaignStep } from "@/components/agents/campaign/kit";
 import { addRules, blankStep, restructure, timeline, withPositions } from "@/components/agents/campaign/sequence";
-import StepDrawer, { type StepSave } from "@/components/agents/campaign/StepDrawer";
+import StepDrawer, { type PendingVoice, type StepSave } from "@/components/agents/campaign/StepDrawer";
 import StepContactsModal from "@/components/agents/campaign/StepContactsModal";
 import CampaignSettings, { type CampaignSettingsInitial } from "@/components/agents/campaign/CampaignSettings";
 import AddStepMenu from "@/components/agents/campaign/AddStepMenu";
@@ -34,6 +34,34 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
   const [delayMenu, setDelayMenu] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [sample, setSample] = useState<{ id: string; name: string | null } | null>(null);
+  const [pendingVoice, setPendingVoice] = useState<Record<string, PendingVoice>>({});
+
+  /** Save the edited sequence, then upload recordings made for its new voice steps. */
+  async function saveDraft() {
+    if (!draft || !workflowId) return;
+    // Rows keep their order per track on the server, so a new step is found by its position.
+    const places = Object.entries(pendingVoice).map(([id, v]) => {
+      const s = draft.find((x) => x.id === id);
+      return s ? { v, track: s.track, idx: draft.filter((x) => x.track === s.track).indexOf(s) } : null;
+    }).filter((x): x is { v: PendingVoice; track: "linkedin" | "email"; idx: number } => !!x);
+    if (!(await putAll(draft, "Sequence saved"))) return;
+    if (places.length) {
+      const rows = await fetch(`/api/workflows/${workflowId}/steps`).then((r) => r.json()).catch(() => []) as CampaignStep[];
+      let failed = 0;
+      for (const p of places) {
+        const row = rows.filter((x) => x.track === p.track).sort((a, b) => a.step_order - b.step_order)[p.idx];
+        if (!row || row.step_type !== "voice") { failed++; continue; }
+        const audio = await new Promise<string>((resolve) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result).split(",")[1] ?? ""); fr.readAsDataURL(p.v.data); });
+        const r = await fetch(voiceUrl(workflowId, row.id), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ audio_base64: audio, mime: p.v.data.type || "audio/webm", duration_ms: p.v.ms }) });
+        if (!r.ok) failed++;
+      }
+      Object.values(pendingVoice).forEach((v) => URL.revokeObjectURL(v.url));
+      setPendingVoice({});
+      if (failed) toast.error("A voice recording couldn't be saved. Open the step and record it again.");
+      await load();
+    }
+    setDraft(null);
+  }
   // Edit mode scrolls down to "Add a step", where new steps go (once the edit view has rendered).
   const addRef = useRef<HTMLLIElement>(null);
   const scrollToAdd = useRef(false);
@@ -71,6 +99,14 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
   }
 
   async function saveStep(step: CampaignStep, s: StepSave) {
+    // While editing the sequence, changes stay in the draft (new steps have no server id yet);
+    // a recording for a new step is kept and uploaded when the sequence is saved.
+    if (draft) {
+      setDraft(restructure(draft, step.id, { fields: s.fields, delaySeconds: s.delaySeconds, visitBefore: s.visitBefore, likeBefore: s.likeBefore }));
+      if (s.voice) setPendingVoice((cur) => ({ ...cur, [step.id]: s.voice! }));
+      setEditStep(null);
+      return;
+    }
     if (s.delaySeconds === undefined && s.visitBefore === undefined && s.likeBefore === undefined) {
       setBusy(true);
       const r = await fetch(`/api/workflows/${workflowId}/steps/${step.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(s.fields) });
@@ -132,8 +168,8 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
       <div className="sticky top-3 z-30 flex justify-end gap-3 px-4 pt-6 sm:px-10">
         {editing ? (
           <>
-            <button className="inline-flex h-12 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-5 text-[16.5px] text-base-content shadow-[0_4px_14px_-8px_rgba(20,20,19,0.25)] hover:bg-base-200 disabled:opacity-50" disabled={busy} onClick={() => setDraft(null)}><RiCloseLine size={20} /> Cancel</button>
-            <button className="inline-flex h-12 items-center gap-2 rounded-[8px] bg-[#f4876b] px-5 text-[16.5px] font-semibold text-white shadow-[0_6px_16px_-6px_rgba(232,112,82,0.7)] hover:bg-[#ee7357] disabled:opacity-60" disabled={busy} onClick={async () => { if (await putAll(draft!, "Sequence saved")) setDraft(null); }}><RiCheckLine size={20} /> Save changes</button>
+            <button className="inline-flex h-12 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-5 text-[16.5px] text-base-content shadow-[0_4px_14px_-8px_rgba(20,20,19,0.25)] hover:bg-base-200 disabled:opacity-50" disabled={busy} onClick={() => { Object.values(pendingVoice).forEach((v) => URL.revokeObjectURL(v.url)); setPendingVoice({}); setDraft(null); }}><RiCloseLine size={20} /> Cancel</button>
+            <button className="inline-flex h-12 items-center gap-2 rounded-[8px] bg-[#f4876b] px-5 text-[16.5px] font-semibold text-white shadow-[0_6px_16px_-6px_rgba(232,112,82,0.7)] hover:bg-[#ee7357] disabled:opacity-60" disabled={busy} onClick={() => void saveDraft()}><RiCheckLine size={20} /> Save changes</button>
           </>
         ) : (
           <>
@@ -193,7 +229,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
                       )}
                     </div>
                   )}
-                  <StepCard item={it} n={n} stat={stat.get(s.id)} editing={editing} busy={busy} workflowId={workflowId}
+                  <StepCard item={it} n={n} stat={stat.get(s.id)} editing={editing} busy={busy} workflowId={workflowId} localVoice={pendingVoice[s.id] ?? null}
                     aiLabel={aiName(s, countOn(s.step_type === "email" ? "email" : "message"))}
                     onRemove={() => removeStep(s.id)} onEdit={() => setEditStep(s.id)} onRecord={() => setEditStep(s.id)}
                     onContacts={() => setContactsOf({ id: s.id, title: `Step ${n} — ${STEP_TITLE[s.step_type] ?? s.step_type}`, invite: s.step_type === "connect" })}
@@ -229,7 +265,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
         <LikePostsDrawer step={editingItem.step} delayBefore={editingItem.delayBefore} busy={busy} onClose={() => setEditStep(null)} onSave={(s) => saveStep(editingItem.step, s)} />
       )}
       {editingItem && workflowId && editingItem.step.step_type === "voice" && (
-        <VoiceDrawer step={editingItem.step} workflowId={workflowId} delayBefore={editingItem.delayBefore} busy={busy} onClose={() => setEditStep(null)} onSave={(s) => saveStep(editingItem.step, s)} />
+        <VoiceDrawer step={editingItem.step} workflowId={workflowId} delayBefore={editingItem.delayBefore} busy={busy} pending={pendingVoice[editingItem.step.id] ?? null} onClose={() => setEditStep(null)} onSave={(s) => saveStep(editingItem.step, s)} />
       )}
       {editingItem && workflowId && !["like_posts", "voice"].includes(editingItem.step.step_type) && (
         <StepDrawer step={editingItem.step} stepNumber={items.indexOf(editingItem) + 1} delayBefore={editingItem.delayBefore} visitBefore={editingItem.visitBefore}

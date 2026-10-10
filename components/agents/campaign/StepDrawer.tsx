@@ -9,7 +9,9 @@ import { DELAY_OPTIONS, LEAD_VARIABLES, RadioCard, SideDrawer, STEP_TITLE, Tip, 
 import { Avatar, Toggle } from "@/components/agents/ui";
 import { SearchSelect } from "@/components/agents/sources/kit";
 
-export interface StepSave { fields: Partial<CampaignStep>; delaySeconds?: number; visitBefore?: boolean; likeBefore?: boolean }
+/** A voice recording not uploaded yet (its step isn't saved): attached when the sequence is saved. */
+export interface PendingVoice { data: Blob; url: string; ms: number }
+export interface StepSave { fields: Partial<CampaignStep>; delaySeconds?: number; visitBefore?: boolean; likeBefore?: boolean; voice?: PendingVoice }
 
 interface Props {
   step: CampaignStep; stepNumber: number; delayBefore: number | null; visitBefore: boolean; likeBefore?: boolean;
