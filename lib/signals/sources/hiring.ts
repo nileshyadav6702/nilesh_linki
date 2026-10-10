@@ -71,3 +71,58 @@ export const hiringRunner: SourceRunner = async (ctx) => {
     });
   }
 };
+
+/** A board is "surging" when open roles grow by half (and by at least 5) against a 2-6 week old count. */
+export const SURGE_MIN_ROLES = 5;
+export const SURGE_RATIO = 1.5;
+const SURGE_BASE_MIN_DAYS = 14;
+const SURGE_BASE_MAX_DAYS = 42;
+
+export type CountHistory = Array<{ at: string; n: number }>;
+
+/** The count to compare against: the newest sample at least 2 weeks old (and at most 6). */
+export function surgeBaseline(history: CountHistory, now = Date.now()): number | null {
+  const age = (s: { at: string }) => (now - Date.parse(s.at)) / 86_400_000;
+  const old = history.filter((s) => age(s) >= SURGE_BASE_MIN_DAYS && age(s) <= SURGE_BASE_MAX_DAYS);
+  return old.length ? old[old.length - 1].n : null;
+}
+
+export function isSurge(now: number, base: number | null): boolean {
+  return base !== null && now >= base * SURGE_RATIO && now - base >= SURGE_MIN_ROLES;
+}
+
+/**
+ * Hiring surge: counts open roles on the boards listed under Job openings every run, and flags
+ * a company once its count jumps against the count from a few weeks before. The first weeks
+ * only build that history.
+ */
+export const hiringSurgeRunner: SourceRunner = async (ctx) => {
+  const row = ctx.db.prepare("SELECT config_json FROM agent_sources WHERE agent_id = ? AND source_type = 'hiring' ORDER BY created_at LIMIT 1").get(ctx.agent.id) as { config_json: string } | undefined;
+  let boards: Array<{ ats: Ats; slug: string; company?: string }> = [];
+  try { boards = (JSON.parse(row?.config_json || "{}").boards ?? []) as typeof boards; } catch { /* no boards */ }
+  if (!boards.length) throw new Error("Hiring surge watches the job boards under Job openings: add at least one board there");
+  const all = (ctx.cursor.counts as Record<string, CountHistory> | undefined) ?? {};
+  const nowIso = new Date().toISOString();
+  for (const board of boards) {
+    const key = `${board.ats}:${board.slug}`;
+    let jobs: JobPosting[];
+    try {
+      const res = await fetch(boardUrl(board.ats, board.slug), { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+      if (!res.ok) continue;
+      jobs = parseBoard(board.ats, await res.json());
+    } catch { continue; }
+    const history = all[key] ?? [];
+    const base = surgeBaseline(history);
+    // One sample a day is enough; keep ~2 months.
+    if (!history.length || history[history.length - 1].at.slice(0, 10) !== nowIso.slice(0, 10)) history.push({ at: nowIso, n: jobs.length });
+    all[key] = history.filter((s) => Date.now() - Date.parse(s.at) <= 60 * 86_400_000);
+    if (!isSurge(jobs.length, base)) continue;
+    const company = board.company || board.slug.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    ctx.emitForCompany({ name: company }, {
+      type: "hiring_surge", title: `Hiring surge at ${company}: ${jobs.length} open roles (up from ${base})`,
+      snippet: jobs.slice(0, 5).map((j) => j.title).join("; "), sourceUrl: jobs[0]?.url ?? null,
+      dedupeKey: `hiring_surge:${key}:${isoWeek(new Date())}`, metadata: { ats: board.ats, slug: board.slug, open_roles: jobs.length, baseline: base },
+    });
+  }
+  ctx.cursor.counts = all;
+};

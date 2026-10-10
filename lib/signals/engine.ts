@@ -10,7 +10,10 @@ import { prefilterLead, upsertLead, type LeadCandidate } from "@/lib/signals/lea
 import { SOURCE_TYPES, type SourceType } from "@/lib/signals/types";
 import { engagementRunner, keywordRunner } from "@/lib/signals/sources/engagement";
 import { jobChangeRunner } from "@/lib/signals/sources/job-change";
-import { hiringRunner } from "@/lib/signals/sources/hiring";
+import { hiringRunner, hiringSurgeRunner } from "@/lib/signals/sources/hiring";
+import { newDecisionMakerRunner, topActiveRunner } from "@/lib/signals/sources/icp-people";
+import { techStackRunner } from "@/lib/signals/sources/tech-stack";
+import { companyFollowersRunner, profileVisitorsRunner } from "@/lib/signals/sources/linkedin-audience";
 import { fundingRunner } from "@/lib/signals/sources/funding";
 import { lookalikeRunner } from "@/lib/signals/sources/lookalike";
 import { existingListRunner, linkedinImportRunner } from "@/lib/signals/sources/imports";
@@ -28,6 +31,12 @@ const RUNNERS: Record<SourceType, SourceRunner> = {
   lookalike: lookalikeRunner,
   existing_list: existingListRunner,
   linkedin_import: linkedinImportRunner,
+  top_active: topActiveRunner,
+  new_decision_maker: newDecisionMakerRunner,
+  hiring_surge: hiringSurgeRunner,
+  tech_stack: techStackRunner,
+  profile_visitors: profileVisitorsRunner,
+  company_followers: companyFollowersRunner,
 };
 
 /** New leads one agent may add per day, so a viral post can't flood the workspace. */

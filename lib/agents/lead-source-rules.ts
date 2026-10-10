@@ -7,6 +7,7 @@
 export const DRAWER_SIGNAL_TYPES = [
   "competitor_engagement", "keyword_engagement", "influencer_engagement", "own_content_engagement",
   "job_change", "funding", "hiring", "lookalike",
+  "top_active", "new_decision_maker", "hiring_surge", "tech_stack", "profile_visitors", "company_followers",
 ] as const;
 export type DrawerSignalType = (typeof DRAWER_SIGNAL_TYPES)[number];
 
@@ -31,13 +32,16 @@ export interface SignalDraftConfig {
 }
 export interface SignalDraft { enabled: boolean; config: SignalDraftConfig }
 
-/** How many signals one source contributes: each URL / topic once, each switched-on event once. */
+/** Sources that are simply on or off: each counts as one signal. */
+const ON_OFF_TYPES = new Set(["job_change", "funding", "hiring", "lookalike", "top_active", "new_decision_maker", "hiring_surge", "profile_visitors", "company_followers"]);
+
+/** How many signals one source contributes: each URL / topic / technology once, each switched-on event once. */
 export function signalsFor(type: string, s: SignalDraft | undefined): number {
   if (!s?.enabled) return 0;
   const c = s.config;
-  if (type === "keyword_engagement") return c.keywords?.length ?? 0;
+  if (type === "keyword_engagement" || type === "tech_stack") return c.keywords?.length ?? 0;
   if (type === "competitor_engagement" || type === "influencer_engagement" || type === "own_content_engagement") return c.urls?.length ?? 0;
-  if (type === "job_change" || type === "funding" || type === "hiring" || type === "lookalike") return 1;
+  if (ON_OFF_TYPES.has(type)) return 1;
   return 0;
 }
 

@@ -190,6 +190,8 @@ const SOURCE_NAME: Record<string, string> = {
   competitor_engagement: "Competitor engagement", influencer_engagement: "Industry experts", own_content_engagement: "People engaging with you",
   keyword_engagement: "Topic engagement", job_change: "Recent job changes", funding: "Recently raised funds", hiring: "Job openings",
   lookalike: "Lookalike prospects", existing_list: "Saved list", linkedin_import: "LinkedIn import",
+  top_active: "Top 5% active profiles", new_decision_maker: "New decision-makers", hiring_surge: "Hiring surge", tech_stack: "Tech stack",
+  profile_visitors: "Profile visitors", company_followers: "Company page followers",
 };
 
 function parseConfig(json: string | null): { urls: string[]; keywords: string[] } {

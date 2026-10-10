@@ -25,9 +25,9 @@ export default function SavedListPanel({ lists, attached, ownListId, attach, det
     <div className="space-y-6">
       <PanelHeader title="Saved list" description="Add the leads of a list you already have to this agent." />
       <div className="space-y-2">
-        <span className="text-[15px] font-medium text-base-content">Lead list <span className="text-error">*</span></span>
+        <span className="text-[16.5px] font-medium text-base-content">Lead list <span className="text-error">*</span></span>
         <SearchSelect value="" options={options} onChange={onAttach} placeholder={loading ? "Loading lists…" : "Choose a list…"} label="Lead list" />
-        <p className="text-[14.5px] text-base-content/55">The agent picks up the list&apos;s contacts on its next run. A contact already handled by another agent stays with that agent.</p>
+        <p className="text-[15.5px] text-base-content/55">The agent picks up the list&apos;s contacts on its next run. A contact already handled by another agent stays with that agent.</p>
       </div>
       <div>
         <SubHeading>Lists feeding this agent ({active.length})</SubHeading>
@@ -41,7 +41,7 @@ export default function SavedListPanel({ lists, attached, ownListId, attach, det
                 onRemove={() => onDetach(id)} />
             );
           })}
-          {!active.length && <p className="py-3 text-[15px] text-base-content/45">No lists attached yet.</p>}
+          {!active.length && <p className="py-3 text-[16.5px] text-base-content/45">No lists attached yet.</p>}
         </div>
       </div>
     </div>

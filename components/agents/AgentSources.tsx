@@ -24,14 +24,18 @@ export interface AgentSourceRow {
 const GROUP_TITLE: Record<string, string> = {
   competitor_engagement: "Competitor engagement", keyword_engagement: "Topic engagement", influencer_engagement: "Expert engagement",
   own_content_engagement: "Your content engagement", hiring: "Hiring", existing_list: "Saved lists", linkedin_import: "LinkedIn imports",
+  tech_stack: "Tech stack", company_followers: "Company page followers",
 };
 const UNIT: Record<string, [string, string]> = {
   competitor_engagement: ["competitor", "competitors"], keyword_engagement: ["topic", "topics"], influencer_engagement: ["expert", "experts"],
   own_content_engagement: ["profile", "profiles"], hiring: ["job board", "job boards"], existing_list: ["list", "lists"], linkedin_import: ["list", "lists"],
+  tech_stack: ["technology", "technologies"], company_followers: ["page", "pages"],
 };
 /** Item-less sources (a buying event each) are grouped together, the way they read to a user. */
 const EVENT_TITLE: Record<string, string> = {
   funding: "Recently raised funds", job_change: "Recently changed jobs", technology: "Uses a technology", website_visit: "Visited your website",
+  top_active: "Top 5% active profiles in your ICP", new_decision_maker: "New decision-makers in role", hiring_surge: "Hiring surge", profile_visitors: "Profile visitors",
+  lookalike: "Lookalike prospects",
 };
 
 const LOOK: Record<string, { icon: ReactNode; cls: string }> = {
@@ -43,9 +47,12 @@ const LOOK: Record<string, { icon: ReactNode; cls: string }> = {
   existing_list: { icon: <RiFileList3Line size={24} />, cls: "bg-base-200 text-base-content/70" },
   linkedin_import: { icon: <RiFileList3Line size={24} />, cls: "bg-[#e8f1fb] text-[#0a66c2]" },
   events: { icon: <RiLineChartLine size={24} />, cls: "bg-[#fff4e0] text-[#e8870e]" },
+  tech_stack: { icon: <RiCodeSSlashLine size={24} />, cls: "bg-[#e3f5ea] text-[#16a34a]" },
+  company_followers: { icon: <RiGroupLine size={24} />, cls: "bg-[#fde8f1] text-[#db2777]" },
 };
 const EVENT_ICON: Record<string, ReactNode> = {
   funding: <RiMoneyDollarCircleLine size={18} />, job_change: <RiBriefcase4Line size={18} />, technology: <RiCodeSSlashLine size={18} />, website_visit: <RiGlobalLine size={18} />,
+  top_active: <RiLineChartLine size={18} />, new_decision_maker: <RiUserStarLine size={18} />, hiring_surge: <RiUserSearchLine size={18} />, profile_visitors: <RiGroupLine size={18} />,
 };
 
 /** "~ in 5 hours" until the source's next scheduled run. */

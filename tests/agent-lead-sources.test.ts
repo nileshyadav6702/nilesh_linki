@@ -116,3 +116,26 @@ describe("PUT /api/agents/:id/sources", () => {
     expect(row.enabled).toBe(1);
   });
 });
+
+describe("new live signals", () => {
+  it("saves tech stack, ICP people signals, audience signals; checks their inputs", async () => {
+    const a = newAgent();
+    expect((await put(a.id, { sources: [{ source_type: "tech_stack", enabled: true, config: { keywords: [] } }] })).statusCode).toBe(400);
+    expect((await put(a.id, { sources: [{ source_type: "company_followers", enabled: true, config: {} }] })).statusCode).toBe(400);
+    // Hiring surge reads the Job openings boards.
+    expect((await put(a.id, { sources: [{ source_type: "hiring_surge", enabled: true, config: {} }] })).statusCode).toBe(400);
+    const ok = await put(a.id, { sources: [
+      { source_type: "tech_stack", enabled: true, config: { keywords: ["Intercom", "Segment"] } },
+      { source_type: "top_active", enabled: true, config: {} },
+      { source_type: "new_decision_maker", enabled: true, config: {} },
+      { source_type: "profile_visitors", enabled: true, config: {} },
+      { source_type: "company_followers", enabled: true, config: { urls: ["linkedin.com/company/Acme/about/"] } },
+      { source_type: "hiring", enabled: true, config: { boards: [{ ats: "greenhouse", slug: "acme" }] } },
+      { source_type: "hiring_surge", enabled: true, config: {} },
+    ] });
+    expect(ok.statusCode).toBe(200);
+    expect(parseSourceConfig(byType(a.id, "tech_stack")!.config_json).keywords).toEqual(["Intercom", "Segment"]);
+    expect(parseSourceConfig(byType(a.id, "company_followers")!.config_json).urls).toEqual(["https://www.linkedin.com/company/acme"]);
+    for (const t of ["top_active", "new_decision_maker", "profile_visitors", "hiring_surge"]) expect(byType(a.id, t)?.enabled).toBe(1);
+  });
+});

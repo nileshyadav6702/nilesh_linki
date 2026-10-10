@@ -31,8 +31,8 @@ export class LeadSourceError extends Error {
 
 /** Canonical URLs for a URL-based source; throws a readable error on the first bad one. */
 function cleanUrls(type: DrawerSignalType, urls: string[]): string[] {
-  const norm = type === "competitor_engagement" ? normalizeCompanyUrl : type === "influencer_engagement" ? normalizeProfileUrlStrict : normalizePageUrl;
-  const what = type === "competitor_engagement" ? "LinkedIn company page" : type === "influencer_engagement" ? "LinkedIn profile" : "LinkedIn profile or company page";
+  const norm = type === "competitor_engagement" || type === "company_followers" ? normalizeCompanyUrl : type === "influencer_engagement" ? normalizeProfileUrlStrict : normalizePageUrl;
+  const what = type === "competitor_engagement" || type === "company_followers" ? "LinkedIn company page" : type === "influencer_engagement" ? "LinkedIn profile" : "LinkedIn profile or company page";
   const out: string[] = [];
   for (const u of urls) {
     const n = norm(u);
@@ -55,6 +55,8 @@ function checkDraft(type: DrawerSignalType, s: { enabled: boolean; config: z.inf
     if (needsUrls && !config.urls?.length) throw new LeadSourceError("Add at least one LinkedIn page before turning this source on");
     if (type === "keyword_engagement" && !config.keywords?.length) throw new LeadSourceError("Add at least one topic");
     if (type === "hiring" && !config.boards?.length) throw new LeadSourceError("Job openings needs at least one job board (e.g. greenhouse:acme)");
+    if (type === "tech_stack" && !config.keywords?.length) throw new LeadSourceError("Add at least one technology to track");
+    if (type === "company_followers" && !config.urls?.length) throw new LeadSourceError("Add your company page to track its followers");
   }
   return { enabled: s.enabled, config };
 }
@@ -105,6 +107,8 @@ export function saveLeadSources(db: DB, agentId: string, workspaceId: string, in
   const was = countSignals(before);
   const now = countSignals(next);
   if (now > SIGNAL_BUDGET && now > was) throw new LeadSourceError(`An agent can track up to ${SIGNAL_BUDGET} signals (this would be ${now})`);
+  // Hiring surge watches the job boards listed under Job openings.
+  if (next.hiring_surge?.enabled && !next.hiring?.config.boards?.length) throw new LeadSourceError("Hiring surge watches the job boards under Job openings: add at least one board there");
 
   for (const id of input.attach_list_ids) {
     if (!db.prepare("SELECT 1 FROM lists WHERE id = ? AND workspace_id = ?").get(id, workspaceId)) throw new LeadSourceError("List not found", 404);

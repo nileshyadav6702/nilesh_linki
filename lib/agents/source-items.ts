@@ -16,7 +16,7 @@ interface Config { keywords?: string[]; urls?: string[]; boards?: Array<{ ats: s
 export const HIGH_VOLUME_LEADS = 10;
 
 const ENGAGEMENT_SUB: Record<string, string> = {
-  competitor_engagement: "Company competitor profile", influencer_engagement: "Expert profile", own_content_engagement: "Your profile",
+  competitor_engagement: "Company competitor profile", influencer_engagement: "Expert profile", own_content_engagement: "Your profile", company_followers: "Your company page",
 };
 
 function config(s: SourceLike): Config {

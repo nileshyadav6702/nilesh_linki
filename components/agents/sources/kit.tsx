@@ -72,27 +72,27 @@ export function Modal({ title, subtitle, onClose, children, footer, labelId, wid
 }
 
 export function SoonPill() {
-  return <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-base-200 px-2 py-0.5 text-[13.5px] font-medium text-base-content/50">Coming soon</span>;
+  return <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-base-200 px-2.5 py-0.5 text-[14.5px] text-base-content/50">Coming soon</span>;
 }
 
 export function NewPill() {
-  return <span className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-[12.5px] font-semibold uppercase tracking-wide text-[#3a8c4f]">New</span>;
+  return <span className="caps inline-flex items-center rounded-full border border-[#86e0a6] bg-[#e3f9ea] px-2.5 py-0.5 text-[13px] font-semibold tracking-wide text-[#1f9a4c]">New</span>;
 }
 
 /** Panel title row: "Competitor engagement [1 tracked]" + description. */
 export function PanelHeader({ title, count, description }: { title: string; count?: number; description: string }) {
   return (
     <div className="space-y-1">
-      <h3 className="flex flex-wrap items-center gap-2 text-[19px] font-medium text-base-content">
+      <h3 className="flex flex-wrap items-center gap-2.5 text-[21px] font-medium text-base-content">
         {title}
-        {count !== undefined && count > 0 && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[14.5px] font-normal text-primary">{count} tracked</span>}
+        {count !== undefined && count > 0 && <span className="rounded-[6px] bg-base-200 px-2 py-0.5 text-[15px] font-normal text-base-content/65">{count} tracked</span>}
       </h3>
-      <p className="text-[15px] text-base-content/55">{description}</p>
+      <p className="text-[17px] text-base-content/55">{description}</p>
     </div>
   );
 }
 
-export const SubHeading = ({ children }: { children: ReactNode }) => <h4 className="text-[15px] font-medium text-base-content">{children}</h4>;
+export const SubHeading = ({ children }: { children: ReactNode }) => <h4 className="text-[17.5px] font-medium text-base-content">{children}</h4>;
 
 /** Square coral checkbox row with title, optional pill and hint. Disabled rows show Coming soon. */
 export function CheckRow({ label, hint, checked, onChange, disabled, pill, soon }: {
@@ -100,12 +100,15 @@ export function CheckRow({ label, hint, checked, onChange, disabled, pill, soon 
 }) {
   const off = disabled || soon;
   return (
-    <label className={`flex items-start gap-3 border-b border-[var(--border-subtle)] px-1 py-3.5 last:border-0 ${off ? "cursor-not-allowed" : "cursor-pointer hover:bg-base-200/40"}`}>
-      <input type="checkbox" checked={checked && !soon} disabled={off} onChange={(e) => onChange(e.target.checked)}
-        className="checkbox checkbox-sm checkbox-primary mt-0.5 rounded-[5px]" />
+    <label className={`flex items-start gap-4 border-b border-[var(--border-subtle)] px-3 py-4 last:border-0 ${off ? "cursor-not-allowed" : "cursor-pointer hover:bg-base-200/45"}`}>
+      <input type="checkbox" checked={checked && !soon} disabled={off} onChange={(e) => onChange(e.target.checked)} className="peer sr-only" />
+      {/* Coral square like the design; the real checkbox stays for keyboard and screen readers. */}
+      <span aria-hidden className={`mt-0.5 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[5px] border-[1.5px] transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--ring)] ${checked && !soon ? "border-[#f0785a] bg-[#f0785a] text-white" : "border-[#f0785a]/80 bg-base-100"}`}>
+        {checked && !soon && <RiCheckLine size={16} />}
+      </span>
       <span className={`min-w-0 flex-1 ${off ? "opacity-55" : ""}`}>
-        <span className="flex flex-wrap items-center gap-2 text-[15px] text-base-content">{label}{pill}</span>
-        <span className="block text-[14.5px] text-base-content/55">{hint}</span>
+        <span className="flex flex-wrap items-center gap-2.5 text-[17.5px] text-base-content">{label}{pill}</span>
+        <span className="block text-[15.5px] text-base-content/55">{hint}</span>
       </span>
       {soon && <SoonPill />}
     </label>
@@ -124,14 +127,14 @@ export function InitialTile({ label, size = 40 }: { label: string; size?: number
 /** A tracked item row with a remove ✕. */
 export function TrackedRow({ lead, title, sub, onRemove }: { lead?: ReactNode; title: string; sub?: string; onRemove: () => void }) {
   return (
-    <div className="flex items-center gap-3 border-b border-[var(--border-subtle)] py-3 last:border-0">
+    <div className="flex items-center gap-4 border-b border-[var(--border-subtle)] py-3.5 last:border-0">
       {lead}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-[15px] text-base-content">{title}</div>
-        {sub && <div className="truncate text-[14.5px] text-base-content/50">{sub}</div>}
+        <div className="truncate text-[17.5px] text-base-content">{title}</div>
+        {sub && <div className="truncate text-[15.5px] text-base-content/50">{sub}</div>}
       </div>
       <button type="button" onClick={onRemove} aria-label={`Remove ${title}`}
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-base-content/45 hover:bg-base-200 hover:text-error"><RiCloseLine size={18} /></button>
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-base-content/45 hover:bg-base-200 hover:text-error"><RiCloseLine size={22} /></button>
     </div>
   );
 }
