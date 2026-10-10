@@ -44,22 +44,73 @@ const LAUNCH_ARGS = [
   "--disable-gpu",
 ];
 
+export interface BrowserProfile { viewport: { width: number; height: number }; timezoneId: string }
+
+/** The fingerprint every account used before profiles were per account (and still uses without one). */
+const SHARED_PROFILE: BrowserProfile = { viewport: { width: 1920, height: 1080 }, timezoneId: BROWSER_TIMEZONE };
+const VIEWPORTS = [{ width: 1920, height: 1080 }, { width: 1536, height: 864 }, { width: 1440, height: 900 }, { width: 1680, height: 1050 }, { width: 1366, height: 768 }];
+
+/** The fingerprint this account's session was born under (stored at its login), else the shared one. */
+export function browserProfile(accountId: string): BrowserProfile {
+  const raw = (getDb().prepare("SELECT browser_profile FROM accounts WHERE id = ?").get(accountId) as { browser_profile: string | null } | undefined)?.browser_profile;
+  try { return raw ? { ...SHARED_PROFILE, ...(JSON.parse(raw) as Partial<BrowserProfile>) } : SHARED_PROFILE; } catch { return SHARED_PROFILE; }
+}
+
 /**
- * Shared browser-context fingerprint. Login and runtime MUST use the identical
- * options so the LinkedIn session is BORN under the exact fingerprint it will
- * later be used with — a mismatch (or a drift) triggers a forced re-auth.
+ * A fresh login gives the account its own fingerprint, so several accounts on one server don't
+ * look like one machine: a common screen size picked per account, and the browser clock in the
+ * account's timezone (where its people work; LINKEDIN_BROWSER_TIMEZONE still overrides it, e.g.
+ * to match a proxy's region). Stored only with the session the login saves (loginProfileJson), so
+ * a failed re-login never leaves the old session under a new fingerprint.
  */
-export function contextOptions(storageState?: object, proxy?: PlaywrightProxy) {
+export function profileForNewLogin(accountId: string): BrowserProfile {
+  const row = getDb().prepare("SELECT timezone FROM accounts WHERE id = ?").get(accountId) as { timezone: string | null } | undefined;
+  let hash = 0;
+  for (const ch of accountId) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  const profile: BrowserProfile = {
+    viewport: VIEWPORTS[hash % VIEWPORTS.length],
+    timezoneId: process.env.LINKEDIN_BROWSER_TIMEZONE || validZone(row?.timezone) || BROWSER_TIMEZONE,
+  };
+  return profile;
+}
+
+const loginProfiles = new WeakMap<BrowserContext, BrowserProfile>();
+
+/** A browser context for a fresh login, under the account's new fingerprint. */
+export async function newLoginContext(b: Browser, accountId: string): Promise<BrowserContext> {
+  const profile = profileForNewLogin(accountId);
+  const ctx = await b.newContext(contextOptions(undefined, accountProxy(accountId), profile));
+  loginProfiles.set(ctx, profile);
+  return ctx;
+}
+
+/** The fingerprint a login context was made with, to store alongside the session it saves. */
+export function loginProfileJson(ctx: BrowserContext): string | null {
+  const profile = loginProfiles.get(ctx);
+  return profile ? JSON.stringify(profile) : null;
+}
+
+function validZone(tz: string | null | undefined): string | null {
+  if (!tz) return null;
+  try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz; } catch { return null; }
+}
+
+/**
+ * Browser-context fingerprint. Login and runtime MUST use the identical options so the LinkedIn
+ * session is BORN under the exact fingerprint it will later be used with — a mismatch (or a drift)
+ * triggers a forced re-auth. Pass the account's profile (browserProfile / profileForNewLogin).
+ */
+export function contextOptions(storageState?: object, proxy?: PlaywrightProxy, profile: BrowserProfile = SHARED_PROFILE) {
   return {
     // The account's own proxy, when set: login and runtime both go through it (one stable IP).
     ...(proxy ? { proxy } : {}),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     storageState: storageState as any,
-    viewport: { width: 1920, height: 1080 },
+    viewport: profile.viewport,
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
     locale: "en-US",
-    timezoneId: BROWSER_TIMEZONE,
+    timezoneId: profile.timezoneId,
     permissions: ["clipboard-read", "clipboard-write"] as ("clipboard-read" | "clipboard-write")[],
   };
 }
@@ -122,7 +173,7 @@ async function createContext(accountId: string): Promise<BrowserContext> {
     }
   }
 
-  const ctx = await b.newContext(contextOptions(storageState, accountProxy(accountId)));
+  const ctx = await b.newContext(contextOptions(storageState, accountProxy(accountId), browserProfile(accountId)));
 
   // Auto-evict from map when context closes for any reason (crash, session expiry, etc.)
   ctx.on("close", () => {
@@ -326,7 +377,7 @@ export async function authenticateAccount(accountId: string): Promise<void> {
 
   try {
     // Same fingerprint as runtime, so the session is not born under a different one.
-    const ctx = await visibleBrowser.newContext(contextOptions(undefined, accountProxy(accountId)));
+    const ctx = await newLoginContext(visibleBrowser, accountId);
 
     const page = await ctx.newPage();
     await page.goto("https://www.linkedin.com/login");
@@ -344,8 +395,9 @@ export async function authenticateAccount(accountId: string): Promise<void> {
 
     // Save full storage state (cookies + localStorage) to DB
     const state = await ctx.storageState();
-    db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1 WHERE id = ?").run(
+    db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1, browser_profile = COALESCE(?, browser_profile) WHERE id = ?").run(
       encryptSecret(JSON.stringify(state)),
+      loginProfileJson(ctx),
       accountId
     );
 

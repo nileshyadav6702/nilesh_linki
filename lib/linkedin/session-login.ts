@@ -1,8 +1,7 @@
 import type { BrowserContext, Page } from "playwright";
 import { getDb } from "@/lib/db";
 import { encryptSecret } from "@/lib/crypto";
-import { closeSession, contextOptions, getBrowser } from "@/lib/linkedin/session";
-import { accountProxy } from "@/lib/linkedin/proxy";
+import { closeSession, getBrowser, loginProfileJson, newLoginContext } from "@/lib/linkedin/session";
 
 // ─── Server-side headless login ───────────────────────────────────────────────
 // Logs in directly on the server (no screen) so the session is born under the
@@ -67,8 +66,9 @@ async function persistLogin(accountId: string, ctx: BrowserContext, page?: Page)
   }
   const db = getDb();
   const state = await ctx.storageState();
-  db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1 WHERE id = ?").run(
+  db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1, browser_profile = COALESCE(?, browser_profile) WHERE id = ?").run(
     encryptSecret(JSON.stringify(state)),
+    loginProfileJson(ctx),
     accountId
   );
   // Pull the account's LinkedIn conversations into the inbox right away.
@@ -151,7 +151,7 @@ export async function startHeadlessLogin(
   await clearPendingLogin(accountId);
 
   const b = await getBrowser(true);
-  const ctx = await b.newContext(contextOptions(undefined, accountProxy(accountId)));
+  const ctx = await newLoginContext(b, accountId);
   const page = await ctx.newPage();
   try {
     await page.goto("https://www.linkedin.com/login", { waitUntil: "domcontentloaded", timeout: 30_000 });

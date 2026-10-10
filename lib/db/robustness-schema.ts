@@ -275,6 +275,9 @@ const STATEMENTS: string[] = [
   // Why a lead is parked on its step right now (daily limit, outside hours, waiting to accept…),
   // shown next to it in the campaign. Cleared when it moves on.
   "ALTER TABLE run_profile_tracks ADD COLUMN wait_reason TEXT",
+  // The browser fingerprint an account's LinkedIn session was born under (viewport, clock),
+  // chosen at its login and reused for every later use. NULL = the original shared one.
+  "ALTER TABLE accounts ADD COLUMN browser_profile TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */
