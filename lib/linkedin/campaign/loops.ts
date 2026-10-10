@@ -13,7 +13,7 @@ import {
   CONNECTION_SYNC_TIMEOUT_MS, CONTEXT_IDLE_CLOSE_MS, INBOX_SYNC_TIMEOUT_MS, POLL_INTERVAL_MS,
 } from "./constants";
 import { emailCampaignTick } from "./email-tick";
-import { accountConcurrency, busyAccountIds, claimAccount, runAccountWorkers } from "./account-workers";
+import { accountConcurrency, busyAccountIds, claimAccount, startAccountWorkers } from "./account-workers";
 import { linkiRole, runsBackgroundLoops } from "@/lib/runtime/role";
 import { isStopping, stoppableSleep, trackLoop } from "@/lib/runtime/lifecycle";
 
@@ -167,7 +167,9 @@ export async function linkedinLoop(): Promise<void> {
  * timed-out phase keeps its account busy until it really ends.
  */
 export async function linkedinPass(db: ReturnType<typeof getDb>, lease: ActiveLease): Promise<void> {
-  await runAccountWorkers(db, lease);
+  // Free-running: each account starts its next unit as soon as its last one ends, instead of
+  // every account waiting for the slowest one (account-workers.ts).
+  await startAccountWorkers(db, lease);
   // CRM connector sync (HubSpot/Salesforce): HTTP only, after the account workers as before.
   if (!lease.isHeld()) return;
   await guard("Connection sync", CONNECTION_SYNC_TIMEOUT_MS, () => syncDueConnections());

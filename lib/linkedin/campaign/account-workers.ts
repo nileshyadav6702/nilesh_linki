@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { isStopping, trackLoop } from "@/lib/runtime/lifecycle";
 import type { ActiveLease } from "@/lib/email/infrastructure";
 import { acquireAccountLease, type AccountLease } from "@/lib/linkedin/account-lease";
 import { dropStaleSession } from "@/lib/linkedin/session";
@@ -246,3 +247,38 @@ export async function runAccountWorkers(db: ReturnType<typeof getDb>, lease: Act
   }, () => lease.isHeld());
   return outcomes;
 }
+
+/** Account units started by startAccountWorkers that haven't finished yet. */
+const inFlight = new Map<string, Promise<void>>();
+
+/**
+ * Free-running account workers: start a unit for every account with work that isn't already
+ * running one (at most the concurrency cap in flight) and return WITHOUT waiting for them. A fast
+ * account starts its next unit on the next pass instead of idling until the slowest account's
+ * unit (imports, enrichment, discovery) is done. Units are tracked so shutdown waits for them.
+ */
+export async function startAccountWorkers(db: ReturnType<typeof getDb>, lease: ActiveLease, opts: AccountPassOptions = {}): Promise<string[]> {
+  if (!lease.isHeld() || isStopping()) return [];
+  recoverStaleLinkedinActions(db);
+  const { failAccountlessImports } = await import("@/lib/import-jobs");
+  failAccountlessImports(db);
+  const { flagAccountlessDiscoverySources } = await import("@/lib/signals/linkedin-discovery");
+  flagAccountlessDiscoverySources();
+  const accounts = (opts.accounts ?? await accountsWithLinkedinWork(db)).filter((id) => !inFlight.has(id));
+  const phases = opts.phases ?? defaultAccountPhases(db);
+  const limit = opts.concurrency ?? accountConcurrency();
+  const started: string[] = [];
+  for (const accountId of accounts) {
+    if (inFlight.size >= limit || !lease.isHeld()) break;
+    const unit = runAccountUnit(accountId, lease, phases)
+      .then(() => undefined, (err: unknown) => { console.error(`[runner] account worker ${accountId} failed:`, err instanceof Error ? err.message : err); })
+      .finally(() => { inFlight.delete(accountId); });
+    inFlight.set(accountId, unit);
+    void trackLoop(unit);
+    started.push(accountId);
+  }
+  return started;
+}
+
+/** Accounts whose unit is still running (for tests and status). */
+export const accountsInFlight = () => [...inFlight.keys()];
