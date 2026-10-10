@@ -147,6 +147,20 @@ export function afterStepWhere(w: { track: string; from: number; to: number | nu
     : { sql: "rt.state = 'in_progress' AND rt.current_step >= ? AND rt.current_step < ?", params: [w.from, w.to] };
 }
 
+/** An invitation sent from this step on this track (the step holds the lead until it is accepted). */
+const INVITED_HERE = "EXISTS (SELECT 1 FROM linkedin_actions la WHERE la.track_id = rt.id AND la.step_id = ? AND la.type = 'connect' AND la.status IN ('sent','uncertain'))";
+
+/**
+ * The leads "at" a step, as its card counts them and its contacts list shows them: past it and
+ * not yet at the next action step; for an invitation step also those invited and still waiting
+ * for an answer.
+ */
+export function atStepWhere(stepId: string, stepType: string, w: { track: string; from: number; to: number | null }): { sql: string; params: unknown[] } {
+  const after = afterStepWhere(w);
+  if (stepType !== "connect") return after;
+  return { sql: `(${after.sql} OR (rt.state = 'in_progress' AND rt.current_step < ? AND ${INVITED_HERE}))`, params: [...after.params, w.from, stepId] };
+}
+
 export function stepOccupancy(db: Database.Database, workflowId: string | null): StepOccupancy[] {
   if (!workflowId) return [];
   const steps = db.prepare("SELECT id, track, step_type, step_order, delay_seconds FROM workflow_steps WHERE workflow_id = ? ORDER BY track, step_order").all(workflowId) as StepOccupancy[];
@@ -162,13 +176,12 @@ export function stepOccupancy(db: Database.Database, workflowId: string | null):
     // An invitation step holds the lead until the invitation is accepted (or it gives up), so
     // "past the step" misses every pending invitation. Count the invitations actually sent from
     // this step (linkedin_actions), plus anyone already past it.
-    const invitedHere = "EXISTS (SELECT 1 FROM linkedin_actions la WHERE la.track_id = rt.id AND la.step_id = ? AND la.type = 'connect' AND la.status IN ('sent','uncertain'))";
     const past = db.prepare(`SELECT COUNT(DISTINCT rp.target_id) invited, COUNT(DISTINCT CASE WHEN t.connected_at IS NOT NULL THEN rp.target_id END) accepted
-      ${TRACKS_IN_RUN.replace("JOIN runs r", "JOIN targets t ON t.id = rp.target_id JOIN runs r")} AND (rt.state = 'completed' OR rt.current_step >= ? OR ${invitedHere})`)
+      ${TRACKS_IN_RUN.replace("JOIN runs r", "JOIN targets t ON t.id = rp.target_id JOIN runs r")} AND (rt.state = 'completed' OR rt.current_step >= ? OR ${INVITED_HERE})`)
       .get(workflowId, s.track, s.step_order, s.id) as { invited: number; accepted: number };
     // At this step now: invited and waiting for an answer (still on it), or accepted and waiting for the next step.
-    const contacts = (db.prepare(`SELECT COUNT(DISTINCT rp.target_id) n ${TRACKS_IN_RUN} AND (${where.sql} OR (rt.state = 'in_progress' AND rt.current_step < ? AND ${invitedHere}))`)
-      .get(workflowId, s.track, ...where.params, s.step_order, s.id) as { n: number }).n;
+    const at = atStepWhere(s.id, s.step_type, w);
+    const contacts = (db.prepare(`SELECT COUNT(DISTINCT rp.target_id) n ${TRACKS_IN_RUN} AND ${at.sql}`).get(workflowId, s.track, ...at.params) as { n: number }).n;
     return { ...s, contacts, invited: past.invited, accepted: past.accepted };
   });
 }

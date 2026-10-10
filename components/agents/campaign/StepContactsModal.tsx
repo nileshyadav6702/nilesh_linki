@@ -23,7 +23,7 @@ function stamp(iso: string | null): string {
 }
 
 /** The leads that completed one campaign step and have not moved to the next one yet. */
-export default function StepContactsModal({ agentId, stepId, title, onClose, onChanged }: { agentId: string; stepId: string; title: string; onClose: () => void; onChanged?: () => void }) {
+export default function StepContactsModal({ agentId, stepId, title, invite = false, onClose, onChanged }: { agentId: string; stepId: string; title: string; invite?: boolean; onClose: () => void; onChanged?: () => void }) {
   const [rows, setRows] = useState<StepContact[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,7 +63,7 @@ export default function StepContactsModal({ agentId, stepId, title, onClose, onC
           <h2 className="min-w-0 truncate font-medium text-[24px] leading-tight text-base-content">{title} — {rows === null ? "…" : n} contacts</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-base-content/45 hover:bg-base-200 hover:text-base-content"><RiCloseLine size={20} /></button>
         </header>
-        <p className="border-b border-[var(--border-subtle)] px-6 py-3 text-[15px] text-base-content/60">{n} contacts have completed this step and haven&apos;t moved to the next one yet.</p>
+        <p className="border-b border-[var(--border-subtle)] px-6 py-3 text-[15px] text-base-content/60">{invite ? `${n} contact${n === 1 ? " was" : "s were"} invited: waiting for them to accept, or accepted and waiting for the next step.` : <>{n} contacts have completed this step and haven&apos;t moved to the next one yet.</>}</p>
 
         <div className="flex-1 overflow-auto px-6 py-4">
           <table className="w-full min-w-[900px] border-separate border-spacing-0">

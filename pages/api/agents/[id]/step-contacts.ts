@@ -1,10 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { getAgent } from "@/lib/agents/store";
-import { afterStepWhere, stepWindows } from "@/lib/agents/analytics";
+import { atStepWhere, stepWindows } from "@/lib/agents/analytics";
 import { requireWorkspace } from "@/lib/workspace";
 
-// GET /api/agents/:id/step-contacts?step_id= → the leads that completed this step and have not
+// GET /api/agents/:id/step-contacts?step_id= → the leads at this step (see atStepWhere): completed it and not
 // moved to the next one yet (the Campaign tab's "N contacts" on a step card).
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") { res.setHeader("Allow", ["GET"]); return res.status(405).end(); }
@@ -15,7 +15,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const db = getDb();
   const w = stepWindows(db, agent.workflow_id).get(String(req.query.step_id ?? ""));
   if (!w) return res.status(404).json({ error: "Step not found" });
-  const where = afterStepWhere(w);
+  const stepId = String(req.query.step_id);
+  const step = db.prepare("SELECT step_type FROM workflow_steps WHERE id = ?").get(stepId) as { step_type: string } | undefined;
+  const where = atStepWhere(stepId, step?.step_type ?? "", w);
   const contacts = db.prepare(`SELECT t.id, t.full_name, t.title, t.company, t.linkedin_url, t.profile_image_url, t.lead_score, t.agent_status,
       rt.current_step, rt.state, rt.last_step_at,
       (SELECT s.title FROM signals s WHERE s.target_id = t.id ORDER BY s.occurred_at DESC LIMIT 1) signal_title,

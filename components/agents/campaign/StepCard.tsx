@@ -130,7 +130,9 @@ export default function StepCard({ item, n, stat, editing, busy, aiLabel, workfl
             </span>
           )}
           <span className="ml-auto flex items-center gap-1">
-            <Tip text={`${stat?.contacts ?? 0} contact${stat?.contacts === 1 ? " has" : "s have"} completed this step and haven't moved to the next one yet.`}>
+            <Tip text={s.step_type === "connect"
+              ? `${stat?.contacts ?? 0} contact${stat?.contacts === 1 ? " was" : "s were"} invited: waiting for them to accept, or accepted and waiting for the next step.`
+              : `${stat?.contacts ?? 0} contact${stat?.contacts === 1 ? " has" : "s have"} completed this step and haven't moved to the next one yet.`}>
               <button type="button" onClick={onContacts}
                 className="inline-flex items-center gap-1 rounded-[8px] px-2 py-1 tabular-nums text-base-content/55 hover:bg-primary/10 hover:text-base-content"><RiGroupLine size={14} /> {stat?.contacts ?? 0} contacts</button>
             </Tip>

@@ -38,7 +38,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
   const [draft, setDraft] = useState<CampaignStep[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [editStep, setEditStep] = useState<string | null>(null);
-  const [contactsOf, setContactsOf] = useState<{ id: string; title: string } | null>(null);
+  const [contactsOf, setContactsOf] = useState<{ id: string; title: string; invite: boolean } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [delayMenu, setDelayMenu] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -196,7 +196,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
                   <StepCard item={it} n={n} stat={stat.get(s.id)} editing={editing} busy={busy} workflowId={workflowId}
                     aiLabel={aiName(s, countOn(s.step_type === "email" ? "email" : "message"))}
                     onRemove={() => removeStep(s.id)} onEdit={() => setEditStep(s.id)} onRecord={() => setEditStep(s.id)}
-                    onContacts={() => setContactsOf({ id: s.id, title: `Step ${n} — ${STEP_TITLE[s.step_type] ?? s.step_type}` })}
+                    onContacts={() => setContactsOf({ id: s.id, title: `Step ${n} — ${STEP_TITLE[s.step_type] ?? s.step_type}`, invite: s.step_type === "connect" })}
                     onSaveSkip={(days) => void saveSkip(s, days)} />
                 </li>
               );
@@ -249,7 +249,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
           sampleTargetId={sample?.id ?? null} sampleTargetName={sample?.name ?? null} busy={busy}
           onClose={() => setEditStep(null)} onSave={(s) => saveStep(editingItem.step, s)} />
       )}
-      {contactsOf && <StepContactsModal agentId={agentId} stepId={contactsOf.id} title={contactsOf.title} onClose={() => setContactsOf(null)} onChanged={onChanged} />}
+      {contactsOf && <StepContactsModal agentId={agentId} stepId={contactsOf.id} title={contactsOf.title} invite={contactsOf.invite} onClose={() => setContactsOf(null)} onChanged={onChanged} />}
       {settingsOpen && <CampaignSettings agentId={agentId} initial={settings} onClose={() => setSettingsOpen(false)} onSaved={onChanged} />}
     </Panel>
   );
