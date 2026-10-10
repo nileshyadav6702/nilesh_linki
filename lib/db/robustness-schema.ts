@@ -262,6 +262,16 @@ const STATEMENTS: string[] = [
   // The text a message / InMail attempt carried, so a retry after a failed send reuses it
   // instead of paying the AI to write a different one.
   "ALTER TABLE linkedin_actions ADD COLUMN body TEXT",
+  // Per-lead lookups on hot paths (reply stop, reply guard, threading, unsubscribe, bounce
+  // matching, lead deletion) that otherwise scan the whole table.
+  "CREATE INDEX IF NOT EXISTS idx_run_profiles_target ON run_profiles(target_id)",
+  "CREATE INDEX IF NOT EXISTS idx_run_profiles_mailbox ON run_profiles(email_account_id)",
+  "CREATE INDEX IF NOT EXISTS idx_email_jobs_target ON email_jobs(target_id, status)",
+  "CREATE INDEX IF NOT EXISTS idx_email_jobs_run_target ON email_jobs(run_id, target_id)",
+  "CREATE INDEX IF NOT EXISTS idx_sent_messages_recipient ON sent_messages(workspace_id, lower(recipient))",
+  "CREATE INDEX IF NOT EXISTS idx_linkedin_actions_target ON linkedin_actions(target_id, account_id, type)",
+  "CREATE INDEX IF NOT EXISTS idx_logs_target ON logs(target_id)",
+  "CREATE INDEX IF NOT EXISTS idx_runs_workflow ON runs(workflow_id, status)",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */
