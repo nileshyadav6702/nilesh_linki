@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import {
-  RiArrowDownSLine, RiCheckDoubleLine, RiEyeLine, RiLoader4Line, RiMicLine, RiRefreshLine, RiSave3Line, RiSparkling2Line, RiThumbUpLine, RiUserAddLine,
+  RiArrowDownSLine, RiChat3Line, RiCheckDoubleLine, RiCheckLine, RiEyeLine, RiLoader4Line, RiMicLine, RiRefreshLine, RiSave3Line, RiSparkling2Line, RiThumbUpLine, RiUserAddLine,
 } from "react-icons/ri";
 import { Avatar } from "@/components/agents/ui";
 import type { DraftRow, LeadDetail } from "@/lib/agents/copilot";
@@ -140,8 +141,37 @@ export function whenLabel(day: number, firstLaunch: string | null): string {
   return h <= 0 ? "Now" : `In ${h} Hour${h === 1 ? "" : "s"}`;
 }
 
-export default function StepItem({ n, step, targetId, firstLaunch, sender, onDraft }: {
+const agoText = (iso: string) => {
+  const t = Date.parse(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`);
+  return Number.isNaN(t) ? "" : formatDistanceToNow(t, { addSuffix: true });
+};
+
+/** A step that already ran for this contact: what was done, the text that went out, and a link to the conversation. */
+function Done({ step, onThread }: { step: Step; onThread?: () => void }) {
+  const when = step.executed_at ? agoText(step.executed_at) : "";
+  const text = step.draft?.body ?? null;
+  const what = step.step_type === "connect" ? "A LinkedIn connection invitation was sent"
+    : step.step_type === "visit" ? "The contact's LinkedIn profile was visited"
+    : step.step_type === "like_posts" ? "The contact's recent posts were liked"
+    : step.step_type === "voice" ? "A voice message was sent" : null;
+  return (
+    <div className="space-y-3">
+      {what && <Line icon={step.step_type === "connect" ? <RiUserAddLine size={22} /> : <RiCheckLine size={22} className="text-success" />} text={what} />}
+      {!what && text && <div className="whitespace-pre-wrap rounded-[12px] border border-[var(--border-subtle)] bg-base-200/50 px-5 py-4 text-[16px] leading-relaxed text-base-content/85">{text}</div>}
+      {!what && (
+        <div className="flex items-center gap-2.5 text-[15px] text-base-content/70">
+          <RiChat3Line size={20} className="text-primary" /> Sent {when}
+          {onThread && <button type="button" onClick={onThread} className="ml-auto font-medium text-primary hover:underline">View thread</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function StepItem({ n, step, targetId, firstLaunch, sender, onDraft, onThread }: {
   n: number; step: Step; targetId: string; firstLaunch: string | null; sender: { name: string; photo: string | null }; onDraft: (stepId: string, d: DraftRow) => void;
+  /** Opens the inbox conversation with this contact (shown on sent message steps). */
+  onThread?: () => void;
 }) {
   const [open, setOpen] = useState(true);
   const [shown, setShown] = useState(false);
@@ -161,8 +191,10 @@ export default function StepItem({ n, step, targetId, firstLaunch, sender, onDra
     finally { setLoading(false); }
   }
 
+  const done = !!step.executed_at;
   let body: ReactNode = null;
-  if (step.step_type === "connect") body = <Line icon={<RiUserAddLine size={22} />} text="A LinkedIn connection invitation will be sent to this contact" />;
+  if (done) body = <Done step={step} onThread={step.track === "linkedin" ? onThread : undefined} />;
+  else if (step.step_type === "connect") body = <Line icon={<RiUserAddLine size={22} />} text="A LinkedIn connection invitation will be sent to this contact" />;
   else if (step.step_type === "visit") body = <Line icon={<RiEyeLine size={22} className="text-success" />} title="Profile Visit" text="The contact's LinkedIn profile will be visited" />;
   else if (step.step_type === "like_posts") body = <Line icon={<RiThumbUpLine size={22} />} text="The contact's recent posts will be liked" />;
   else if (step.step_type === "voice") body = <Line icon={<RiMicLine size={22} className="text-[#a020c4]" />} title="Voice Message" text="A voice message will be sent to this contact" />;
@@ -173,13 +205,18 @@ export default function StepItem({ n, step, targetId, firstLaunch, sender, onDra
 
   return (
     <li className="relative">
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-4 py-3 text-left">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)] bg-base-100 text-[15px] tabular-nums">{n}</span>
-        <span className="flex flex-1 items-center gap-2 text-[17px] font-medium">{step.label}{writes && !step.fixed && <RiSparkling2Line size={20} className="text-[#c04ad6]" />}</span>
-        <span className="text-[15px] text-base-content/60">{whenLabel(step.day, firstLaunch)}</span>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}
+        className={`flex w-full items-center gap-4 py-3 text-left ${done ? "-mx-3 rounded-[12px] bg-success/[0.08] px-3" : ""}`}>
+        {done
+          ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-success text-white"><RiCheckLine size={22} /></span>
+          : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--border-strong)] bg-base-100 text-[15px] tabular-nums">{n}</span>}
+        <span className="flex flex-1 flex-wrap items-center gap-2 text-[17px] font-medium">{step.label}{writes && !step.fixed && <RiSparkling2Line size={20} className="text-[#c04ad6]" />}
+          {done && <span className="rounded-[6px] border border-success/30 bg-success/12 px-2 py-0.5 text-[14px] font-medium text-[#2f7a43]">Completed</span>}
+        </span>
+        <span className="text-[15px] text-base-content/60">{done ? `Executed ${agoText(step.executed_at!)}` : whenLabel(step.day, firstLaunch)}</span>
         <RiArrowDownSLine size={22} className={`shrink-0 text-base-content/60 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && body && <div className="wizard-rise ml-[18px] border-l border-[var(--border-strong)] pb-4 pl-8 pt-1">{body}</div>}
+      {open && body && <div className={`wizard-rise ml-[18px] border-l-2 pb-4 pl-8 pt-2 ${done ? "border-success" : "border-[var(--border-strong)]"}`}>{body}</div>}
     </li>
   );
 }

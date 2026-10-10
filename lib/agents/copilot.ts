@@ -17,7 +17,10 @@ export interface LeadDetail {
   company: Record<string, unknown> | null;
   signals: Array<{ id: string; type: string; title: string; snippet: string | null; source_url: string | null; occurred_at: string; metadata_json?: string | null }>;
   agent: Pick<Agent, "id" | "name" | "mode" | "outreach_enabled" | "status" | "workflow_id"> & { workflow_name: string | null } | null;
-  sequence: Array<SequenceStep & { draft: DraftRow | null }>;
+  /** Each step with this contact's draft and, once it ran for them, when (executed_at). */
+  sequence: Array<SequenceStep & { draft: DraftRow | null; executed_at: string | null }>;
+  /** The inbox conversation with this contact, for "View thread". */
+  thread_id: string | null;
   /** Drafts not tied to a step (older first-touch drafts). */
   loose_drafts: DraftRow[];
   outreach: Array<{ track: string; state: string; current_step: number; next_step_at: string | null }>;
@@ -69,12 +72,19 @@ export function getLeadDetail(db: Database.Database, workspaceId: string, target
   const drafts = db.prepare(`SELECT id, step_id, channel, subject, body, status, auto_approve_at, position, updated_at FROM approval_queue
     WHERE target_id = ? AND status != 'rejected' ORDER BY created_at DESC`).all(targetId) as DraftRow[];
   const steps = sequenceSteps(db, agent?.workflow_id ?? null);
-  const sequence = steps.map((s) => ({ ...s, draft: drafts.find((d) => d.step_id === s.id) ?? null }));
+  // When each step actually ran for this contact: LinkedIn actions and emails, by step.
+  const ran = new Map<string, string>();
+  for (const r of db.prepare(`SELECT step_id, MAX(created_at) at FROM linkedin_actions WHERE target_id = ? AND status IN ('sent','uncertain') AND step_id IS NOT NULL GROUP BY step_id
+      UNION ALL SELECT step_id, MAX(updated_at) at FROM email_jobs WHERE target_id = ? AND status = 'sent' AND step_id IS NOT NULL GROUP BY step_id`).all(targetId, targetId) as Array<{ step_id: string; at: string }>) {
+    ran.set(r.step_id, r.at);
+  }
+  const sequence = steps.map((s) => ({ ...s, draft: drafts.find((d) => d.step_id === s.id) ?? null, executed_at: ran.get(s.id) ?? null }));
+  const thread = db.prepare("SELECT id FROM inbox_threads WHERE target_id = ? AND workspace_id = ? AND deleted = 0 ORDER BY last_message_at DESC LIMIT 1").get(targetId, workspaceId) as { id: string } | undefined;
   const loose = drafts.filter((d) => !d.step_id);
   const outreach = db.prepare(`SELECT rpt.track, rpt.state, rpt.current_step, rpt.next_step_at FROM run_profile_tracks rpt
     JOIN run_profiles rp ON rp.id = rpt.run_profile_id JOIN runs r ON r.id = rp.run_id
     WHERE rp.target_id = ? AND r.workspace_id = ? ORDER BY rp.created_at DESC LIMIT 2`).all(targetId, workspaceId) as LeadDetail["outreach"];
-  return { contact, company: company ?? null, signals, agent: agent ?? null, sequence, loose_drafts: loose, outreach, activity: leadActivity(db, workspaceId, contact, agent?.name ?? null) };
+  return { contact, company: company ?? null, signals, agent: agent ?? null, sequence, thread_id: thread?.id ?? null, loose_drafts: loose, outreach, activity: leadActivity(db, workspaceId, contact, agent?.name ?? null) };
 }
 
 /** Regenerate one step's draft, or refine it with an instruction such as "make it shorter". */

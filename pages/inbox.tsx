@@ -1,13 +1,17 @@
 import Head from "next/head";
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { RiChat3Line, RiCloseLine, RiFireLine, RiInbox2Line, RiInboxLine, RiLoader4Line, RiMailLine, RiPencilLine, RiRefreshLine, RiSearchLine } from "react-icons/ri";
+import { RiChat3Line, RiCloseLine, RiFireFill, RiFireLine, RiInbox2Line, RiInboxLine, RiLoader4Line, RiMailLine, RiPencilLine, RiRefreshLine, RiSearchLine } from "react-icons/ri";
 import AccountSwitcher from "@/components/inbox/AccountSwitcher";
 import Compose from "@/components/inbox/Compose";
 import ThreadView from "@/components/inbox/ThreadView";
+import ContactPanel from "@/components/inbox/ContactPanel";
+import LeadDrawer from "@/components/agents/LeadDrawer";
 import { ago, PersonAvatar, type AccountsInfo, type ThreadRow } from "@/components/inbox/kit";
 import { requireSignedIn } from "@/lib/agents/page-auth";
+import { Tip } from "@/components/agents/campaign/kit";
 
 export const getServerSideProps = requireSignedIn;
 
@@ -17,11 +21,27 @@ const FILTERS: Array<{ id: Filter; label: string; icon?: React.ReactNode }> = [
   { id: "unread", label: "Unread", icon: <RiMailLine size={16} /> }, { id: "all", label: "All" },
 ];
 
-function Row({ t, on, onClick }: { t: ThreadRow; on: boolean; onClick: () => void }) {
+const quickBtn = "flex h-9 w-9 items-center justify-center rounded-full text-base-content/55 transition-colors hover:bg-primary/10";
+
+function Row({ t, on, onClick, onTriage }: { t: ThreadRow; on: boolean; onClick: () => void; onTriage: (patch: { interested?: boolean; unread?: boolean }) => void }) {
   const email = t.channel === "email";
   const unread = !!t.unread;
   return (
-    <li>
+    <li className="group relative">
+      {/* Quick actions on hover (or keyboard focus): mark interested, mark unread. */}
+      <span className="absolute right-4 top-3 z-10 hidden items-center gap-0.5 rounded-full border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[0_6px_18px_-8px_rgba(20,20,19,0.3)] group-hover:flex group-focus-within:flex">
+        <Tip text={t.interested ? "Remove interested" : "Mark as interested"}>
+          <button type="button" aria-label={t.interested ? "Remove interested" : "Mark as interested"} aria-pressed={!!t.interested}
+            onClick={() => onTriage({ interested: !t.interested })} className={`${quickBtn} ${t.interested ? "text-primary" : "hover:text-primary"}`}>
+            {t.interested ? <RiFireFill size={18} /> : <RiFireLine size={18} />}
+          </button>
+        </Tip>
+        {!unread && (
+          <Tip text="Mark as unread">
+            <button type="button" aria-label="Mark as unread" onClick={() => onTriage({ unread: true })} className={`${quickBtn} hover:text-[#4f46e5]`}><RiMailLine size={18} /></button>
+          </Tip>
+        )}
+      </span>
       <button type="button" onClick={onClick} aria-current={on ? "true" : undefined}
         className={`relative flex w-full gap-3.5 border-b border-[var(--border-subtle)] px-5 py-4 text-left transition-colors ${on ? "bg-primary/[0.08] before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-primary" : "hover:bg-base-200/50"}`}>
         <PersonAvatar name={t.participant_name ?? t.participant_email} photo={t.participant_photo} channel={t.channel} size={42} />
@@ -49,14 +69,21 @@ export default function Inbox() {
   const [info, setInfo] = useState<AccountsInfo | null>(null);
   const [threads, setThreads] = useState<ThreadRow[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [hidden, setHidden] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
+  const [leadId, setLeadId] = useState<string | null>(null);
+  // Deep link (?thread=<id>), e.g. "View thread" in a lead panel elsewhere: open that conversation.
+  const router = useRouter();
+  const linked = typeof router.query.thread === "string" ? router.query.thread : null;
+  const [seenLink, setSeenLink] = useState<string | null>(null);
+  if (linked && linked !== seenLink) { setSeenLink(linked); setFilter("all"); setComposing(false); setSelected(linked); }
   const [syncing, setSyncing] = useState(false);
 
   const loadInfo = useCallback(() => fetch("/api/inbox/accounts").then((r) => r.json()).then(setInfo).catch(() => {}), []);
   const loadThreads = useCallback(async () => {
     const d = await fetch(`/api/inbox/threads?${new URLSearchParams({ scope, filter, q: q.trim(), limit: "100" })}`).then((r) => r.json()).catch(() => null);
-    setThreads(d?.threads ?? []); setTotal(d?.total ?? 0);
+    setThreads(d?.threads ?? []); setTotal(d?.total ?? 0); setHidden(d?.hidden ?? 0);
     setSelected((cur) => (d?.threads?.some((t: ThreadRow) => t.id === cur) ? cur : d?.threads?.[0]?.id ?? null));
   }, [scope, filter, q]);
   useEffect(() => { void loadInfo(); }, [loadInfo]);
@@ -68,6 +95,14 @@ export default function Inbox() {
     const t = setInterval(() => { void loadInfo(); void loadThreads(); }, 5000);
     return () => clearInterval(t);
   }, [anyRunning, loadInfo, loadThreads]);
+
+  /** Row quick actions: flag interested / unread without opening the conversation. */
+  async function triage(id: string, p: { interested?: boolean; unread?: boolean }) {
+    const r = await fetch(`/api/inbox/threads/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
+    if (!r.ok) { toast.error("Could not update the conversation"); return; }
+    setThreads((cur) => cur?.map((x) => (x.id === id ? { ...x, ...(p.interested !== undefined ? { interested: p.interested ? 1 : 0 } : {}), ...(p.unread ? { unread: 1 } : {}) } : x)) ?? null);
+    toast.success(p.unread ? "Marked as unread" : p.interested ? "Marked as interested" : "Removed from Interested");
+  }
 
   async function syncNow() {
     setSyncing(true);
@@ -139,9 +174,15 @@ export default function Inbox() {
             </div>
             {syncError && <div className="rounded-[8px] bg-error/8 px-3 py-2 text-[13px] text-error">Last sync failed: {syncError}</div>}
           </div>
+          {hidden > 0 && (
+            <div className="mx-4 mt-3 rounded-[10px] bg-[#6366f1]/[0.07] px-3.5 py-2.5 text-[14px] text-base-content/70">
+              {hidden} conversation{hidden === 1 ? " is" : "s are"} hidden: they&apos;re with people who aren&apos;t Kairo contacts.{" "}
+              <Link href="/settings?tab=senders" className="font-medium text-[#4f46e5] hover:underline">Change in LinkedIn account settings</Link>
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto">
             {threads === null ? <div className="flex justify-center py-12"><RiLoader4Line size={24} className="animate-spin text-primary" /></div>
-              : threads.length ? <ul>{threads.map((t) => <Row key={t.id} t={t} on={!composing && t.id === selected} onClick={() => { setComposing(false); setSelected(t.id); setThreads((cur) => cur?.map((x) => (x.id === t.id ? { ...x, unread: 0 } : x)) ?? null); }} />)}</ul>
+              : threads.length ? <ul>{threads.map((t) => <Row key={t.id} t={t} on={!composing && t.id === selected} onTriage={(p) => void triage(t.id, p)} onClick={() => { setComposing(false); setSelected(t.id); setThreads((cur) => cur?.map((x) => (x.id === t.id ? { ...x, unread: 0 } : x)) ?? null); }} />)}</ul>
               : (
                 <div className="flex flex-col items-center gap-2 px-8 py-14 text-center">
                   <RiChat3Line size={40} className="text-base-content/30" />
@@ -165,7 +206,10 @@ export default function Inbox() {
               </div>
             )}
         </section>
+
+        {selected && !composing && <ContactPanel key={selected} threadId={selected} onViewMore={setLeadId} />}
       </div>
+      {leadId && <LeadDrawer targetId={leadId} onClose={() => setLeadId(null)} onViewThread={(id) => { setLeadId(null); setComposing(false); setSelected(id); }} />}
     </>
   );
 }

@@ -19,18 +19,29 @@ export interface MessageInput { externalId: string; direction: "in" | "out"; sen
 
 const norm = (u: string | null | undefined) => (u ? u.toLowerCase().replace(/\/+$/, "") : null);
 
-/** The workspace contact this thread is with, matched by LinkedIn URL or email. */
-function matchTarget(db: Database.Database, t: ThreadInput): string | null {
-  if (t.participantUrl) {
-    const row = db.prepare("SELECT id FROM targets WHERE workspace_id = ? AND lower(rtrim(linkedin_url, '/')) = ?").get(t.workspaceId, norm(t.participantUrl)) as { id: string } | undefined;
+/**
+ * The workspace contact a conversation is with: by profile URL, by LinkedIn member id (messaging
+ * shows /in/ACoAA… while a contact may be stored under its public URL, or the reverse), or email.
+ */
+export function findParticipantContact(db: Database.Database, workspaceId: string, participantUrl: string | null | undefined, participantEmail: string | null | undefined): string | null {
+  if (participantUrl) {
+    const row = db.prepare("SELECT id FROM targets WHERE workspace_id = ? AND lower(rtrim(linkedin_url, '/')) = ?").get(workspaceId, norm(participantUrl)) as { id: string } | undefined;
     if (row) return row.id;
+    const handle = participantUrl.match(/linkedin\.com\/in\/([^/?#,]+)/i)?.[1];
+    if (handle) {
+      const byId = db.prepare(`SELECT id FROM targets WHERE workspace_id = ? AND (linkedin_member_urn = ? OR messaging_urn LIKE ? OR lower(rtrim(linkedin_url, '/')) LIKE ?) LIMIT 1`)
+        .get(workspaceId, `urn:li:fsd_profile:${handle}`, `%${handle}%`, `%/in/${handle.toLowerCase()}`) as { id: string } | undefined;
+      if (byId) return byId.id;
+    }
   }
-  if (t.participantEmail) {
-    const row = db.prepare("SELECT id FROM targets WHERE workspace_id = ? AND lower(email) = lower(?)").get(t.workspaceId, t.participantEmail) as { id: string } | undefined;
+  if (participantEmail) {
+    const row = db.prepare("SELECT id FROM targets WHERE workspace_id = ? AND lower(email) = lower(?)").get(workspaceId, participantEmail) as { id: string } | undefined;
     if (row) return row.id;
   }
   return null;
 }
+
+const matchTarget = (db: Database.Database, t: ThreadInput) => findParticipantContact(db, t.workspaceId, t.participantUrl, t.participantEmail);
 
 /**
  * Insert or refresh a thread. A deleted thread stays deleted unless new activity arrives;
@@ -92,22 +103,26 @@ const FILTER_SQL: Record<InboxFilter, string> = {
 };
 
 /** A LinkedIn seat set to "only conversations with my contacts" hides threads with people who aren't contacts. */
-const CONTACTS_ONLY = " AND NOT (t.channel = 'linkedin' AND t.target_id IS NULL AND EXISTS (SELECT 1 FROM accounts sa WHERE sa.id = t.account_id AND sa.inbox_contacts_only = 1))";
+const HIDDEN = " AND t.channel = 'linkedin' AND t.target_id IS NULL AND EXISTS (SELECT 1 FROM accounts sa WHERE sa.id = t.account_id AND sa.inbox_contacts_only = 1)";
+const CONTACTS_ONLY = ` AND NOT (${HIDDEN.slice(5)})`;
 
 export function listThreads(db: Database.Database, workspaceId: string, opts: { scope: AccountScope; filter: InboxFilter; q?: string | null; limit?: number; offset?: number }) {
   const s = scopeWhere(opts.scope);
   const params: unknown[] = [workspaceId, ...s.params];
   let sql = `SELECT t.id, t.channel, t.account_id, t.subject, t.participant_name, t.participant_headline, t.participant_email, t.participant_url, t.participant_photo,
       t.target_id, t.snippet, t.last_message_at, t.unread, t.interested, t.archived, t.has_inbound
-    FROM inbox_threads t WHERE t.workspace_id = ? AND t.deleted = 0${CONTACTS_ONLY}${s.sql}${FILTER_SQL[opts.filter]}`;
+    FROM inbox_threads t WHERE t.workspace_id = ? AND t.deleted = 0${s.sql}${FILTER_SQL[opts.filter]}`;
   if (opts.q) {
     const like = `%${opts.q}%`;
     sql += " AND (t.participant_name LIKE ? OR t.participant_email LIKE ? OR t.subject LIKE ? OR t.snippet LIKE ?)";
     params.push(like, like, like, like);
   }
+  // Conversations the contacts-only setting hides from this view, so the inbox can say why it looks empty.
+  const hidden = (db.prepare(`SELECT COUNT(*) n FROM (${sql}${HIDDEN})`).get(...params) as { n: number }).n;
+  sql += CONTACTS_ONLY;
   const total = (db.prepare(`SELECT COUNT(*) n FROM (${sql})`).get(...params) as { n: number }).n;
   const rows = db.prepare(`${sql} ORDER BY t.last_message_at DESC LIMIT ? OFFSET ?`).all(...params, opts.limit ?? 50, opts.offset ?? 0);
-  return { total, threads: rows };
+  return { total, hidden, threads: rows };
 }
 
 /** Thread counts per account (and per channel) for the account switcher. */

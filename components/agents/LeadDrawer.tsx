@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Papa from "papaparse";
@@ -19,6 +20,7 @@ export interface LeadDetail {
   signals: SignalRow[];
   agent: { id: string; name: string; workflow_name: string | null; mode: string } | null;
   sequence: Step[];
+  thread_id?: string | null;
   outreach: Array<{ track: string; state: string; current_step: number; next_step_at: string | null }>;
   activity?: Array<{ at: string; kind: string; text: string }>;
 }
@@ -51,7 +53,11 @@ const EMPTY_EDIT = { name: false, role: false, contact: false };
  * and activity, with inline edits in the header. Opens from any list; `siblings` + `onOpen`
  * enable the previous / next arrows (and ← → keys).
  */
-export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onOpen }: { targetId: string | null; onClose: () => void; onChanged?: () => void; siblings?: string[]; onOpen?: (id: string) => void }) {
+export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onOpen, onViewThread }: {
+  targetId: string | null; onClose: () => void; onChanged?: () => void; siblings?: string[]; onOpen?: (id: string) => void;
+  /** "View thread" on a sent step; defaults to opening the conversation in the inbox. */
+  onViewThread?: (threadId: string) => void;
+}) {
   const { data: session } = useSession();
   // Closing plays the slide-out first, then tells the parent (which unmounts the panel).
   const [closing, setClosing] = useState(false);
@@ -61,6 +67,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
     setClosing(true);
     setTimeout(() => { setClosing(false); onClose(); }, 230);
   }, [closing, onClose]);
+  const router = useRouter();
   const [d, setD] = useState<LeadDetail | null>(null);
   const [busy, setBusy] = useState(false);
   const [fold, setFold] = useState<Record<Fold, boolean>>({ basic: true, other: false, notes: false, activity: false });
@@ -269,7 +276,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
                         {d.sequence.map((s, i) => {
                           const on = s.id === step;
                           const ai = (s.step_type === "message" || s.step_type === "email" || s.step_type === "sales_inmail") && !s.fixed;
-                          const dot = s.draft?.status === "sent" || s.draft?.status === "consumed" || s.draft?.status === "approved" ? "bg-success" : s.draft?.status === "pending" ? "bg-warning" : "bg-base-content/35";
+                          const dot = s.executed_at || s.draft?.status === "sent" || s.draft?.status === "consumed" || s.draft?.status === "approved" ? "bg-success" : s.draft?.status === "pending" ? "bg-warning" : "bg-base-content/35";
                           return (
                             <span key={s.id} className="inline-flex items-center gap-2">
                               <button type="button" onClick={() => setStep(on ? null : s.id)} aria-pressed={on}
@@ -285,6 +292,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
                       {picked >= 0 ? (
                         <ol className="mt-5">
                           <StepItem key={d.sequence[picked].id} n={picked + 1} step={d.sequence[picked]} targetId={targetId} firstLaunch={null} sender={sender}
+                            onThread={d.thread_id ? () => (onViewThread ? onViewThread(d.thread_id!) : void router.push(`/inbox?thread=${d.thread_id}`)) : undefined}
                             onDraft={(id, draft) => setD((cur) => cur ? { ...cur, sequence: cur.sequence.map((s) => s.id === id ? { ...s, draft } : s) } : cur)} />
                         </ol>
                       ) : <p className="mt-4 text-center text-[15px] text-base-content/45">Click a step to see message details</p>}
