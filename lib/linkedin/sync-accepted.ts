@@ -85,13 +85,22 @@ export async function syncAcceptedConnections(accountId: string): Promise<number
       return m ? parseInt(m[1].replace(/[.,]/g, ""), 10) : null;
     });
 
+    // Only leads THIS account invited (in its workspace) can be its accepted connections. Matching
+    // every workspace let one sender stamp — and its cleanup wipe — another sender's leads.
+    const workspaceId = (db.prepare("SELECT workspace_id FROM accounts WHERE id = ?").get(accountId) as { workspace_id: string | null } | undefined)?.workspace_id ?? null;
+    const invitedHere = `t.workspace_id IS @ws AND EXISTS (SELECT 1 FROM linkedin_actions la WHERE la.target_id = t.id AND la.account_id = @acc
+      AND la.type = 'connect' AND la.status IN ('sent', 'uncertain'))`;
     const findByVanity = db.prepare(
-      `SELECT id, full_name, connected_at, degree FROM targets
-       WHERE linkedin_url LIKE ? AND connection_requested_at IS NOT NULL`
+      `SELECT t.id, t.full_name, t.connected_at, t.degree FROM targets t
+       WHERE (lower(t.linkedin_url) LIKE @exact OR lower(t.linkedin_url) LIKE @slash OR lower(t.linkedin_url) LIKE @query)
+         AND t.connection_requested_at IS NOT NULL AND ${invitedHere}`
     );
+    const vanityArgs = (v: string) => ({ exact: `%/in/${v}`, slash: `%/in/${v}/%`, query: `%/in/${v}?%`, ws: workspaceId, acc: accountId });
     const stampAccepted = db.prepare(
       "UPDATE targets SET degree = 1, connected_at = COALESCE(connected_at, ?) WHERE id = ?"
     );
+    // Accepted proves the invitation went out: an 'uncertain' send is settled as sent.
+    const settleInvite = db.prepare("UPDATE linkedin_actions SET status = 'sent', last_error = NULL, updated_at = datetime('now') WHERE target_id = ? AND account_id = ? AND type = 'connect' AND status = 'uncertain'");
 
     const seenVanities = new Set<string>(); // full-pass phantom check
     let uniquePulled = 0;
@@ -118,9 +127,10 @@ export async function syncAcceptedConnections(accountId: string): Promise<number
         }
         if (!c.vanity) continue;
 
-        for (const m of findByVanity.all(`%/in/${c.vanity}/%`) as Array<{
+        for (const m of findByVanity.all(vanityArgs(c.vanity.toLowerCase())) as Array<{
           id: string; full_name: string | null; connected_at: string | null; degree: number | null;
         }>) {
+          settleInvite.run(m.id, accountId);
           if (m.degree === 1 && m.connected_at) continue; // already correct
           stampAccepted.run(msToSqlite(c.createdAt), m.id);
           console.log(`[sync-accepted] Accepted: ${m.full_name ?? c.vanity}`);
@@ -142,9 +152,10 @@ export async function syncAcceptedConnections(accountId: string): Promise<number
     // incremental/incomplete pass — a partial pull must not wipe real accepts.
     let unmarked = 0;
     if (verifiedComplete) {
+      // Only this account's own invitees: another sender's connections are not in this list.
       const deg1 = db.prepare(
-        "SELECT id, full_name, linkedin_url FROM targets WHERE degree = 1 AND linkedin_url LIKE '%/in/%'"
-      ).all() as Array<{ id: string; full_name: string | null; linkedin_url: string }>;
+        `SELECT t.id, t.full_name, t.linkedin_url FROM targets t WHERE t.degree = 1 AND t.linkedin_url LIKE '%/in/%' AND ${invitedHere}`
+      ).all({ ws: workspaceId, acc: accountId }) as Array<{ id: string; full_name: string | null; linkedin_url: string }>;
       const unmark = db.prepare("UPDATE targets SET degree = NULL, connected_at = NULL WHERE id = ?");
       const tx = db.transaction((rows: typeof deg1) => {
         for (const t of rows) {
