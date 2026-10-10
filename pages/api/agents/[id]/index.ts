@@ -60,7 +60,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "PATCH") {
     const body = (req.body ?? {}) as Record<string, unknown>;
     if (body.status !== undefined && !["active", "paused", "draft"].includes(String(body.status))) return res.status(400).json({ error: "Invalid status" });
-    const { status, outreach_enabled, create_default_campaign: _create, ...rest } = body;
+    const { status, outreach_enabled, create_default_campaign: _create, connect_skip_after_days: skipDays, ...rest } = body;
+    // The invitation step's email fallback (days before switching to email; 0 = never), saved
+    // with the other campaign settings in one go.
+    if (skipDays !== undefined && !(Number.isInteger(skipDays) && (skipDays as number) >= 0 && (skipDays as number) <= 60)) {
+      return res.status(400).json({ error: "connect_skip_after_days must be a whole number of days from 0 to 60" });
+    }
     void _create;
     const parsed = agentInputSchema.partial().safeParse(rest);
     if (!parsed.success) return res.status(400).json({ error: firstIssue(parsed.error) });
@@ -83,7 +88,15 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const patch: Record<string, unknown> = { ...fields };
     if (status !== undefined) patch.status = status;
     if (typeof outreach_enabled === "boolean") patch.outreach_enabled = outreach_enabled;
-    const updated = updateAgent(id, ctx.workspaceId, patch);
+    const updated = db.transaction(() => {
+      const next = updateAgent(id, ctx.workspaceId, patch);
+      const workflowId = next?.workflow_id ?? null;
+      if (next && skipDays !== undefined && workflowId) {
+        db.prepare(`UPDATE workflow_steps SET skip_after_days = ? WHERE id = (SELECT id FROM workflow_steps
+          WHERE workflow_id = ? AND track = 'linkedin' AND step_type = 'connect' ORDER BY step_order LIMIT 1)`).run(skipDays, workflowId);
+      }
+      return next;
+    })();
     if (updated && outreach_enabled === true) activateAgentRuns(db, updated);
     if (updated && outreach_enabled === false) pauseAgentRuns(db, updated);
     // A new mailbox takes over the agent's queued email leads (LinkedIn sender / campaign changes

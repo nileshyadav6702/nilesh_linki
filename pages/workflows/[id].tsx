@@ -497,6 +497,9 @@ export const getServerSideProps: GetServerSideProps = async ({ params, req, res 
 type WizardPage = "prospects" | "prompt" | "linkedin-steps" | "email-steps" | "account" | "summary";
 
 interface WizardStep {
+  /** Server ids of the step and of the delay before it (null for new ones), so a save keeps leads in place. */
+  id?: string | null;
+  delayId?: string | null;
   track: Track;
   type: "visit" | "connect" | "message" | "sales_inmail" | "email";
   delayDaysBefore: number; // delay before this step (0 for first step within its track)
@@ -524,13 +527,17 @@ function buildWizardSteps(steps: Step[]): WizardStep[] {
   const result: WizardStep[] = [];
   // Track pending delays per track independently
   const pendingDelay: Record<string, number> = { linkedin: 0, email: 0 };
+  const pendingDelayId: Record<string, string | null> = { linkedin: null, email: null };
   for (const s of steps) {
     const track: Track = s.track ?? (s.step_type === "email" ? "email" : "linkedin");
     if (s.step_type === "delay") {
       pendingDelay[track] = Math.round(s.delay_seconds / 86400);
+      pendingDelayId[track] = s.id;
     } else {
       const raw = s as unknown as Record<string, unknown>;
       result.push({
+        id: s.id,
+        delayId: pendingDelayId[track],
         track,
         type: s.step_type as "visit" | "connect" | "message" | "sales_inmail" | "email",
         delayDaysBefore: pendingDelay[track] ?? 0,
@@ -553,6 +560,7 @@ function buildWizardSteps(steps: Step[]): WizardStep[] {
         aiLanguage: (raw.ai_language as string) ?? "English",
       });
       pendingDelay[track] = 0;
+      pendingDelayId[track] = null;
     }
   }
   return result;
@@ -1028,11 +1036,12 @@ function Wizard({
   async function saveStepsToDB() {
     setSaving(true);
     // Save campaign prompt alongside steps
-    await fetch(`/api/workflows/${workflowId}`, {
+    const promptRes = await fetch(`/api/workflows/${workflowId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt: campaignPrompt }),
     });
+    if (!promptRes.ok) { setSaving(false); toast.error("Could not save the campaign"); return false; }
     // Build the whole ordered step list and reconcile it in ONE call. The server updates
     // steps in place (reusing ids), so this no longer wipes workflow_branches the way the
     // old delete-every-step-then-recreate flow did.
@@ -1044,7 +1053,7 @@ function Wizard({
     const steps: Array<Record<string, unknown>> = [];
     for (const ws of allOrdered) {
       if (ws.delayDaysBefore > 0) {
-        steps.push({ step_type: "delay", track: ws.track, delay_seconds: ws.delayDaysBefore * 86400 });
+        steps.push({ id: ws.delayId ?? "new", step_type: "delay", track: ws.track, delay_seconds: ws.delayDaysBefore * 86400 });
       }
       const isEmail = ws.type === "email";
       const isInMail = ws.type === "sales_inmail";
@@ -1052,6 +1061,7 @@ function Wizard({
       const isMessage = ws.type === "message" || isInMail;
       const hasAI = isMessage || isEmail;
       steps.push({
+        id: ws.id ?? "new",
         step_type: ws.type,
         track: ws.track,
         connect_note: ws.type === "connect" ? (ws.connectNote || null) : null,
@@ -1077,12 +1087,14 @@ function Wizard({
       if (isEmail) emailPosition++;
       if (isMessage) messagePosition++;
     }
-    await fetch(`/api/workflows/${workflowId}/steps`, {
+    const stepsRes = await fetch(`/api/workflows/${workflowId}/steps`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ steps }),
     });
     setSaving(false);
+    if (!stepsRes.ok) { toast.error("Could not save the sequence"); return false; }
+    return true;
   }
 
   async function enrollContacts() {
@@ -1119,7 +1131,7 @@ function Wizard({
   async function launch() {
     if (wizardSteps.length === 0) { toast.error("Add at least one step"); return; }
     if (selectedTargetIds.size === 0) { toast.error("Select at least one prospect"); return; }
-    await saveStepsToDB();
+    if (!(await saveStepsToDB())) return;
     setLaunching(true);
     const body: Record<string, unknown> = {
       workflow_id: workflowId,
@@ -1159,7 +1171,7 @@ function Wizard({
   }
 
   async function saveAndClose() {
-    await saveStepsToDB();
+    if (!(await saveStepsToDB())) return;
     toast.success("Steps saved");
     onClose();
   }

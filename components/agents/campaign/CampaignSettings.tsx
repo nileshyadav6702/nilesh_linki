@@ -59,11 +59,11 @@ function Card({ title, badge, sub, right, children }: { title: string; badge?: R
  * Agent-wide campaign settings: the language, goal and tone the AI writes in, who is skipped,
  * when an unanswered invitation falls back to email, and how LinkedIn messages are sent.
  */
-export default function CampaignSettings({ agentId, initial, connectStep, workflowId, hasEmailSender, onClose, onSaved }: {
+export default function CampaignSettings({ agentId, initial, connectStep, hasEmailSender, onClose, onSaved }: {
   agentId: string; initial: CampaignSettingsInitial;
   /** The sequence's invitation step: its "skip after N days" is the email fallback. */
   connectStep: { id: string; skip_after_days?: number | null } | null;
-  workflowId: string | null; hasEmailSender: boolean;
+  hasEmailSender: boolean;
   onClose: () => void; onSaved: () => void;
 }) {
   const [language, setLanguage] = useState(initial.language ?? "");
@@ -89,17 +89,15 @@ export default function CampaignSettings({ agentId, initial, connectStep, workfl
   async function save() {
     if (fallbackOn && (!Number.isInteger(days) || days < 1 || days > 60)) return toast.error("Pick between 1 and 60 days for the email fallback");
     setBusy(true);
+    // One request: the settings and the email fallback save together or not at all.
+    const nextDays = fallbackOn ? days : 0;
+    const fallbackChanged = !!connectStep && nextDays !== (connectStep.skip_after_days ?? DEFAULT_FALLBACK_DAYS);
     const r = await fetch(`/api/agents/${agentId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ goal, tone, exclude_first_degree: exclude, language: language || null, split_messages: split }),
+      body: JSON.stringify({ goal, tone, exclude_first_degree: exclude, language: language || null, split_messages: split, ...(fallbackChanged ? { connect_skip_after_days: nextDays } : {}) }),
     });
-    if (!r.ok) { setBusy(false); return toast.error((await r.json().catch(() => ({}))).error ?? "Could not save settings"); }
-    const nextDays = fallbackOn ? days : 0;
-    if (connectStep && workflowId && nextDays !== (connectStep.skip_after_days ?? DEFAULT_FALLBACK_DAYS)) {
-      const s = await fetch(`/api/workflows/${workflowId}/steps/${connectStep.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ skip_after_days: nextDays }) });
-      if (!s.ok) { setBusy(false); return toast.error("Could not save the email fallback"); }
-    }
     setBusy(false);
+    if (!r.ok) return toast.error((await r.json().catch(() => ({}))).error ?? "Could not save settings");
     toast.success("Campaign settings saved");
     onSaved();
     onClose();

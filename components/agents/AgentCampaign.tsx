@@ -275,7 +275,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
           onClose={() => setEditStep(null)} onSave={(s) => saveStep(editingItem.step, s)} />
       )}
       {contactsOf && <StepContactsModal agentId={agentId} stepId={contactsOf.id} title={contactsOf.title} invite={contactsOf.invite} accepted={contactsOf.accepted} onClose={() => setContactsOf(null)} onChanged={onChanged} />}
-      {settingsOpen && <CampaignSettings agentId={agentId} initial={settings} workflowId={workflowId} hasEmailSender={hasEmailSender}
+      {settingsOpen && <CampaignSettings agentId={agentId} initial={settings} hasEmailSender={hasEmailSender}
         connectStep={(steps ?? []).find((s) => s.step_type === "connect") ?? null}
         onClose={() => setSettingsOpen(false)} onSaved={() => { void load(); onChanged(); }} />}
     </Panel>
