@@ -241,6 +241,12 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
     const listUnsubscribe = unsubscribeHeaders(target.workspace_id, freshTarget.email, emailAccount.reply_to || emailAccount.from_email);
     headers = Object.keys(listUnsubscribe).length ? listUnsubscribe : undefined;
   }
+  // Last look before handing over: writing the email can take a while, and a reply (or a stop)
+  // may have arrived meanwhile. Nothing is sent to someone who already answered.
+  if (stoppedSinceClaim(db, tr.id)) {
+    log(db, runId, target.id, "info", `${name} replied or was stopped while the email was being prepared — not sending`);
+    return;
+  }
   db.prepare("UPDATE run_profile_tracks SET last_step_at = datetime('now') WHERE id = ?").run(tr.id);
   log(db, runId, target.id, "info", `Sending email to ${name} <${freshTarget.email}>`);
   try {
@@ -281,4 +287,15 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
     trAdvance(db, tr, steps);
     log(db, runId, target.id, "info", `Email sent to ${name}`);
   })();
+}
+
+/** The track was stopped, or the lead replied since enrolling, after this step started. */
+export function stoppedSinceClaim(db: ReturnType<typeof import("@/lib/db").getDb>, trackId: string): boolean {
+  const row = db.prepare(`SELECT rt.state, t.email_replied_at, t.last_replied_at, rp.created_at enrolled_at FROM run_profile_tracks rt
+    JOIN run_profiles rp ON rp.id = rt.run_profile_id JOIN targets t ON t.id = rp.target_id WHERE rt.id = ?`).get(trackId) as
+    { state: string; email_replied_at: string | null; last_replied_at: string | null; enrolled_at: string | null } | undefined;
+  if (!row || row.state !== "in_progress") return true;
+  const ms = (v: string | null) => (v ? Date.parse(/[TZ]/.test(v) ? v : `${v.replace(" ", "T")}Z`) : NaN);
+  const since = ms(row.enrolled_at);
+  return [row.email_replied_at, row.last_replied_at].some((at) => !!at && (Number.isNaN(since) || ms(at) >= since));
 }
