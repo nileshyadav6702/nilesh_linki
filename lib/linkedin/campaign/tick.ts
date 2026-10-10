@@ -60,6 +60,13 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
         }
         console.log(`[runner] Accepted-connections sync complete — ${stamped} stamped`);
       });
+      // Right after acceptances are known: invitations we recorded as sent that LinkedIn's own
+      // Sent list doesn't have are put back in line to be sent again.
+      await guard(`Sent-invitations check (${accountId})`, ACCEPTED_SYNC_TIMEOUT_MS, async () => {
+        const { reconcileSentInvitations } = await import("@/lib/linkedin/invite-reconcile");
+        const r = await reconcileSentInvitations(accountId);
+        if (r.requeued.length) console.log(`[runner] Sent-invitations check: ${r.requeued.length} requeued of ${r.checked} checked`);
+      });
     }
   }
 

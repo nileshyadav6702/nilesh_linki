@@ -43,10 +43,16 @@ export async function runConnectStep(ctx: StepContext): Promise<void> {
   const linkedinUrl = await getLinkedinUrl(db, target, accountId);
   const note = step.connect_note?.trim() ? renderOutreachTemplate(step.connect_note, freshTarget, loadTargetCustomValues(db, target.workspace_id, target.id)) : null;
   let noteSent = false;
+  let publicUrl: string | null = null;
   const sent = await sendLinkedinAction(db, connect, async () => {
     const page = await getSessionPage(accountId);
-    try { noteSent = (await sendConnectionRequest(page, linkedinUrl, note)).noteSent; } finally { await page.close(); }
+    try { ({ noteSent, publicUrl } = await sendConnectionRequest(page, linkedinUrl, note)); } finally { await page.close(); }
   });
+  // Keep the public profile URL: acceptance sync and the sent-invitations check match on it, and
+  // LinkedIn's internal "/in/ACoAA…" ids never show up there.
+  if (publicUrl && /\/in\/ACo/i.test(freshTarget.linkedin_url ?? "")) {
+    db.prepare("UPDATE targets SET linkedin_url = ? WHERE id = ?").run(publicUrl, target.id);
+  }
   if (note && sent.claimed && !noteSent) log(db, runId, target.id, "warn", `LinkedIn did not allow a note for ${name} (free accounts get a few per month) — sent without it`);
   if (!sent.claimed) { settlePriorLinkedinAction(db, runId, tr, steps, target.id, name, "connect", sent.status); return; }
   await saveSessionAfterSend(accountId);
