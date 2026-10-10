@@ -174,7 +174,7 @@ export function SectionHeading({ title, subtitle, actions, className = "" }: { t
 /** Underlined tab row. `counts` shows a small number chip after a tab label. */
 export function TabBar<T extends string>({ tabs, value, onChange, counts = {}, icons = {} }: { tabs: readonly T[]; value: T; onChange: (t: T) => void; counts?: Partial<Record<T, number>>; icons?: Partial<Record<T, ReactNode>> }) {
   return (
-    <div role="tablist" className="flex gap-2 overflow-x-auto border-b border-[var(--border-subtle)]">
+    <div role="tablist" className="flex gap-2 overflow-x-auto overflow-y-hidden border-b border-[var(--border-subtle)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {tabs.map((t) => {
         const on = t === value;
         return (
@@ -183,7 +183,7 @@ export function TabBar<T extends string>({ tabs, value, onChange, counts = {}, i
             {icons[t] && <span className={on ? "text-primary" : ""}>{icons[t]}</span>}
             {t}
             {counts[t] !== undefined && <span className="rounded-[6px] bg-base-200 px-2.5 py-0.5 text-[15px] tabular-nums text-base-content/75">{counts[t]}</span>}
-            {on && <motion.span layoutId="agent-tab-underline" transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }} className="absolute inset-x-3 -bottom-px h-[3px] rounded-full bg-base-content/80" />}
+            {on && <motion.span layoutId="agent-tab-underline" transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }} className="absolute inset-x-3 bottom-0 h-[3px] rounded-full bg-base-content/80" />}
           </button>
         );
       })}

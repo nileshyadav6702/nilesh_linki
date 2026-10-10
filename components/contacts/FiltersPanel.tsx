@@ -99,7 +99,7 @@ export default function FiltersPanel({ filters, patch, clear, onClose, agents, l
   );
   if (compact) {
     return (
-      <div ref={wrap} role="dialog" aria-label="Lead filters" className="wizard-rise absolute left-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(540px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+      <div ref={wrap} role="dialog" aria-label="Lead filters" className="wizard-rise absolute right-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(540px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
         <button type="button" onClick={onClose} aria-label="Close filters" className="absolute right-4 top-4 z-10 text-base-content/50 hover:text-base-content"><RiCloseLine size={24} /></button>
         <div className="space-y-5 px-6 pb-5 pt-6">
           <div><Heading>Campaign</Heading>{sel("Step", filters.step, [{ value: "", label: "All" }, ...CAMPAIGN.slice(1)], (v) => patch({ step: v }))}</div>

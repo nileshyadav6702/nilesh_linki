@@ -1,11 +1,10 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { SiGmail } from "react-icons/si";
 import {
-  RiAddLine, RiArrowRightLine, RiDeleteBinLine, RiFocus3Line, RiInformationLine, RiLinkedinFill, RiMailLine, RiMore2Fill,
-  RiPauseCircleLine, RiPauseLine, RiPlayFill, RiRadarLine, RiRocketLine, RiSendPlaneLine, RiUserAddLine,
+  RiAddLine, RiArrowRightLine, RiFocus3Line, RiInformationLine, RiLinkedinFill, RiMailLine,
+  RiPauseCircleLine, RiPauseLine, RiPlayFill, RiSendPlaneLine, RiUserAddLine,
 } from "react-icons/ri";
-import { FloatingMenu, type MenuItem } from "@/components/agents/leads/Menu";
 import { primaryBtn } from "@/components/agents/ui";
 
 export interface HeaderSenders {
@@ -55,24 +54,18 @@ function rampTip(limit: number, start: string | null): string {
 
 /**
  * Compact agent header: name + status, then the senders with their daily limits, and one
- * primary outreach action. Less frequent controls (sourcing, launch now, delete) sit in a menu.
+ * primary outreach action. Sourcing on/off and launching live on the Sources tab.
  */
-export default function AgentHeader({ name, status, statusTip, outreachOn, senders, busy, nextLaunch, onToggleOutreach, onToggleSourcing, onLaunch, onDelete, onSenderSettings }: {
-  name: string; status: "active" | "paused" | "draft" | string; statusTip: string; outreachOn: boolean; senders: HeaderSenders; busy: boolean;
+export default function AgentHeader({ name, status, statusTip, outreachOn, senders, nextLaunch, onToggleOutreach, onSenderSettings }: {
+  name: string; status: "active" | "paused" | "draft" | string; statusTip: string; outreachOn: boolean; senders: HeaderSenders;
   /** "Next launch in 12 hours" under the outreach button; `when` is shown bold. */
   nextLaunch?: { lead: string; when: string; tip: string } | null;
-  onToggleOutreach: () => void; onToggleSourcing: () => void; onLaunch: () => void; onDelete: () => void; onSenderSettings: () => void;
+  onToggleOutreach: () => void; onSenderSettings: () => void;
 }) {
-  const [menu, setMenu] = useState<HTMLElement | null>(null);
   const li = senders.linkedin;
   const mail = senders.email;
   const finding = status === "active";
   const isGmail = !!mail?.from_email && /@(gmail|googlemail)\.com$/i.test(mail.from_email);
-  const items: MenuItem[] = [
-    { label: finding ? "Pause lead sourcing" : "Resume lead sourcing", icon: <RiRadarLine size={15} />, onSelect: onToggleSourcing },
-    { label: "Launch sources now", icon: <RiRocketLine size={15} />, onSelect: onLaunch, disabled: busy },
-    { label: "Delete agent", icon: <RiDeleteBinLine size={15} />, onSelect: onDelete, danger: true },
-  ];
 
   return (
     <div className="-mx-4 -mt-6 flex flex-col gap-4 px-4 pt-6 sm:flex-row sm:items-start sm:justify-between md:-mx-10 md:-mt-9 md:px-10 md:pt-8">
@@ -143,10 +136,6 @@ export default function AgentHeader({ name, status, statusTip, outreachOn, sende
         <button className={`${primaryBtn} !h-12 !bg-[#f4876b] !px-5 !text-[16.5px] shadow-[0_6px_16px_-6px_rgba(232,112,82,0.7)] hover:!bg-[#ee7357]`} onClick={onToggleOutreach}>
           {outreachOn ? <><RiPauseLine size={18} /> Pause Outreach</> : <><RiPlayFill size={18} /> Start Outreach</>}
         </button>
-        <button type="button" className="inline-flex h-10 w-10 items-center justify-center rounded-[8px] text-base-content/50 hover:bg-base-200 hover:text-base-content" aria-label="More agent actions" aria-haspopup="menu" aria-expanded={!!menu} onClick={(e) => setMenu(menu ? null : e.currentTarget)}>
-          <RiMore2Fill size={18} />
-        </button>
-        {menu && <FloatingMenu anchor={menu} items={items} onClose={() => setMenu(null)} label="Agent actions" width={220} />}
       </div>
       {nextLaunch && (
         <Tip tip={nextLaunch.tip} wide>

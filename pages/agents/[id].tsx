@@ -13,8 +13,6 @@ import { EMPTY_ICP } from "@/components/agents/IcpEditor";
 import TargetingDrawer from "@/components/agents/targeting/TargetingDrawer";
 import AgentCampaign from "@/components/agents/AgentCampaign";
 import { ContactsWorkspace } from "@/components/contacts/ContactsWorkspace";
-import Confirm from "@/components/contacts/Confirm";
-import { failToast } from "@/components/settings/billing/credits-toast";
 import { FindingLeadsToast, LeadsFinderTip } from "@/components/agents/LaunchNotice";
 import type { Step } from "@/components/agents/SequenceEditor";
 import {
@@ -68,8 +66,6 @@ export default function AgentDetail() {
   const [icp, setIcp] = useState<Icp>(EMPTY_ICP);
   const [icpWebsite, setIcpWebsite] = useState<string | null>(null);
   const [editingIcp, setEditingIcp] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [askLaunch, setAskLaunch] = useState(false);
   // Fresh from the new-agent wizard: show the "finding leads" card and the Leads tab tip once.
   const [launched, setLaunched] = useState(() => router.query.launched === "1");
   const [tipOpen, setTipOpen] = useState(launched);
@@ -109,29 +105,12 @@ export default function AgentDetail() {
     return true;
   }
 
-  async function runNow() {
-    setBusy(true);
-    const r = await fetch(`/api/agents/${id}/run`, { method: "POST" });
-    const data = await r.json();
-    setBusy(false);
-    if (!r.ok) return failToast(data, "Run failed");
-    toast.success(`Scored ${data.pass?.scored ?? 0}, drafted ${data.pass?.drafted ?? 0}${data.linkedin_sources_queued ? ` · ${data.linkedin_sources_queued} LinkedIn source(s) queued` : ""}`);
-    if (data.note) toast.message(data.note);
-    load();
-  }
-
   /** Saves the edited targeting as a new ICP version and points the agent at it. */
   async function saveIcp(next: Icp): Promise<boolean> {
     const r = await fetch("/api/icp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data: next, website_url: icpWebsite ?? undefined }) });
     const row = await r.json();
     if (!r.ok) { toast.error(row.error ?? "Could not save ICP"); return false; }
     return patch({ icp_id: row.id }, `ICP v${row.version} saved — new leads are scored against it`);
-  }
-
-  async function remove() {
-    if (!confirm("Delete this agent? Its leads and campaign stay; discovery stops.")) return;
-    await fetch(`/api/agents/${id}`, { method: "DELETE" });
-    router.push("/agents");
   }
 
   if (!d) return <p className="text-[15px] text-base-content/40">Loading…</p>;
@@ -149,16 +128,12 @@ export default function AgentDetail() {
       <Head><title>{a.name} — Agents — Kairo</title></Head>
       <div className="space-y-6">
         <AgentHeader
-          name={a.name} status={a.status} outreachOn={sending} senders={d.senders} busy={busy}
+          name={a.name} status={a.status} outreachOn={sending} senders={d.senders}
           statusTip={finding ? `Finding leads · ${launch}` : a.status === "draft" ? "Draft — launch it to start finding leads" : `Lead sourcing is paused · ${launch}`}
           onToggleOutreach={() => patch({ outreach_enabled: !sending }, sending ? "Outreach paused" : "Outreach started")}
-          onToggleSourcing={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")}
-          onLaunch={() => setAskLaunch(true)} onDelete={remove} onSenderSettings={() => setTab("Settings")}
+          onSenderSettings={() => setTab("Settings")}
           nextLaunch={launchInfo(sending, d.next_outreach_at ?? null)}
         />
-        {askLaunch && <Confirm title="Launch sources now?" action="Launch now (10 credits)" onCancel={() => setAskLaunch(false)}
-          onConfirm={async () => { setAskLaunch(false); await runNow(); }}
-          text={<>Runs every lead source right away and scores the new leads. An instant launch uses <b>10 credits</b>; scheduled runs are free.</>} />}
         {a.last_error && <Callout tone="error" icon={<RiErrorWarningLine size={17} />}>{a.last_error}</Callout>}
         {!sending && waiting > 0 && (
           <Panel className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">

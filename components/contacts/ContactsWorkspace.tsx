@@ -207,12 +207,15 @@ export function ContactsWorkspace({ base, hidden, sizesKey, openLeadId, classNam
                 </>
               )}
             </Dropdown>}
-            <Dropdown label="Export to..." icon={<RiUpload2Line size={18} />} disabled={busy}>
+            {/* An agent's Leads tab exports only what's selected; integrations aren't wired to exports yet. */}
+            <Dropdown label="Export to..." icon={<RiUpload2Line size={18} />} disabled={busy || (agentMode && !sel.length)}>
               {(close) => (
                 <>
                   <Item icon={<RiDownload2Line size={18} />} disabled={!sel.length} onClick={() => { close(); csv(rows.filter((r) => selected.has(r.id)), "contacts-selected.csv"); }}>Export Selected ({sel.length})</Item>
-                  <Item icon={<RiDownload2Line size={18} />} onClick={() => { close(); void exportAll(); }}>Export all ({c.total.toLocaleString()})</Item>
-                  <Link href="/settings?tab=integrations" className="flex items-center gap-3 rounded-[8px] px-3 py-2.5 text-[15px] hover:bg-base-200"><RiPlugLine size={18} /> Add an integration</Link>
+                  {!agentMode && <Item icon={<RiDownload2Line size={18} />} onClick={() => { close(); void exportAll(); }}>Export all ({c.total.toLocaleString()})</Item>}
+                  {agentMode
+                    ? <Item icon={<RiPlugLine size={18} />} disabled onClick={() => {}}>Add an integration <span className="ml-1 rounded-full bg-base-200 px-2 py-0.5 text-[12px] text-base-content/55">Soon</span></Item>
+                    : <Link href="/integrations" className="flex items-center gap-3 rounded-[8px] px-3 py-2.5 text-[15px] hover:bg-base-200"><RiPlugLine size={18} /> Add an integration</Link>}
                 </>
               )}
             </Dropdown>
