@@ -59,8 +59,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
          imap_host, imap_port, username, password,
          imap_username, imap_password,
          daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, signature,
-         ramp_up_enabled, ramp_start_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ramp_up_enabled, ramp_start_date, include_unsubscribe)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `).run(
       id, ctx.workspaceId, name, from_email, from_name ?? null, reply_to ?? null,
       smtp_host, smtp_port, smtp_secure,

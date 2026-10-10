@@ -175,7 +175,7 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
     id: string; from_email: string; from_name: string | null; reply_to: string | null;
     smtp_host: string; smtp_port: number; smtp_secure: number;
     username: string; password: string; signature: string | null;
-    track_opens: number | null; include_unsubscribe: number | null;
+    track_opens: number | null; include_unsubscribe: number | null; postal_address?: string | null;
   } | undefined;
 
   if (!emailAccount) {
@@ -213,9 +213,12 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
     const sig = rawSig ? signatureText(rawSig) : "";
     let composed = sig ? `${emailBody}\n\n--\n${sig}` : emailBody;
     // The sender's "Unsubscribe link: Included" adds a footer link when the copy has none of its own.
-    if (emailAccount.include_unsubscribe && !/\{\{\s*unsubscribe_url/i.test(composed) && unsubscribeUrl(target.workspace_id, freshTarget.email)) {
-      composed += "\n\nUnsubscribe: {{unsubscribe_url}}";
+    if (emailAccount.include_unsubscribe && !/\{\{\s*unsubscribe_url/i.test(composed)) {
+      // No public link can be built (no APP URL configured): an opt-out by reply still works,
+      // and the reply classifier honours it, so say so instead of dropping the footer.
+      composed += unsubscribeUrl(target.workspace_id, freshTarget.email) ? "\n\nUnsubscribe: {{unsubscribe_url}}" : "\n\nTo stop receiving these emails, reply \"unsubscribe\".";
     }
+    if (emailAccount.include_unsubscribe && emailAccount.postal_address?.trim()) composed += `\n${emailAccount.postal_address.trim()}`;
     finalEmailBody = applyUnsubscribeVariable(composed, target.workspace_id, freshTarget.email);
     // A placeholder that survived rendering ({{frist_name}}, a deleted custom field) would go
     // out literally. Fail the step with the culprit named instead.

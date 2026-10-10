@@ -18,6 +18,7 @@ describe("the words the person wrote", () => {
     expect(newReplyText(`Avec plaisir.\n\nLe lun. 6 oct. 2026 à 10:00, Jane <jane@kairo.io> a écrit :\n> Bonjour`)).toBe("Avec plaisir.");
     expect(newReplyText(`Book me in.\n${FOOTER}`)).toBe("Book me in.");
     expect(newReplyText("Please unsubscribe me from these emails.")).toBe("Please unsubscribe me from these emails.");
+    expect(newReplyText('Interested!\nTo stop receiving these emails, reply "unsubscribe".')).toBe("Interested!");
   });
 });
 

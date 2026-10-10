@@ -9,11 +9,11 @@ import SignatureEditor, { plainLength, sanitizeSignature, signatureToHtml, SIGNA
 
 interface EmailAccount {
   id: string; from_email: string | null; from_name: string | null; daily_email_limit: number | null; signature: string | null;
-  ramp_up_enabled: number | null; ramp_start_date: string | null; track_opens?: number | null; include_unsubscribe?: number | null;
+  ramp_up_enabled: number | null; ramp_start_date: string | null; track_opens?: number | null; include_unsubscribe?: number | null; postal_address?: string | null;
   sent_today?: number | null; effective_limit?: number | null;
 }
 
-interface Form { from_name: string; daily_email_limit: number; ramp_up_enabled: boolean; ramp_start_date: string | null; track_opens: boolean; include_unsubscribe: boolean; signature: string }
+interface Form { from_name: string; daily_email_limit: number; ramp_up_enabled: boolean; ramp_start_date: string | null; track_opens: boolean; include_unsubscribe: boolean; postal_address: string; signature: string }
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -56,7 +56,7 @@ export default function EmailSenderDrawer({ emailAccountId, onClose, onSaved }: 
         const html = signatureToHtml(a.signature);
         const f: Form = {
           from_name: a.from_name ?? "", daily_email_limit: a.daily_email_limit ?? 50, ramp_up_enabled: !!a.ramp_up_enabled,
-          ramp_start_date: a.ramp_start_date, track_opens: !!a.track_opens, include_unsubscribe: !!a.include_unsubscribe, signature: html,
+          ramp_start_date: a.ramp_start_date, track_opens: !!a.track_opens, include_unsubscribe: !!a.include_unsubscribe, postal_address: a.postal_address ?? "", signature: html,
         };
         setAcct(a); setForm(f); setInitial(f); setInitialHtml(html);
       })
@@ -77,6 +77,7 @@ export default function EmailSenderDrawer({ emailAccountId, onClose, onSaved }: 
     if (form.ramp_start_date !== initial.ramp_start_date) next.ramp_start_date = form.ramp_start_date;
     if (form.track_opens !== initial.track_opens) next.track_opens = form.track_opens;
     if (form.include_unsubscribe !== initial.include_unsubscribe) next.include_unsubscribe = form.include_unsubscribe;
+    if (form.postal_address.trim() !== initial.postal_address.trim()) next.postal_address = form.postal_address.trim() || null;
     const sig = sanitizeSignature(form.signature);
     if (sig !== sanitizeSignature(initial.signature)) next.signature = plainLength(sig) ? sig : null;
     if (Object.keys(next).length === 0) { onClose(); return; }
@@ -136,6 +137,13 @@ export default function EmailSenderDrawer({ emailAccountId, onClose, onSaved }: 
               <span className="text-[15px] font-medium text-base-content">{form.include_unsubscribe ? "Included" : "Not included"}</span>
             </div>
             <Note>Including an unsubscribe link can improve deliverability and may be required for marketing emails in some regions.</Note>
+            <label className="mt-4 block space-y-1.5">
+              <span className="text-[15px] font-medium text-base-content">Postal address (footer)</span>
+              <input value={form.postal_address} onChange={(e) => set({ postal_address: e.target.value })} maxLength={300}
+                placeholder="e.g. Kairo Inc., 548 Market St, San Francisco, CA 94104"
+                className="h-11 w-full rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-[15px] outline-none focus:border-[var(--border-focus)]" />
+              <span className="block text-[14px] text-base-content/55">Added under the unsubscribe line. US law (CAN-SPAM) requires a valid postal address in commercial email.</span>
+            </label>
           </Section>
 
           <div className="rounded-[12px] border border-[var(--border-subtle)] p-5">

@@ -24,7 +24,7 @@ function outlookHeaderAt(lines: string[], i: number): boolean {
 }
 
 /** Our own unsubscribe footer (a line with an unsubscribe link). */
-const FOOTER = /unsubscribe\b.*(https?:\/\/|\/api\/u\/|\{\{\s*unsubscribe_url\s*\}\})/i;
+const FOOTER = /unsubscribe\b.*(https?:\/\/|\/api\/u\/|\{\{\s*unsubscribe_url\s*\}\})|^to stop receiving these emails, reply "unsubscribe"\.?$/i;
 
 export function newReplyText(body: string): string {
   const lines = body.replace(/\r\n?/g, "\n").split("\n");

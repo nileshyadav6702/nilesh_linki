@@ -13,7 +13,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (req.method === "GET") {
     const account = db
-      .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, imap_username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at, track_opens, include_unsubscribe FROM email_accounts WHERE id = ? AND workspace_id = ?")
+      .prepare("SELECT id, name, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_secure, imap_host, imap_port, username, imap_username, daily_email_limit, active_hours_start, active_hours_end, timezone, working_days, is_verified, signature, ramp_up_enabled, ramp_start_date, provider, paused_at, paused_reason, created_at, track_opens, include_unsubscribe, postal_address FROM email_accounts WHERE id = ? AND workspace_id = ?")
       .get(id, ctx.workspaceId) as (Record<string, unknown> & { daily_email_limit: number | null; ramp_up_enabled: number | null; ramp_start_date: string | null; timezone: string | null }) | undefined;
     if (!account) return res.status(404).json({ error: "not found" });
     // Today's usage on the mailbox's own day, and today's limit once warm-up is applied.
@@ -53,6 +53,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     if (has("ramp_up_enabled")) put("ramp_up_enabled", body.ramp_up_enabled ? 1 : 0);
     if (has("track_opens")) put("track_opens", body.track_opens ? 1 : 0);
     if (has("include_unsubscribe")) put("include_unsubscribe", body.include_unsubscribe ? 1 : 0);
+    if (has("postal_address")) put("postal_address", typeof body.postal_address === "string" && body.postal_address.trim() ? body.postal_address.trim().slice(0, 300) : null);
     if (has("signature") && typeof body.signature === "string" && body.signature.length > 20_000) return res.status(400).json({ error: "Signature is too long" });
     // Secrets: only rewrite when a non-empty value is supplied.
     if (body.password) put("password", encryptSecret(String(body.password)));

@@ -257,6 +257,8 @@ const STATEMENTS: string[] = [
   `UPDATE runs SET agent_id = (SELECT a.id FROM agents a WHERE a.workspace_id = runs.workspace_id AND a.workflow_id = runs.workflow_id AND a.list_id IS runs.list_id ORDER BY a.created_at LIMIT 1)
     WHERE agent_id IS NULL`,
   "CREATE INDEX IF NOT EXISTS idx_runs_agent ON runs(agent_id, status)",
+  // Sender's postal address for the campaign email footer (CAN-SPAM).
+  "ALTER TABLE email_accounts ADD COLUMN postal_address TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */
