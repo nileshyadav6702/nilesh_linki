@@ -60,29 +60,6 @@ beforeAll(() => {
 beforeEach(() => { ran.length = 0; onRun = () => {}; });
 
 describe("per-account LinkedIn signal discovery", () => {
-  it("is the last phase of an account's worker unit and runs only that account's sources", async () => {
-    const phases = defaultAccountPhases(getDb());
-    const discovery = phases[phases.length - 1];
-    expect(discovery.label).toBe("Signal discovery");
-
-    expect(await runAccountUnit("li-a", lease(), [discovery])).toBe("done");
-    expect(ran.sort()).toEqual(["src-a1", "src-a2"]);
-  });
-
-  it("stops between sources once the lease is lost", async () => {
-    const discovery = defaultAccountPhases(getDb()).at(-1)!;
-    let held = true;
-    onRun = () => { held = false; };
-
-    await runAccountUnit("li-a", lease(() => held), [discovery]);
-    expect(ran).toHaveLength(1);
-  });
-
-  it("does not start at all without the lease", async () => {
-    expect(await runLinkedInDiscovery(60_000, { accountId: "li-b", shouldStop: () => true })).toBe(0);
-    expect(ran).toEqual([]);
-  });
-
   it("schedules accounts with due discovery, except one paused after a 429/999", async () => {
     expect(discoveryAccountIds().sort()).toEqual(expect.arrayContaining(["li-a", "li-b"]));
     pauseDiscovery("li-b", "HTTP 999");
@@ -90,11 +67,33 @@ describe("per-account LinkedIn signal discovery", () => {
     expect(await runLinkedInDiscovery(60_000, { accountId: "li-b" })).toBe(0);
   });
 
-  it("flags due sources whose agent has no LinkedIn account instead of leaving them due forever", async () => {
-    expect(flagAccountlessDiscoverySources()).toBe(1);
+  it("does not start at all without the lease", async () => {
+    expect(await runLinkedInDiscovery(60_000, { accountId: "li-a", shouldStop: () => true })).toBe(0);
+    expect(ran).toEqual([]);
+  });
+
+  it("is the last phase of an account's worker unit, runs one of that account's units per pass, then spaces the next", async () => {
+    const phases = defaultAccountPhases(getDb());
+    const discovery = phases[phases.length - 1];
+    expect(discovery.label).toBe("Signal discovery");
+
+    expect(await runAccountUnit("li-a", lease(), [discovery])).toBe("done");
+    expect(ran).toHaveLength(1);
+    expect(["src-a1", "src-a2"]).toContain(ran[0]);
+    // The account's next read waits for the 10-20 minute spacing.
+    await runAccountUnit("li-a", lease(), [discovery]);
+    expect(ran).toHaveLength(1);
+    expect(discoveryAccountIds()).not.toContain("li-a");
+  });
+
+  it("marks due sources whose agent has no LinkedIn account as needing attention instead of leaving them due", async () => {
+    // Already flagged when the due accounts were gated; flagging again finds nothing new.
+    flagAccountlessDiscoverySources();
     const row = getDb().prepare("SELECT last_error, next_run_at FROM agent_sources WHERE id = 'src-none'").get() as { last_error: string; next_run_at: string };
     expect(row.last_error).toMatch(/No LinkedIn account/);
     expect(row.next_run_at).toBeTruthy();
+    const unit = getDb().prepare("SELECT state FROM source_units WHERE source_id = 'src-none'").get() as { state: string };
+    expect(unit.state).toBe("attention");
     expect(flagAccountlessDiscoverySources()).toBe(0);
   });
 });

@@ -3,7 +3,7 @@ import { getDb } from "@/lib/db";
 import { configWithItems, itemKeys } from "@/lib/agents/source-items";
 import { getAgent, listSources, sourceNeedsLinkedIn } from "@/lib/agents/store";
 import { runAgentPass } from "@/lib/agents/loop";
-import { runSource } from "@/lib/signals/engine";
+import { launchNow, runUnit, unitsForAgent } from "@/lib/signals/scheduler";
 import { requireWorkspace } from "@/lib/workspace";
 import { CREDIT_COSTS, debit, InsufficientCreditsError, refund } from "@/lib/credits/ledger";
 
@@ -41,11 +41,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let queued = 0;
     for (const s of sources) {
       if (sourceNeedsLinkedIn(s.source_type)) {
-        db.prepare("UPDATE agent_sources SET next_run_at = datetime('now') WHERE id = ?").run(s.id);
-        queued++;
+        // LinkedIn reads keep the account's spacing and hours: next in line, not all at once.
+        if (launchNow(db, s.id, item)) queued++;
       } else {
-        const r = await runSource(s);
-        http.push({ source_type: s.source_type, ingested: r.ingested, error: r.error });
+        launchNow(db, s.id, item);
+        // Data-provider sources run right away, item by item, and the scheduler sets their next run.
+        const units = unitsForAgent(db, agent.id).filter((u) => u.source_id === s.id && (!item || u.item_key === item));
+        let ingested = 0; let error: string | null = null;
+        for (const u of units) { const r = await runUnit(u); ingested += r.ingested; error = r.error ?? error; }
+        http.push({ source_type: s.source_type, ingested, error });
       }
     }
     const pass = only ? null : await runAgentPass(agent);

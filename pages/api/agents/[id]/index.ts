@@ -10,6 +10,7 @@ import { createDefaultCampaign } from "@/lib/agents/default-campaign";
 import { sequenceSteps } from "@/lib/agents/drafts";
 import { firstIssue } from "@/lib/validation";
 import { recordAudit, requireWorkspace } from "@/lib/workspace";
+import { unitViews } from "@/lib/signals/scheduler";
 
 // GET /api/agents/:id → agent, sources, last detector runs, counts, funnel, LinkedIn budget
 // PATCH /api/agents/:id → fields; status (finding leads), outreach_enabled (sending), create_default_campaign
@@ -25,9 +26,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === "GET") {
     const runs = db.prepare(`SELECT dr.*, s.source_type FROM detector_runs dr JOIN agent_sources s ON s.id = dr.agent_source_id
       WHERE s.agent_id = ? ORDER BY dr.started_at DESC LIMIT 20`).all(id);
+    const schedule = unitViews(db, id);
     return res.json({
       agent, runs, counts: agentCounts(db, id),
       sources: listSources(id, ctx.workspaceId).map((src) => ({
+        schedule: schedule.get(src.id) ?? [],
         ...src, leads: (db.prepare("SELECT COALESCE(SUM(ingested), 0) n FROM detector_runs WHERE agent_source_id = ?").get(src.id) as { n: number }).n,
         items: sourceItems(db, src),
       })),

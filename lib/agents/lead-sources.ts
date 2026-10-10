@@ -1,6 +1,7 @@
 import type Database from "better-sqlite3";
 import { z } from "zod";
 import { addSource, listSources, parseSourceConfig, sourceConfigSchema, updateSource, type AgentSource } from "@/lib/agents/store";
+import { launchNow } from "@/lib/signals/scheduler";
 import {
   countSignals, DRAWER_SIGNAL_TYPES, MAX_TOPIC_WORDS, normalizeCompanyUrl, normalizePageUrl, normalizeProfileUrlStrict, SIGNAL_BUDGET,
   type DrawerSignalType, type SignalDraft,
@@ -82,7 +83,7 @@ export function attachListToAgent(db: DB, agentId: string, workspaceId: string, 
   }
   const updated = updateSource(row.id, workspaceId, { config, enabled: true })!;
   // Adopt the new members on the next pass instead of waiting out the interval.
-  db.prepare("UPDATE agent_sources SET next_run_at = datetime('now') WHERE id = ?").run(row.id);
+  launchNow(db, row.id, listId);
   return updated;
 }
 

@@ -15,9 +15,12 @@ import type { Icp } from "@/lib/icp/schema";
 import { roleTitles, sizeLabel } from "@/lib/icp/targeting";
 
 export interface SourceItemRow { key: string; label: string; sub: string; leads: number; volume: "high" | "low" }
+export interface UnitView { item_key: string; state: "active" | "attention" | "waiting"; next_run_at: string; cadence_hours: number; note: string | null }
 export interface AgentSourceRow {
   id: string; source_type: string; config_json: string; enabled: number; last_run_at: string | null; next_run_at: string | null; last_error: string | null; leads: number;
   items?: SourceItemRow[];
+  /** The scheduler's clock per tracked item ("*" for on/off signals). */
+  schedule?: UnitView[];
 }
 
 /** Sources that track a list of things (pages, topics, boards, lists) show each one as a row. */
@@ -61,6 +64,35 @@ function nextLabel(s: AgentSourceRow): string {
   if (!s.next_run_at) return "Not scheduled";
   const t = Date.parse(s.next_run_at.includes("T") || s.next_run_at.endsWith("Z") ? s.next_run_at : `${s.next_run_at.replace(" ", "T")}Z`);
   return Number.isNaN(t) || t <= Date.now() ? "~ now" : `~ in ${formatDistanceToNowStrict(t)}`;
+}
+
+/** "Every 8h", "Daily", "Every 3 days", "Weekly" from a unit's current cadence. */
+export function cadenceLabel(hours: number): string {
+  if (hours < 20) return `Every ${Math.max(1, Math.round(hours))}h`;
+  if (hours < 36) return "Daily";
+  if (hours < 140) return `Every ${Math.round(hours / 24)} days`;
+  return "Weekly";
+}
+
+const untilLabel = (isoTime: string) => {
+  const t = Date.parse(isoTime);
+  return Number.isNaN(t) || t <= Date.now() ? "~ now" : `~ in ${formatDistanceToNowStrict(t)}`;
+};
+
+/** Next run cell: when, how often, or why it is waiting / needs attention. */
+function NextCell({ s, units }: { s: AgentSourceRow; units: UnitView[] }) {
+  if (!s.enabled) return <div className="text-right text-[16px] text-base-content/50">Off</div>;
+  if (!units.length) return <div className="text-right text-[16px] text-base-content/70">{nextLabel(s)}</div>;
+  const attention = units.find((u) => u.state === "attention");
+  if (attention) return <div className="text-right" title={attention.note ?? undefined}><div className="text-[15.5px] font-medium text-error">Needs attention</div><div className="truncate text-[13.5px] text-error/80">{attention.note}</div></div>;
+  const soonest = units.reduce((a, b) => (Date.parse(a.next_run_at) <= Date.parse(b.next_run_at) ? a : b));
+  const fastest = Math.min(...units.map((u) => u.cadence_hours));
+  return (
+    <div className="text-right" title={soonest.note ?? undefined}>
+      <div className="text-[16px] text-base-content/75">{untilLabel(soonest.next_run_at)}</div>
+      <div className={`truncate text-[13.5px] ${soonest.note ? "text-[#b7791f]" : "text-base-content/45"}`}>{soonest.note ?? cadenceLabel(fastest)}</div>
+    </div>
+  );
 }
 
 function Volume({ v }: { v: "high" | "low" }) {
@@ -151,13 +183,13 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
         <div className="text-[19px] tabular-nums text-base-content">{leads}</div>
         {item && <Volume v={item.volume} />}
       </div>
-      <div className="text-right text-[16px] text-base-content/70">{nextLabel(s)}</div>
+      <NextCell s={s} units={(s.schedule ?? []).filter((u) => u.item_key === (item?.key ?? "*") || (!item && u.item_key !== "*" && !(s.items ?? []).length))} />
       <button type="button" aria-label={`Actions for ${label}`} onClick={(e) => setMenu({ anchor: e.currentTarget, source: s, item })}
         className="flex h-9 w-9 items-center justify-center justify-self-end rounded-full text-base-content/50 hover:bg-base-200 hover:text-base-content"><RiMoreFill size={22} /></button>
     </div>
   );
 
-  const groupRow = (key: string, title: string, sub: string, leads: number, next: string, on: boolean, onToggle: () => void, look: { icon: ReactNode; cls: string }, children: ReactNode, error?: string | null) => {
+  const groupRow = (key: string, title: string, sub: string, leads: number, next: ReactNode, on: boolean, onToggle: () => void, look: { icon: ReactNode; cls: string }, children: ReactNode, error?: string | null) => {
     const expanded = !!open[key];
     return (
       <div key={key} className="border-t border-[var(--border-subtle)]">
@@ -176,7 +208,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
           </div>
           <span />
           <div className="text-right text-[19px] tabular-nums text-base-content">{leads}</div>
-          <div className="text-right text-[16px] text-base-content/70">{next}</div>
+          {next}
           <div className="justify-self-end"><Toggle on={on} onChange={onToggle} label={`Turn ${title} ${on ? "off" : "on"}`} /></div>
         </div>
         {expanded && <div className="wizard-rise pb-2">{children}</div>}
@@ -249,7 +281,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
           {grouped.map((s) => {
             const items = s.items ?? [];
             const [one, many] = UNIT[s.source_type] ?? ["item", "items"];
-            return groupRow(s.id, GROUP_TITLE[s.source_type], `${items.length} ${items.length === 1 ? one : many} tracked`, s.leads, nextLabel(s), !!s.enabled, () => void toggle(s),
+            return groupRow(s.id, GROUP_TITLE[s.source_type], `${items.length} ${items.length === 1 ? one : many} tracked`, s.leads, <NextCell s={s} units={s.schedule ?? []} />, !!s.enabled, () => void toggle(s),
               LOOK[s.source_type] ?? LOOK.events,
               items.length ? items.map((it) => childRow(s, it, it.label, it.sub, it.leads)) : childRow(s, null, GROUP_TITLE[s.source_type], "Nothing tracked yet", s.leads),
               s.last_error);
@@ -257,9 +289,9 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
 
           {events.length > 0 && (() => {
             const on = events.some((e) => e.enabled);
-            const soonest = events.filter((e) => e.enabled && e.next_run_at).sort((x, y) => String(x.next_run_at).localeCompare(String(y.next_run_at)))[0];
+            const live = events.filter((e) => e.enabled);
             return groupRow("events", "Buying events", `${events.length} event${events.length === 1 ? "" : "s"} tracked`, events.reduce((n, e) => n + e.leads, 0),
-              soonest ? nextLabel(soonest) : "Off", on, () => void toggleEvents(), LOOK.events,
+              <NextCell s={live[0] ?? events[0]} units={live.flatMap((e) => e.schedule ?? [])} />, on, () => void toggleEvents(), LOOK.events,
               events.map((e) => childRow(e, null, EVENT_TITLE[e.source_type] ?? SIGNAL_LABEL[e.source_type] ?? e.source_type, e.last_error ?? null, e.leads, EVENT_ICON[e.source_type] ?? <RiRadarLine size={18} />)));
           })()}
 

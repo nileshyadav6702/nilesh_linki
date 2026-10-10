@@ -3,16 +3,16 @@ import { sourceNeedsLinkedIn } from "@/lib/agents/store";
 import { getSessionContext, saveSessionState } from "@/lib/linkedin/session";
 import { VoyagerClient, VoyagerBlockedError, VoyagerBudgetExceeded } from "@/lib/linkedin/voyager";
 import { discoveryPausedUntil, pauseDiscovery } from "@/lib/linkedin/budget";
-import { dueSources, runSource } from "@/lib/signals/engine";
 import { SOURCE_TYPES, type SourceType } from "@/lib/signals/types";
-import type { AgentSource } from "@/lib/agents/store";
+import { deferUnit, dueUnits, linkedInDueAccounts, nextLinkedInUnit, runUnit, syncUnits } from "@/lib/signals/scheduler";
 
 /**
  * One discovery pass for LinkedIn-backed signal sources. Runs as the LAST phase of an
  * account's worker unit (lib/linkedin/campaign/account-workers.ts), so it is sequential with
  * that account's outreach on the same browser session, and bounded by `budgetMs` so outreach
- * is never starved. Each source keeps its own cadence (agent_sources.next_run_at), and a
- * 429/999 pauses discovery for that account only, for 24h.
+ * is never starved. The signal scheduler (lib/signals/scheduler.ts) decides which unit runs:
+ * one per account pass, spaced 10-20 minutes apart and paced over the account's working hours.
+ * A 429/999 pauses discovery for that account only, for 24h.
  */
 
 interface AccountRow { id: string; is_authenticated: number; active_hours_start: number | null; active_hours_end: number | null; timezone: string | null; working_days: string | null }
@@ -39,11 +39,6 @@ export function withinActiveHours(a: Pick<AccountRow, "active_hours_start" | "ac
   return hour >= start && hour < end;
 }
 
-function deferToTomorrow(sourceIds: string[]) {
-  const stmt = getDb().prepare("UPDATE agent_sources SET next_run_at = datetime('now', '+12 hours') WHERE id = ?");
-  for (const id of sourceIds) stmt.run(id);
-}
-
 function loadAccount(accountId: string): AccountRow | undefined {
   return getDb().prepare("SELECT id, is_authenticated, active_hours_start, active_hours_end, timezone, working_days FROM accounts WHERE id = ?").get(accountId) as AccountRow | undefined;
 }
@@ -58,68 +53,51 @@ function linkedInSourceTypes(): SourceType[] {
 }
 
 /**
- * Due LinkedIn sources whose agent has no LinkedIn account: no account worker will ever pick
- * them up, so they are flagged for the user and pushed back 6h. Returns how many were flagged.
+ * Due LinkedIn units whose agent has no LinkedIn account: no account worker will ever pick them
+ * up, so they are marked "needs attention" for the user and re-checked daily. Returns how many.
  */
 export function flagAccountlessDiscoverySources(): number {
-  const types = linkedInSourceTypes();
-  return getDb().prepare(`UPDATE agent_sources SET last_error = ?, next_run_at = datetime('now', '+6 hours')
-    WHERE enabled = 1 AND source_type IN (${types.map(() => "?").join(",")})
-      AND (next_run_at IS NULL OR next_run_at <= datetime('now'))
-      AND agent_id IN (SELECT id FROM agents WHERE status = 'active' AND linkedin_account_id IS NULL)`)
-    .run("No LinkedIn account selected on this agent", ...types).changes;
+  const db = getDb();
+  syncUnits(db);
+  const types = new Set<string>(linkedInSourceTypes());
+  let n = 0;
+  for (const u of dueUnits(db, "linkedin").filter((x) => !x.linkedin_account_id && types.has(x.source_type))) {
+    deferUnit(db, u.id, { ok: false, until: Date.now() + 24 * 3_600_000, state: "attention", note: "No LinkedIn account selected on this agent" });
+    db.prepare("UPDATE agent_sources SET last_error = ? WHERE id = ?").run("No LinkedIn account selected on this agent", u.source_id);
+    n++;
+  }
+  return n;
 }
 
-/** Accounts with due LinkedIn discovery work that may run now — they get an account worker unit. */
+/** Accounts with a LinkedIn discovery unit allowed to run now: they get an account worker unit. */
 export function discoveryAccountIds(): string[] {
-  const types = linkedInSourceTypes();
-  const rows = getDb().prepare(`SELECT DISTINCT a.linkedin_account_id id FROM agent_sources s JOIN agents a ON a.id = s.agent_id
-    WHERE s.enabled = 1 AND a.status = 'active' AND a.linkedin_account_id IS NOT NULL
-      AND s.source_type IN (${types.map(() => "?").join(",")})
-      AND (s.next_run_at IS NULL OR s.next_run_at <= datetime('now'))`).all(...types) as Array<{ id: string }>;
-  return rows.map((r) => r.id).filter((id) => accountCanDiscover(loadAccount(id)));
+  return linkedInDueAccounts().filter((id) => accountCanDiscover(loadAccount(id)));
 }
 
 export async function runLinkedInDiscovery(budgetMs = 4 * 60_000, opts: DiscoveryOptions = {}): Promise<number> {
-  const db = getDb();
   const deadline = Date.now() + budgetMs;
   const shouldStop = opts.shouldStop ?? (() => false);
-  const byAccount = new Map<string, AgentSource[]>();
   if (opts.accountId === undefined) flagAccountlessDiscoverySources();
-  for (const s of dueSources("linkedin", 30, opts.accountId)) {
-    const acc = (db.prepare("SELECT linkedin_account_id FROM agents WHERE id = ?").get(s.agent_id) as { linkedin_account_id: string | null } | undefined)?.linkedin_account_id;
-    if (!acc) continue;
-    if (!byAccount.has(acc)) byAccount.set(acc, []);
-    byAccount.get(acc)!.push(s);
-  }
-
+  const accounts = opts.accountId !== undefined ? [opts.accountId] : discoveryAccountIds();
   let ran = 0;
-  for (const [accountId, sources] of byAccount) {
+  for (const accountId of accounts) {
     if (Date.now() > deadline || shouldStop()) break;
     if (!accountCanDiscover(loadAccount(accountId))) continue;
-
+    // One unit per pass: the next is at least 10 minutes later (scheduler spacing).
+    const unit = nextLinkedInUnit(accountId);
+    if (!unit || shouldStop()) continue;
     const ctx = await getSessionContext(accountId);
     const client = new VoyagerClient(ctx, accountId);
     try {
-      for (let i = 0; i < sources.length; i++) {
-        if (Date.now() > deadline || shouldStop()) break;
-        try {
-          const r = await runSource(sources[i], { voyager: client, browser: ctx });
-          ran++;
-          console.log(`[signals] ${sources[i].source_type}: ${r.ingested} new signal(s), ${r.filtered} filtered${r.error ? ` — ${r.error}` : ""}`);
-        } catch (err) {
-          if (err instanceof VoyagerBudgetExceeded) {
-            deferToTomorrow(sources.slice(i).map((s) => s.id));
-            break;
-          }
-          if (err instanceof VoyagerBlockedError) {
-            pauseDiscovery(accountId, err.message);
-            console.warn(`[signals] LinkedIn pushed back on account ${accountId} (${err.message}) — discovery paused 24h`);
-            break;
-          }
-          throw err;
-        }
-      }
+      const r = await runUnit(unit, { voyager: client, browser: ctx });
+      ran++;
+      console.log(`[signals] ${unit.source_type}${unit.item_key === "*" ? "" : ` (${unit.item_key})`}: ${r.ingested} new, ${r.candidates} seen${r.error ? ` — ${r.error}` : ""}`);
+    } catch (err) {
+      ran++;
+      if (err instanceof VoyagerBlockedError) {
+        pauseDiscovery(accountId, err.message);
+        console.warn(`[signals] LinkedIn pushed back on account ${accountId} (${err.message}) — discovery paused 24h`);
+      } else if (!(err instanceof VoyagerBudgetExceeded)) throw err;
     } finally {
       await client.close();
       await saveSessionState(accountId).catch(() => {});

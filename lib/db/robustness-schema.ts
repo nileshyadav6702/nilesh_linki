@@ -216,6 +216,21 @@ const STATEMENTS: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_targets_workspace_lower_email ON targets(workspace_id, lower(email))",
   "CREATE INDEX IF NOT EXISTS idx_targets_needs_data ON targets(agent_status, enriched_profile_at)",
   "CREATE INDEX IF NOT EXISTS idx_list_imports_list_status ON list_imports(list_id, status)",
+  // Signal scheduler: one clock per tracked item (or per source when it has no items).
+  `CREATE TABLE IF NOT EXISTS source_units (
+    id TEXT PRIMARY KEY, source_id TEXT NOT NULL REFERENCES agent_sources(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL, workspace_id TEXT NOT NULL, source_type TEXT NOT NULL, item_key TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'active' CHECK(state IN ('active','attention','waiting')),
+    next_run_at TEXT NOT NULL, last_run_at TEXT, interval_hours REAL NOT NULL,
+    yield_avg REAL, empty_runs INTEGER NOT NULL DEFAULT 0, fail_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT, note TEXT, last_result_json TEXT, config_hash TEXT, icp_ref TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(source_id, item_key)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_source_units_due ON source_units(next_run_at)",
+  "CREATE INDEX IF NOT EXISTS idx_source_units_agent ON source_units(agent_id)",
+  // Reads shared across agents for a few hours (two agents tracking the same competitor).
+  "CREATE TABLE IF NOT EXISTS signal_read_cache (key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at TEXT NOT NULL)",
+  "ALTER TABLE detector_runs ADD COLUMN item_key TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

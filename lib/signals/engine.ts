@@ -144,15 +144,19 @@ export function buildContext(db: Database.Database, agent: Agent, source: AgentS
   };
 }
 
-/** Run one source now. Records a detector_runs row and reschedules the source. */
-export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLike & { requests?: number }; browser?: BrowserContext; maxNew?: number } = {}): Promise<RunStats & { error: string | null }> {
+/**
+ * Run one source now and record a detector_runs row. With `itemKey` (the signal scheduler, which
+ * passes the source scoped to one item) the scheduler sets the next run; otherwise the source is
+ * rescheduled by its interval.
+ */
+export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLike & { requests?: number }; browser?: BrowserContext; maxNew?: number; itemKey?: string } = {}): Promise<RunStats & { error: string | null }> {
   const db = getDb();
   const agent = db.prepare("SELECT * FROM agents WHERE id = ?").get(source.agent_id) as Agent | undefined;
   const stats: RunStats = { candidates: 0, ingested: 0, filtered: 0, duplicates: 0 };
   if (!agent) return { ...stats, error: "Agent not found" };
   const runId = randomUUID();
   const requestsBefore = deps.voyager?.requests ?? 0;
-  db.prepare("INSERT INTO detector_runs (id, agent_source_id, workspace_id) VALUES (?, ?, ?)").run(runId, source.id, source.workspace_id);
+  db.prepare("INSERT INTO detector_runs (id, agent_source_id, workspace_id, item_key) VALUES (?, ?, ?, ?)").run(runId, source.id, source.workspace_id, deps.itemKey && deps.itemKey !== "*" ? deps.itemKey : null);
   const ctx = buildContext(db, agent, source, runId, stats, deps);
   let error: string | null = null;
   try {
@@ -172,8 +176,12 @@ export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLi
     const requests = (deps.voyager?.requests ?? 0) - requestsBefore;
     db.prepare(`UPDATE detector_runs SET finished_at = datetime('now'), candidates = ?, ingested = ?, filtered = ?, linkedin_requests = ?, error = ? WHERE id = ?`)
       .run(stats.candidates, stats.ingested, stats.filtered, requests, error, runId);
-    db.prepare(`UPDATE agent_sources SET last_run_at = datetime('now'), next_run_at = datetime('now', ?), cursor_json = ?, last_error = ? WHERE id = ?`)
-      .run(`+${Math.round(source.interval_hours * 60)} minutes`, JSON.stringify(ctx.cursor), error, source.id);
+    if (deps.itemKey !== undefined) {
+      db.prepare("UPDATE agent_sources SET last_run_at = datetime('now'), cursor_json = ?, last_error = ? WHERE id = ?").run(JSON.stringify(ctx.cursor), error, source.id);
+    } else {
+      db.prepare(`UPDATE agent_sources SET last_run_at = datetime('now'), next_run_at = datetime('now', ?), cursor_json = ?, last_error = ? WHERE id = ?`)
+        .run(`+${Math.round(source.interval_hours * 60)} minutes`, JSON.stringify(ctx.cursor), error, source.id);
+    }
   }
 }
 
@@ -188,13 +196,8 @@ export function dueSources(kind: "linkedin" | "http", limit = 20, accountId?: st
     ORDER BY s.next_run_at LIMIT ?`).all(...types, ...(accountId !== undefined ? [accountId] : []), limit) as AgentSource[];
 }
 
-/** Non-LinkedIn sources (job boards, news). Safe to run on their own loop. */
+/** Non-LinkedIn sources (data provider, job boards, news, websites), paced by the signal scheduler. */
 export async function runDueHttpSources(): Promise<number> {
-  let n = 0;
-  for (const source of dueSources("http")) {
-    const r = await runSource(source);
-    if (r.error) console.warn(`[signals] ${source.source_type} source ${source.id}: ${r.error}`);
-    n++;
-  }
-  return n;
+  const { runDueHttpUnits } = await import("@/lib/signals/scheduler");
+  return runDueHttpUnits();
 }

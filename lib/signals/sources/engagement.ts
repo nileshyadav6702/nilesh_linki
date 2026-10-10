@@ -3,6 +3,7 @@ import type { SourceRunContext, SourceRunner } from "@/lib/signals/sources/types
 import { tregEnabled } from "@/lib/treg/client";
 import { tregPostEngagers, tregRecentPosts, tregSearchPosts } from "@/lib/treg/linkedin";
 import type { SignalType } from "@/lib/signals/types";
+import { cachedRead } from "@/lib/signals/read-cache";
 
 /** Posts older than this carry little intent; skip them. */
 const MAX_POST_AGE_DAYS = 21;
@@ -27,21 +28,32 @@ interface PostData {
   engagers(post: PostRef, opts: { reactions?: number }): Promise<Engager[]>;
 }
 
+const entityKey = (e: EntityRef) => (e.kind === "company" ? `company:${e.universalName}` : `profile:${e.publicId}`).toLowerCase();
+
+/** Reads are public, so they are shared across agents for a few hours (lib/signals/read-cache.ts). */
+function shared(provider: string, data: PostData): PostData {
+  return {
+    posts: (e, n) => cachedRead(`${provider}:posts:${entityKey(e)}:${n}`, () => data.posts(e, n)),
+    search: (k, n) => cachedRead(`${provider}:search:${k.toLowerCase()}:${n}`, () => data.search(k, n)),
+    engagers: (p, o) => cachedRead(`${provider}:engagers:${p.activityUrn}:${o.reactions ?? 0}`, () => data.engagers(p, o)),
+  };
+}
+
 function postData(ctx: SourceRunContext): PostData {
   if (tregEnabled()) {
-    return {
+    return shared("treg", {
       posts: (e, n) => tregRecentPosts(ctx.workspaceId, e, n),
       search: (k, n) => tregSearchPosts(ctx.workspaceId, k, n),
       engagers: (p, o) => tregPostEngagers(ctx.workspaceId, p, o),
-    };
+    });
   }
   const voyager = ctx.voyager;
   if (!voyager) throw new Error("This source needs an authenticated LinkedIn account on the agent");
-  return {
+  return shared("li", {
     posts: (e, n) => fetchRecentPosts(voyager, e, n),
     search: (k, n) => searchPostsByKeyword(voyager, k, n),
     engagers: (p, o) => fetchPostEngagers(voyager, p.activityUrn, o),
-  };
+  });
 }
 
 async function harvestPost(ctx: SourceRunContext, data: PostData, post: PostRef, type: SignalType, what: string, excludeEmployeesOf?: string[]) {
