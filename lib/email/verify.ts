@@ -1,4 +1,5 @@
 import net from "net";
+import os from "os";
 import { resolveMx } from "dns/promises";
 import type DatabaseType from "better-sqlite3";
 import { addSuppression } from "@/lib/platform/suppression";
@@ -211,7 +212,9 @@ async function verifyEmailAddressViaWorker(email: string, opts: { fromEmail?: st
   if (ACCEPT_ALL_DOMAINS.has(domain)) return { status: "checked", reason: "Major provider — mailbox cannot be probed" };
 
   const host = mx.slice().sort((a, b) => a.priority - b.priority)[0].exchange;
-  const fromEmail = opts.fromEmail && SYNTAX.test(opts.fromEmail) ? opts.fromEmail : `postmaster@${domain}`;
+  // Our sender, else the null sender ("MAIL FROM:<>", as a bounce would): never the probed
+  // domain's own postmaster, which fails its SPF and gets the probe refused.
+  const fromEmail = opts.fromEmail && SYNTAX.test(opts.fromEmail) ? opts.fromEmail : "";
   try {
     return await smtpProbe(host, fromEmail, addr, domain, opts.timeoutMs ?? 8000);
   } catch {
@@ -227,7 +230,7 @@ function smtpProbe(host: string, fromEmail: string, target: string, domain: stri
     let rcptCode = 0;
     let rcptText = "";
     let buffer = "";
-    const heloDomain = fromEmail.split("@")[1] || domain;
+    const heloDomain = fromEmail.split("@")[1] || process.env.EMAIL_VERIFY_HELO || os.hostname() || "localhost";
     const randomAddr = `no-such-user-verify-${Math.abs(hashStr(target + host))}@${domain}`;
     const finish = (result: EmailVerifyResult) => { try { socket.destroy(); } catch { /* ignore */ } resolve(result); };
     const send = (line: string) => { try { socket.write(line + "\r\n"); } catch { finish({ status: "unknown", reason: "SMTP write failed" }); } };
@@ -365,6 +368,28 @@ export interface VerifyBatchResult {
   catch_all: number;
   unknown: number;
   suppressed: number;
+}
+
+const CATCHALL_RECHECK_DAYS = 90;
+let lastCatchallSweep = 0;
+
+/**
+ * A catch-all verdict is about the domain's setup that day, which changes (a company drops its
+ * catch-all, moves provider). After CATCHALL_RECHECK_DAYS the do-not-send entry is lifted and
+ * the address marked unverified, so the pre-send check probes it again before any email goes.
+ * Runs at most once an hour. Returns how many entries were lifted.
+ */
+export function recheckStaleCatchalls(db: DB, now = Date.now()): number {
+  if (now - lastCatchallSweep < 3600_000) return 0;
+  lastCatchallSweep = now;
+  const stale = db.prepare(`SELECT id, workspace_id, value, target_id FROM suppressions
+    WHERE source = 'catchall' AND kind = 'email' AND created_at < datetime(?, 'unixepoch', ?)`)
+    .all(Math.floor(now / 1000), `-${CATCHALL_RECHECK_DAYS} days`) as Array<{ id: string; workspace_id: string; value: string; target_id: string | null }>;
+  if (!stale.length) return 0;
+  const lift = db.prepare("DELETE FROM suppressions WHERE id = ?");
+  const reset = db.prepare("UPDATE targets SET email_status = 'unverified' WHERE workspace_id = ? AND lower(email) = ? AND email_status = 'catchall'");
+  db.transaction(() => { for (const s of stale) { lift.run(s.id); reset.run(s.workspace_id, s.value); } })();
+  return stale.length;
 }
 
 /**

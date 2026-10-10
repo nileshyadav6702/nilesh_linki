@@ -1,4 +1,5 @@
 import { getDb } from "@/lib/db";
+import { recheckStaleCatchalls } from "@/lib/email/verify";
 import { WORKER_ID } from "@/lib/email/infrastructure";
 import { claimTrack, releaseTrack } from "@/lib/linkedin/actions";
 import { guard } from "@/lib/watchdog";
@@ -26,6 +27,7 @@ export function assignRunMailboxes(db: ReturnType<typeof getDb>): number {
 
 export async function emailCampaignTick(db: ReturnType<typeof getDb>): Promise<void> {
   assignRunMailboxes(db);
+  recheckStaleCatchalls(db);
   completeFinishedRuns(db, strandedRunningRunIds(db));
   const activeRuns = emailCampaignRuns(db);
   if (activeRuns.length === 0) return;

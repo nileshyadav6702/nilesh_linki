@@ -14,13 +14,23 @@ export function normalizeSuppression(kind: SuppressionKind, value: string): stri
   } catch { return trimmed.replace(/\/$/, ""); }
 }
 
+/** Sources whose entries are lifted automatically (a reclassified reply, a catch-all re-check). */
+const LIFTABLE = "('reply_classifier','catchall')";
+
 export function addSuppression(input: { workspaceId: string; kind: SuppressionKind; value: string; reason: string; source?: string; targetId?: string; createdBy?: string }) {
   const id = randomUUID();
   const value = normalizeSuppression(input.kind, input.value);
+  // An existing entry keeps its reason and source unless it is a liftable one being confirmed by
+  // a firmer one: relabelling an unsubscribe or a bounce as "reply_classifier" / "catchall" would
+  // let an automatic lift remove it.
+  const upgrade = `COALESCE(source, '') IN ${LIFTABLE} AND COALESCE(excluded.source, '') NOT IN ${LIFTABLE}`;
   getDb().prepare(`INSERT INTO suppressions
     (id, workspace_id, kind, value, reason, source, target_id, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(workspace_id, kind, value) DO UPDATE SET reason = excluded.reason, source = excluded.source, target_id = COALESCE(excluded.target_id, target_id)`)
+    ON CONFLICT(workspace_id, kind, value) DO UPDATE SET
+      reason = CASE WHEN ${upgrade} THEN excluded.reason ELSE reason END,
+      source = CASE WHEN ${upgrade} THEN excluded.source ELSE source END,
+      target_id = COALESCE(excluded.target_id, target_id)`)
     .run(id, input.workspaceId, input.kind, value, input.reason, input.source ?? null, input.targetId ?? null, input.createdBy ?? null);
   return getDb().prepare("SELECT * FROM suppressions WHERE workspace_id = ? AND kind = ? AND value = ?").get(input.workspaceId, input.kind, value);
 }
