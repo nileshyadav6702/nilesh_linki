@@ -3,11 +3,12 @@ import { visitProfile } from "@/lib/linkedin/visit";
 import { settledPriorAction } from "@/lib/linkedin/actions";
 import { actionInput, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction } from "../step-helpers";
 import { getLinkedinUrl } from "../resolve-url";
-import { log, trAdvance } from "../track-state";
+import { enforceSchedule, log, trAdvance } from "../track-state";
 import type { StepContext } from "./context";
 
 export async function runVisitStep(ctx: StepContext): Promise<void> {
-  const { db, runId, tr, target, steps, step, name, accountId } = ctx;
+  const { db, runId, tr, target, steps, step, name, accountId, accountLimits } = ctx;
+  if (!enforceSchedule(db, tr, runId, target.id, name, accountLimits)) return;
   const visit = actionInput("visit", runId, tr, step, accountId, target.id);
   if (settlePriorLinkedinAction(db, runId, tr, steps, target.id, name, "visit", settledPriorAction(db, visit.key))) return;
   db.prepare("UPDATE run_profile_tracks SET last_step_at = datetime('now') WHERE id = ?").run(tr.id);

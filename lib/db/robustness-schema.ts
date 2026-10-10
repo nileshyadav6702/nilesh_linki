@@ -248,6 +248,10 @@ const STATEMENTS: string[] = [
   "ALTER TABLE companies ADD COLUMN website_fetched_at TEXT",
   // A mailbox the provider is throttling rests until this time (ISO) instead of failing contacts.
   "ALTER TABLE email_accounts ADD COLUMN cooldown_until TEXT",
+  // Unexpected step errors retried per track before it fails (reset when the track advances).
+  "ALTER TABLE run_profile_tracks ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 0",
+  // LinkedIn's weekly invitation limit hit on this account: no invitations until then (ISO).
+  "ALTER TABLE accounts ADD COLUMN connects_blocked_until TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

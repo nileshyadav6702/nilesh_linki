@@ -1,4 +1,7 @@
 import { getDb } from "@/lib/db";
+import { localWeekStartUtc } from "@/lib/outreach/schedule";
+import { markNeedsReauth } from "@/lib/linkedin/session";
+import { AccountRestrictedError, SessionExpiredError } from "@/lib/linkedin/session-guard";
 import { WeeklyLimitError, AlreadyConnectedError, PendingInviteError, InviteNeedsEmailError, InviteNotConfirmedError } from "@/lib/linkedin/connect";
 import { SenderPausedError, RecipientSuppressedError } from "@/lib/email/infrastructure";
 import { isAiBlockingError } from "@/lib/ai/client";
@@ -8,6 +11,9 @@ import { holdForAi } from "../step-helpers";
 import { log, nowIso, trAdvance, trFail, trSkip, trWait } from "../track-state";
 import type { AccountLimits, EmailAccountLimits, Target, TrackRun, WorkflowStep } from "../types";
 import type { StepContext } from "./context";
+
+/** Unexpected step errors are retried this many times (1h, 2h, 4h) before the track fails. */
+const MAX_STEP_RETRIES = 3;
 
 /** Unconfirmed invitations are retried this many times, this many hours apart. */
 const MAX_INVITE_TRIES = 3;
@@ -85,7 +91,7 @@ export async function executeStep(
 }
 
 /** Map a thrown step error to the track transition it calls for. */
-function handleStepError(
+export function handleStepError(
   db: ReturnType<typeof getDb>, runId: string, tr: TrackRun, target: Target, steps: WorkflowStep[], name: string, err: unknown,
 ): void {
   const msg = err instanceof Error ? err.message : String(err);
@@ -95,9 +101,20 @@ function handleStepError(
     holdForAi(db, runId, tr, target.id, name, msg);
     return;
   }
+  // LinkedIn's weekly invitation limit belongs to the ACCOUNT: block its invitations until the
+  // week resets (other steps, like messages to connections, keep going), and retry this one then.
   if (err instanceof WeeklyLimitError) {
-    log(db, runId, target.id, "error", `Weekly connection limit reached — pausing run`);
-    db.prepare("UPDATE runs SET status = 'paused' WHERE id = ?").run(runId);
+    const until = blockConnectsForWeek(db, tr.account_id);
+    log(db, runId, target.id, "error", `LinkedIn's weekly invitation limit was reached on this account — invitations resume ${until.slice(0, 10)}`);
+    db.prepare("UPDATE run_profile_tracks SET next_step_at = ? WHERE id = ?").run(until, tr.id);
+    return;
+  }
+  // The session was signed out (or hit a security check): reconnecting the account fixes it, so
+  // hold the lead instead of failing it, and flag the account.
+  if (err instanceof SessionExpiredError || err instanceof AccountRestrictedError) {
+    log(db, runId, target.id, "error", `${msg} — reconnect the LinkedIn account; holding ${name}`);
+    void markNeedsReauth(tr.account_id).catch(() => {});
+    trWait(db, tr, 2);
     return;
   }
   if (err instanceof AlreadyConnectedError) {
@@ -150,6 +167,24 @@ function handleStepError(
     trSkip(db, tr, msg);
     return;
   }
-  log(db, runId, target.id, "error", `Error on ${name}: ${msg}`);
+  // Anything else may be a one-off (a slow page, a LinkedIn hiccup): retry with backoff first.
+  // (LinkedIn steps only: an email job has its own retry budget, spent by the time it throws here.)
+  const retries = (db.prepare("SELECT COALESCE(retry_count, 0) n FROM run_profile_tracks WHERE id = ?").get(tr.id) as { n: number } | undefined)?.n ?? 0;
+  if (tr.track === "linkedin" && retries < MAX_STEP_RETRIES) {
+    const hours = 2 ** retries;
+    db.prepare("UPDATE run_profile_tracks SET retry_count = ?, error_message = ? WHERE id = ?").run(retries + 1, msg.slice(0, 500), tr.id);
+    log(db, runId, target.id, "warn", `Error on ${name}: ${msg} — retrying in ${hours}h (${retries + 1}/${MAX_STEP_RETRIES})`);
+    trWait(db, tr, hours);
+    return;
+  }
+  log(db, runId, target.id, "error", `Error on ${name}: ${msg} — giving up after ${MAX_STEP_RETRIES} retries`);
   trFail(db, tr, msg);
+}
+
+/** Block invitations from this account until its next local week (ISO time returned). */
+export function blockConnectsForWeek(db: ReturnType<typeof getDb>, accountId: string | null): string {
+  const tz = accountId ? (db.prepare("SELECT timezone FROM accounts WHERE id = ?").get(accountId) as { timezone: string | null } | undefined)?.timezone ?? "UTC" : "UTC";
+  const until = new Date(Date.parse(localWeekStartUtc(tz)) + 7 * 86_400_000).toISOString();
+  if (accountId) db.prepare("UPDATE accounts SET connects_blocked_until = ? WHERE id = ?").run(until, accountId);
+  return until;
 }

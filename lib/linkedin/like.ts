@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import { assertSignedIn } from "@/lib/linkedin/session-guard";
 
 /**
  * Likes up to `count` of the contact's most recent posts from their activity page.
@@ -8,6 +9,7 @@ import type { Page } from "playwright";
 export async function likeRecentPosts(page: Page, linkedinUrl: string, count: number): Promise<number> {
   const base = linkedinUrl.replace(/[?#].*$/, "").replace(/\/+$/, "");
   await page.goto(`${base}/recent-activity/all/`, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await assertSignedIn(page);
   await page.waitForTimeout(2500 + Math.random() * 1500);
   if (/\/(login|checkpoint|authwall)/.test(page.url())) throw new Error("LinkedIn session is not signed in");
 

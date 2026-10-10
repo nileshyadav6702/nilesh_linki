@@ -1,4 +1,5 @@
 import type { Locator, Page } from "playwright";
+import { assertSignedIn } from "@/lib/linkedin/session-guard";
 
 export class WeeklyLimitError extends Error {}
 export class AlreadyConnectedError extends Error {}
@@ -55,6 +56,7 @@ async function showsPending(page: Page): Promise<boolean> {
  */
 export async function sendConnectionRequest(page: Page, linkedinUrl: string, note?: string | null): Promise<ConnectResult> {
   await page.goto(linkedinUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await assertSignedIn(page);
   await page.locator("main").first().waitFor({ timeout: 20000 });
   await page.waitForTimeout(1500 + Math.random() * 1000);
   const publicUrl = publicUrlOf(page);

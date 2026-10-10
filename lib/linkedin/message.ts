@@ -1,4 +1,5 @@
 import type { Locator, Page } from "playwright";
+import { assertSignedIn } from "@/lib/linkedin/session-guard";
 import { partDelayMs } from "@/lib/linkedin/split-message";
 
 /** The recipient could not be reached safely (no Message button, no unique name match): nothing was sent. */
@@ -50,6 +51,7 @@ async function typeInto(page: Page, input: Locator, text: string): Promise<void>
 /** Open the conversation from the person's own profile ("Message" button): reaches exactly them. */
 async function openFromProfile(page: Page, profileUrl: string): Promise<boolean> {
   await page.goto(profileUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await assertSignedIn(page);
   const main = page.locator("main").first();
   await main.waitFor({ timeout: 15000 });
   const direct = main.locator('button[aria-label^="Message"], a[aria-label^="Message"], button:has-text("Message"), a:has-text("Message")').first();
@@ -67,6 +69,7 @@ async function openFromProfile(page: Page, profileUrl: string): Promise<boolean>
  */
 async function openBySearch(page: Page, fullName: string): Promise<void> {
   await page.goto("https://www.linkedin.com/messaging/thread/new/", { waitUntil: "domcontentloaded", timeout: 30000 });
+  await assertSignedIn(page);
   const searchField = page.locator("input.msg-connections-typeahead__search-field").first();
   await searchField.waitFor({ timeout: 15000 });
   await searchField.click();

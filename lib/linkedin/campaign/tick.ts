@@ -127,6 +127,9 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
     visitsSentToday.set(accountId, linkedinActionsToday(db, accountId, "visit", tz) + linkedinActionsToday(db, accountId, "like", tz));
     // A weekly quota (Settings → LinkedIn seat) caps today at what is left of the week.
     applyWeeklyQuota(db, accountId, accountLimits, { connect: connectsSentToday.get(accountId) ?? 0, message: messagesSentToday.get(accountId) ?? 0, visit: visitsSentToday.get(accountId) ?? 0 });
+    // LinkedIn's own weekly invitation limit was hit: no new invitations until it resets.
+    const blocked = (db.prepare("SELECT connects_blocked_until b FROM accounts WHERE id = ?").get(accountId) as { b: string | null } | undefined)?.b;
+    if (blocked && Date.parse(blocked) > Date.now()) accountLimits.daily_connection_limit = 0;
   }
 
   // Steps cache: (workflow_id, track) → steps filtered by that track

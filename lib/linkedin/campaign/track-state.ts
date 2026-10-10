@@ -66,7 +66,7 @@ export function trAdvance(db: ReturnType<typeof getDb>, tr: TrackRun, steps: Wor
     const nextStep = steps[nextIndex];
     const nextAt = nextStep.delay_seconds > 0 ? new Date(Date.now() + nextStep.delay_seconds * 1000).toISOString() : null;
     db.prepare(
-      "UPDATE run_profile_tracks SET current_step = ?, last_step_at = datetime('now'), next_step_at = ? WHERE id = ?"
+      "UPDATE run_profile_tracks SET current_step = ?, last_step_at = datetime('now'), next_step_at = ?, retry_count = 0 WHERE id = ?"
     ).run(nextIndex, nextAt, tr.id);
   }
 }

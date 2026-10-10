@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import { assertSignedIn } from "@/lib/linkedin/session-guard";
 
 export type WithdrawOutcome = "withdrawn" | "connected" | "not_pending";
 
@@ -8,6 +9,7 @@ export type WithdrawOutcome = "withdrawn" | "connected" | "not_pending";
  */
 export async function withdrawInvitation(page: Page, linkedinUrl: string): Promise<WithdrawOutcome> {
   await page.goto(linkedinUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await assertSignedIn(page);
   await page.waitForTimeout(2000 + Math.random() * 1500);
   if (/\/(login|checkpoint|authwall)/.test(page.url())) throw new Error("LinkedIn session is not signed in");
 
