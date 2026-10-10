@@ -34,10 +34,10 @@ export function markIcon(mark: string): ReactNode {
 }
 
 const OUTCOME_ICON: Record<OutcomeIcon, ReactNode> = {
-  invite: <RiUserAddLine size={17} />, accepted: <RiUserFollowLine size={17} />, message: <RiChat3Line size={17} />, inmail: <RiMailSendLine size={17} />,
-  email: <RiMailLine size={17} />, reply: <RiReplyLine size={17} />, enriched: <RiMailLine size={17} />, qualified: <RiCheckboxCircleLine size={17} />,
-  visit: <RiEyeLine size={17} />, like: <RiThumbUpLine size={17} />, voice: <RiMicLine size={17} />, withdraw: <RiArrowGoBackLine size={17} />,
-  error: <RiErrorWarningLine size={17} />, running: <RiLoader4Line size={17} className="animate-spin" />, website: <RiGlobalLine size={17} />,
+  invite: <RiUserAddLine size={21} />, accepted: <RiUserFollowLine size={21} />, message: <RiChat3Line size={21} />, inmail: <RiMailSendLine size={21} />,
+  email: <RiMailLine size={21} />, reply: <RiReplyLine size={21} />, enriched: <RiMailLine size={21} />, qualified: <RiCheckboxCircleLine size={21} />,
+  visit: <RiEyeLine size={21} />, like: <RiThumbUpLine size={21} />, voice: <RiMicLine size={21} />, withdraw: <RiArrowGoBackLine size={21} />,
+  error: <RiErrorWarningLine size={21} />, running: <RiLoader4Line size={21} className="animate-spin" />, website: <RiGlobalLine size={21} />,
 };
 export const outcomeIcon = (i: OutcomeIcon | null) => (i ? OUTCOME_ICON[i] : null);
 

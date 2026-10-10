@@ -13,7 +13,7 @@ function ageDays(iso: string | null): number {
   return iso ? (Date.now() - Date.parse(iso)) / 86_400_000 : 0;
 }
 
-function entityLabel(url: string): string {
+export function entityLabel(url: string): string {
   const ref = parseEntityUrl(url);
   if (!ref) return url;
   const raw = ref.kind === "company" ? ref.universalName : ref.publicId;

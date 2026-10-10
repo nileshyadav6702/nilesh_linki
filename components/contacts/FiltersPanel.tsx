@@ -26,6 +26,9 @@ const CAMPAIGN = [
 ];
 const SORT = [{ value: "newest", label: "Newest first" }, { value: "score_desc", label: "Score: High to Low" }, { value: "score_asc", label: "Score: Low to High" }];
 
+/** Section label in the compact (agent Leads) panel: CAMPAIGN, ENRICHMENT… */
+const Heading = ({ children }: { children: ReactNode }) => <div className="mb-2 text-[15px] font-medium caps text-base-content/60">{children}</div>;
+
 const Label = ({ children }: { children: ReactNode }) => <div className="mb-1.5 text-[15px] text-base-content/80">{children}</div>;
 
 const iso = (d: Date) => format(d, "yyyy-MM-dd");
@@ -81,17 +84,38 @@ function DateRange({ from, to, onChange }: { from: string; to: string; onChange:
   );
 }
 
-export default function FiltersPanel({ filters, patch, clear, onClose, agents, lists, signals, lockAgent = false }: {
+export default function FiltersPanel({ filters, patch, clear, onClose, agents, lists, signals, lockAgent = false, compact = false }: {
   filters: ContactFilters; patch: (p: Partial<ContactFilters>) => void; clear: () => void; onClose: () => void;
   agents: Array<{ id: string; name: string }>; lists: Array<{ id: string; name: string; target_count: number }>; signals: Array<{ type: string; count: number }>;
   /** The agent is fixed (an agent's Leads tab): hide the agent picker. */
   lockAgent?: boolean;
+  /** An agent's Leads tab: just campaign step, enrichment, signal and sort. */
+  compact?: boolean;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   useDismiss(true, [wrap], onClose);
   const sel = (label: string, value: string, options: Array<{ value: string; label: string; pill?: ReactNode }>, onChange: (v: string) => void, searchable = false) => (
     <div><Label>{label}</Label><SearchSelect label={label} value={value} options={options} placeholder={options[0]?.label ?? "All"} searchable={searchable} onChange={onChange} /></div>
   );
+  if (compact) {
+    return (
+      <div ref={wrap} role="dialog" aria-label="Lead filters" className="wizard-rise absolute left-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(540px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+        <button type="button" onClick={onClose} aria-label="Close filters" className="absolute right-4 top-4 z-10 text-base-content/50 hover:text-base-content"><RiCloseLine size={24} /></button>
+        <div className="space-y-5 px-6 pb-5 pt-6">
+          <div><Heading>Campaign</Heading>{sel("Step", filters.step, [{ value: "", label: "All" }, ...CAMPAIGN.slice(1)], (v) => patch({ step: v }))}</div>
+          <div><Heading>Enrichment</Heading>
+            <div className="grid gap-4 sm:grid-cols-2">{sel("Email", filters.email, EMAIL, (v) => patch({ email: v }))}{sel("Phone", filters.phone, PHONE, (v) => patch({ phone: v }))}</div>
+          </div>
+          <div><Heading>Signal</Heading><SearchSelect label="Signal" value={filters.signal} options={[{ value: "", label: "All signals" }, ...signals.map((s) => ({ value: s.type, label: `${SIGNAL_LABEL[s.type] ?? s.type.replace(/_/g, " ")} (${s.count})` }))]} placeholder="All signals" searchable onChange={(v) => patch({ signal: v })} /></div>
+          <div><Heading>Sort order</Heading><SearchSelect label="Sort order" value={filters.sort} options={SORT} placeholder="Newest first" searchable={false} onChange={(v) => patch({ sort: v || EMPTY_FILTERS.sort })} /></div>
+        </div>
+        <div className="mx-6 flex items-center justify-between border-t border-[var(--border-subtle)] py-4">
+          <button type="button" onClick={clear} className="text-[17px] underline underline-offset-2 hover:text-base-content/70">Clear All</button>
+          <button type="button" onClick={onClose} className="text-[17px] text-base-content/80 hover:text-base-content">Close</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div ref={wrap} role="dialog" aria-label="Contact filters" className="wizard-rise absolute left-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(880px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
       <button type="button" onClick={onClose} aria-label="Close filters" className="absolute right-4 top-4 z-10 text-base-content/50 hover:text-base-content"><RiCloseLine size={22} /></button>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef, type ColumnSizingState } from "@tanstack/react-table";
 import { RiCloseLine, RiDeleteBin6Line, RiLinkedinBoxFill, RiMore2Fill, RiPushpinFill, RiPushpinLine } from "react-icons/ri";
-import { SignalCell } from "@/components/agents/leads/cells";
+import { OutreachCell, SignalCell } from "@/components/agents/leads/cells";
 import { FloatingMenu } from "@/components/agents/leads/Menu";
 import { timeAgo } from "@/components/agents/ui";
 import { ApprovalCell, EmailCell, PhoneCell, ScoreCell } from "@/components/contacts/cells";
@@ -100,6 +100,7 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
     } as ColumnDef<ContactRow>] : []),
     { id: "email", header: "Email", size: 130, minSize: 100, maxSize: 280, cell: ({ row: { original: r } }) => <div className="flex justify-center"><EmailCell row={r} onFound={onChanged} /></div> },
     { id: "phone", header: "Phone", size: 130, minSize: 100, maxSize: 280, cell: ({ row: { original: r } }) => <div className="flex justify-center"><PhoneCell row={r} /></div> },
+    { id: "outreach", header: "Outreach step", size: 360, minSize: 220, maxSize: 600, cell: ({ row: { original: r } }) => <OutreachCell outreach={r.outreach} /> },
     { id: "imported", header: "Import date", size: 150, minSize: 110, maxSize: 260, cell: ({ row: { original: r } }) => <span className="whitespace-nowrap text-[14px] text-base-content/65">{timeAgo(r.created_at)}</span> },
     {
       id: "list", header: "List", size: 210, minSize: 120, maxSize: 420,
@@ -138,7 +139,7 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
                 const isContact = h.column.id === "contact";
                 return (
                   <th key={h.id} style={isContact && pinned ? { left: CHECK_W } : undefined}
-                    className={`group/h relative border-b border-[var(--border-subtle)] bg-base-200 px-4 py-4 text-[14px] font-medium uppercase tracking-[0.04em] text-base-content/70 ${["score", "email", "phone", "approval", "actions"].includes(h.column.id) ? "text-center" : ""} ${isContact ? stickyContact("bg-base-200") : ""}`}>
+                    className={`group/h relative border-b border-[var(--border-subtle)] bg-base-200 px-4 py-4 text-[15.5px] font-medium caps text-base-content/70 ${["score", "email", "phone", "approval", "actions"].includes(h.column.id) ? "text-center" : ""} ${isContact ? stickyContact("bg-base-200") : ""}`}>
                     <span className="flex items-center justify-between gap-2">
                       <span className={`truncate ${["score", "email", "phone", "approval", "actions"].includes(h.column.id) ? "w-full text-center" : ""}`}>{flexRender(h.column.columnDef.header, h.getContext())}</span>
                       {isContact && (

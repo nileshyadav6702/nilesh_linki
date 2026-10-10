@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
+import { configWithItems, itemKeys } from "@/lib/agents/source-items";
 import { getAgent, listSources, sourceNeedsLinkedIn } from "@/lib/agents/store";
 import { runAgentPass } from "@/lib/agents/loop";
 import { runSource } from "@/lib/signals/engine";
@@ -19,8 +20,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const db = getDb();
   // ?source_id= runs just that source ("Launch now" on one row).
   const only = typeof req.query.source_id === "string" ? req.query.source_id : null;
-  const sources = listSources(agent.id, ctx.workspaceId).filter((s) => s.enabled && (!only || s.id === only));
+  // &item= narrows that source to one tracked competitor / topic / board / list (Launch now on an item row).
+  const item = only && typeof req.query.item === "string" ? req.query.item : null;
+  let sources = listSources(agent.id, ctx.workspaceId).filter((s) => s.enabled && (!only || s.id === only));
   if (only && !sources.length) return res.status(404).json({ error: "Source not found or turned off" });
+  if (item) {
+    if (!itemKeys(sources[0]).includes(item)) return res.status(404).json({ error: "That signal is no longer tracked by this source" });
+    sources = [{ ...sources[0], config_json: JSON.stringify(configWithItems(sources[0], (k) => k === item)) }];
+  }
 
   const cost = CREDIT_COSTS.agent_launch;
   try {

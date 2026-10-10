@@ -179,11 +179,11 @@ export function TabBar<T extends string>({ tabs, value, onChange, counts = {}, i
         const on = t === value;
         return (
           <button key={t} role="tab" aria-selected={on} type="button" onClick={() => onChange(t)}
-            className={`relative inline-flex items-center gap-2 whitespace-nowrap px-4 pb-3.5 pt-2 text-[16.5px] transition-colors ${on ? "font-medium text-base-content" : "text-base-content/50 hover:text-base-content/80"}`}>
+            className={`relative inline-flex items-center gap-2.5 whitespace-nowrap px-5 pb-3.5 pt-2 text-[18px] transition-colors ${on ? "text-base-content" : "text-base-content/45 hover:text-base-content/75"}`}>
             {icons[t] && <span className={on ? "text-primary" : ""}>{icons[t]}</span>}
             {t}
-            {counts[t] !== undefined && <span className={`rounded-full px-2 py-px text-[13px] tabular-nums ${on ? "bg-primary/12 text-primary" : "bg-base-200 text-base-content/55"}`}>{counts[t]}</span>}
-            {on && <motion.span layoutId="agent-tab-underline" transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }} className="absolute inset-x-2 -bottom-px h-[2.5px] rounded-full bg-primary" />}
+            {counts[t] !== undefined && <span className="rounded-[6px] bg-base-200 px-2.5 py-0.5 text-[15px] tabular-nums text-base-content/75">{counts[t]}</span>}
+            {on && <motion.span layoutId="agent-tab-underline" transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }} className="absolute inset-x-3 -bottom-px h-[3px] rounded-full bg-base-content/80" />}
           </button>
         );
       })}

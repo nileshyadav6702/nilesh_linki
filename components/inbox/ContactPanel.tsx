@@ -50,7 +50,7 @@ export default function ContactPanel({ threadId, onViewMore }: { threadId: strin
     <aside className="wizard-rise hidden w-[340px] shrink-0 flex-col overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-base-100 xl:flex">
       <header className="border-b border-[var(--border-subtle)] px-6 py-4">
         <div className="text-[18px] font-semibold">Contact Information</div>
-        {c.company && <div className="truncate text-[14px] uppercase tracking-wide text-base-content/55">{c.company}</div>}
+        {c.company && <div className="truncate text-[14px] caps text-base-content/55">{c.company}</div>}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex flex-col items-center text-center">
@@ -64,7 +64,7 @@ export default function ContactPanel({ threadId, onViewMore }: { threadId: strin
         <dl className="mt-7 space-y-5">
           {rows.filter(([, v]) => v).map(([k, v]) => (
             <div key={k}>
-              <dt className="text-[13px] font-semibold uppercase tracking-[0.08em] text-base-content/50">{k}</dt>
+              <dt className="text-[13px] font-semibold caps text-base-content/50">{k}</dt>
               <dd className="mt-1.5 text-[16px] leading-snug text-base-content/85">{v}</dd>
             </div>
           ))}

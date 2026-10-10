@@ -1,11 +1,16 @@
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
+import { format, formatDistanceToNowStrict, parseISO } from "date-fns";
+import { DateRangeCalendar } from "@/components/ui/DateRangePicker";
+import { Tip } from "@/components/agents/campaign/kit";
 import {
   RiArrowRightLine, RiCalendarCheckLine, RiErrorWarningLine, RiFocus3Line, RiLineChartLine, RiLinkedinBoxFill, RiMailLine, RiMailSendLine,
-  RiPauseCircleLine, RiPlayCircleLine, RiRadarLine, RiSearchEyeLine, RiSettings3Line, RiSparkling2Line, RiUserAddLine, RiUserFollowLine,
-  RiUserSearchLine, RiInformationLine, RiFireLine,
+  RiPauseCircleLine, RiRadarLine, RiSearchEyeLine, RiSettings3Line, RiSparkling2Line, RiUserAddLine, RiUserFollowLine,
+  RiUserSearchLine, RiInformationLine, RiFireLine, RiCalendarLine, RiChat1Line, RiCloseLine, RiCopperCoinLine,
 } from "react-icons/ri";
 import TrendChart from "@/components/ui/TrendChart";
-import { Avatar, IconTile, Panel, SectionHeading, Segmented, StatTile, timeAgo, type Tone } from "@/components/agents/ui";
+import { Avatar, IconTile, Panel, timeAgo, type Tone } from "@/components/agents/ui";
 
 export interface FunnelRow { signal_type: string; label: string; detected: number; qualified: number; contacted: number; accepted: number; replied: number; positive: number; meetings: number }
 export interface DetectorRun { id: string; source_type: string; started_at: string; candidates: number; ingested: number; filtered: number; linkedin_requests: number; error: string | null }
@@ -17,102 +22,169 @@ export interface ActivityItem { id: string; kind: "discovery" | "campaign" | "se
 const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "—");
 
 const SERIES = [
-  { key: "found" as const, label: "Leads found", color: "#5db8a6" },
-  { key: "invitations" as const, label: "Invitations sent", color: "#cc785c" },
-  { key: "messages" as const, label: "Messages sent", color: "#e8a55a" },
-  { key: "emails" as const, label: "Emails sent", color: "#6c6a64" },
+  { key: "found" as const, label: "Leads found", color: "#1fb5a1" },
+  { key: "invitations" as const, label: "Invitations sent", color: "#b57cf0" },
+  { key: "messages" as const, label: "Messages sent", color: "#f0609e" },
+  { key: "emails" as const, label: "Emails sent", color: "#5b8def" },
 ];
 
-/** Overview: what happens next, lifetime performance, a short chart, and the latest activity. */
-export default function AgentOverview({ performance, series, activity, dueToday, budget, onReview, onActivity }: {
-  performance: Performance; series: DayPoint[]; activity: ActivityItem[]; dueToday: number; budget: Budget | null;
-  onReview: () => void; onActivity: () => void;
+type Range = "7" | "30" | "custom";
+
+/** Below this share of the monthly refill, the Overview warns that outreach may stop. */
+const LOW_CREDITS_SHARE = 0.15;
+
+/** A "leads contacted today" card, once dismissed, stays hidden for the rest of the day. */
+const dismissKey = (agentId: string) => `kairo.overview.due.${agentId}.${new Date().toISOString().slice(0, 10)}`;
+function readDismissed(agentId: string): boolean {
+  try { return window.localStorage.getItem(dismissKey(agentId)) === "1"; } catch { return false; }
+}
+
+/** Overview: what needs attention, lifetime performance, a chart over a chosen period, and the latest activity. */
+export default function AgentOverview({ agentId, performance, series, activity, dueToday, budget, credits, onReview, onActivity }: {
+  agentId: string; performance: Performance; series: DayPoint[]; activity: ActivityItem[]; dueToday: number; budget: Budget | null;
+  credits?: { balance: number; next_refill: number } | null; onReview: () => void; onActivity: () => void;
 }) {
   const p = performance;
-  const [range, setRange] = useState<"7 days" | "30 days">("7 days");
-  const days = series.slice(-(range === "7 days" ? 7 : 30));
+  const [range, setRange] = useState<Range>("7");
+  const [custom, setCustom] = useState<{ from: string; to: string; points: DayPoint[] } | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [dueHidden, setDueHidden] = useState(() => typeof window !== "undefined" && readDismissed(agentId));
+  const days = range === "custom" && custom ? custom.points : series.slice(-Number(range === "custom" ? 7 : range));
+  const lowCredits = !!credits && credits.balance < Math.max(20, credits.next_refill * LOW_CREDITS_SHARE);
+  const title = range === "custom" && custom ? `${format(parseISO(custom.from), "MMM d")} – ${format(parseISO(custom.to), "MMM d")}` : `Last ${range === "30" ? 30 : 7} days`;
+
+  async function pickDates(r: { from: string; to: string }) {
+    setPicking(false);
+    const res = await fetch(`/api/agents/${agentId}/series?from=${r.from}&to=${r.to}`);
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) { toast.error(d.error ?? "Could not load that period"); return; }
+    setCustom({ ...r, points: d.series ?? [] });
+    setRange("custom");
+  }
+
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
-      <div className="min-w-0 space-y-8">
-        <section className="space-y-3">
-          <SectionHeading title="Actions" />
-          {budget?.paused && (
-            <ActionRow icon={<RiPauseCircleLine size={20} />} tone="amber" title="LinkedIn discovery is paused" subtitle={budget.paused.reason} />
+    <div className="grid gap-8 xl:grid-cols-[1fr_490px]">
+      <div className="min-w-0 space-y-9">
+        <section className="space-y-4">
+          <h2 className="text-[22px] font-semibold text-base-content">Actions</h2>
+          {lowCredits && (
+            <ActionRow icon={<RiCopperCoinLine size={22} />} title="Your organization is running out of credits" subtitle="Add credits to keep your outreach running"
+              action={<Link href="/settings?tab=billing" className="inline-flex items-center gap-1.5 text-[16.5px] text-[#f0785a] hover:underline">Add credits <RiArrowRightLine size={18} /></Link>} />
           )}
-          <ActionRow icon={<RiPlayCircleLine size={20} />} tone="coral"
-            title={`${dueToday} lead${dueToday === 1 ? "" : "s"} will be contacted today`} subtitle="Steps already due on this campaign."
-            action={<button type="button" className="inline-flex items-center gap-1 text-[15px] font-medium text-primary hover:text-[var(--primary-hover)]" onClick={onReview}>Review leads <RiArrowRightLine size={15} /></button>} />
+          {budget?.paused && <ActionRow icon={<RiPauseCircleLine size={22} />} title="LinkedIn discovery is paused" subtitle={budget.paused.reason} />}
+          {dueToday > 0 && !dueHidden && (
+            <ActionRow icon={<RiChat1Line size={22} />} title={`${dueToday} lead${dueToday === 1 ? "" : "s"} will be contacted today`} subtitle="Review their profiles and messages before they go out"
+              action={<span className="flex items-center gap-5">
+                <button type="button" className="inline-flex items-center gap-1.5 text-[16.5px] text-[#f0785a] hover:underline" onClick={onReview}>Review leads <RiArrowRightLine size={18} /></button>
+                <button type="button" aria-label="Dismiss for today" className="text-base-content/40 hover:text-base-content"
+                  onClick={() => { setDueHidden(true); try { window.localStorage.setItem(dismissKey(agentId), "1"); } catch { /* storage unavailable */ } }}><RiCloseLine size={24} /></button>
+              </span>} />
+          )}
+          {!lowCredits && !budget?.paused && (dueToday === 0 || dueHidden) && <p className="text-[16px] text-base-content/50">Nothing needs your attention right now.</p>}
         </section>
 
         <section className="space-y-4">
-          <SectionHeading title="Performance" subtitle="From leads found to interested replies" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <StatTile label="Found" value={p.found} icon={<RiUserSearchLine size={18} />} tone="teal" />
-            <StatTile label="Contacted" value={p.contacted} hint={p.found ? `${pct(p.contacted, p.found)} of found` : undefined} icon={<RiMailSendLine size={18} />} tone="coral" />
-            <StatTile label="Accepted" value={p.accepted} hint={p.contacted ? `${pct(p.accepted, p.contacted)} acceptance rate` : undefined} icon={<RiUserFollowLine size={18} />} tone="linkedin" />
-            <StatTile label="Replied" value={p.replied || "—"} hint={p.contacted && p.replied ? `${pct(p.replied, p.contacted)} reply rate` : undefined} icon={<RiMailLine size={18} />} tone="amber" />
-            <StatTile label="Interested" value={p.interested || "—"} icon={<RiFireLine size={18} />} tone="success" />
+          <div>
+            <h2 className="text-[22px] font-semibold text-base-content">Performance</h2>
+            <p className="text-[16px] text-base-content/60">From leads found to interested replies</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <Stat label="Found" value={p.found} corner={<Tip text="Every lead this agent's sources found, before ICP scoring."><RiInformationLine size={19} className="shrink-0 text-base-content/45" /></Tip>} />
+            <Stat label="Contacted" value={p.contacted} hint={p.found && p.contacted ? `${pct(p.contacted, p.found)} of found` : undefined} />
+            <Stat label="Accepted" value={p.accepted} hint={p.contacted ? `${pct(p.accepted, p.contacted)} acceptance rate` : undefined} />
+            <Stat label="Replied" value={p.replied || "—"} hint={p.contacted && p.replied ? `${pct(p.replied, p.contacted)} reply rate` : undefined} />
+            <Stat label="Interested" value={p.interested || "—"} corner={<RiFireLine size={22} className="shrink-0 text-[#f0785a]" />} />
           </div>
         </section>
 
-        <Panel className="p-5">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <section className="rounded-[16px] border border-[var(--border-subtle)] bg-base-100 p-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
             <div className="flex items-center gap-3">
-              <IconTile icon={<RiLineChartLine size={18} />} tone="coral" size={36} />
-              <div className="text-[20px] font-semibold leading-none">Last {Math.min(days.length, range === "7 days" ? 7 : 30)} days</div>
-              <Segmented options={["7 days", "30 days"] as const} value={range} onChange={setRange} />
+              <RiLineChartLine size={24} className="text-[#f0785a]" />
+              <div className="text-[21px] font-medium leading-tight">{title}</div>
             </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[13.5px] text-base-content/60">
-              {SERIES.map((s) => <span key={s.key} className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full" style={{ background: s.color }} />{s.label}</span>)}
+            <div className="relative flex items-center gap-1 rounded-full bg-base-200 p-1 text-[15.5px]">
+              {(["7", "30"] as const).map((r) => (
+                <button key={r} type="button" onClick={() => setRange(r)} aria-pressed={range === r}
+                  className={`rounded-full px-4 py-1.5 transition-colors ${range === r ? "bg-base-100 font-medium shadow-sm" : "text-base-content/65 hover:text-base-content"}`}>{r} days</button>
+              ))}
+              <button type="button" onClick={() => setPicking(!picking)} aria-pressed={range === "custom"} aria-expanded={picking}
+                className={`inline-flex items-center gap-2 rounded-full px-4 py-1.5 transition-colors ${range === "custom" ? "bg-base-100 font-medium shadow-sm" : "text-base-content/65 hover:text-base-content"}`}>
+                <RiCalendarLine size={17} /> Select dates
+              </button>
+              {picking && (
+                <div className="wizard-rise absolute left-0 top-full z-30 mt-2 rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+                  <DateRangeCalendar value={custom ? { from: custom.from, to: custom.to } : null} onChange={(r) => void pickDates(r)} />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-[15.5px] text-base-content/70">
+              {SERIES.map((s) => <span key={s.key} className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />{s.label}</span>)}
             </div>
           </div>
           <Chart days={days} />
-        </Panel>
+        </section>
       </div>
 
-      <Panel className="flex max-h-[760px] flex-col xl:sticky xl:top-4 xl:self-start">
-        <div className="flex items-center justify-between border-b border-[var(--border-subtle)] px-5 py-4">
-          <h2 className="text-[20px] font-semibold leading-none">Activity feed</h2>
-          <button type="button" className="inline-flex items-center gap-1 text-[14.5px] font-medium text-primary" onClick={onActivity}>View all <RiArrowRightLine size={14} /></button>
+      <section className="flex max-h-[820px] flex-col xl:sticky xl:top-4 xl:self-start">
+        <div className="flex items-center justify-between pb-3">
+          <h2 className="text-[22px] font-semibold leading-none">Activity Feed</h2>
+          <button type="button" className="inline-flex items-center gap-1.5 text-[16px] text-[#f0785a] hover:underline" onClick={onActivity}>View all <RiArrowRightLine size={18} /></button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           {activity.length === 0 && <p className="px-3 py-8 text-center text-[15px] text-base-content/45">Nothing yet. Sources and sends show up here.</p>}
           {activity.slice(0, 14).map((item) => {
             const m = describe(item);
             return (
-              <div key={item.id} className="flex items-center gap-3 rounded-[8px] px-3 py-2.5 hover:bg-base-200/60">
-                {m.avatar ? <Avatar name={item.title} size={32} /> : <IconTile icon={m.icon} tone={m.tone} size={32} />}
-                <div className="min-w-0 flex-1 text-[15px]">
-                  <div className="truncate"><span className="font-medium text-base-content">{m.event}</span>{m.who && <span className="text-base-content/50"> · {m.who}</span>}</div>
-                  {m.sub && <div className="truncate text-[13.5px] text-base-content/45">{m.sub}</div>}
+              <div key={item.id} className="flex items-center gap-4 rounded-[10px] px-3 py-3 hover:bg-base-200/60">
+                {m.avatar ? <Avatar name={item.title} size={38} /> : <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-[#f0785a]/12 text-[#f0785a]">{m.icon}</span>}
+                <div className="min-w-0 flex-1 text-[16px]">
+                  <div className="truncate"><span className="text-base-content">{m.event}</span>{m.who && <span className="text-base-content/50"> · {m.who}</span>}</div>
+                  {m.sub && <div className="truncate text-[15px] text-base-content/55">{m.sub}</div>}
                 </div>
-                <span className="shrink-0 text-[12.5px] text-base-content/40">{timeAgo(item.at)}</span>
+                <span className="shrink-0 text-[15px] text-base-content/45">{agoLong(item.at)}</span>
               </div>
             );
           })}
         </div>
-      </Panel>
+      </section>
     </div>
   );
 }
 
-function ActionRow({ icon, tone, title, subtitle, action }: { icon: ReactNode; tone: Tone; title: string; subtitle?: string; action?: ReactNode }) {
+/** "2 hours ago", "3 days ago". */
+function agoLong(iso: string): string {
+  const t = Date.parse(iso.includes("T") || iso.endsWith("Z") ? iso : `${iso.replace(" ", "T")}Z`);
+  return Number.isNaN(t) ? "" : formatDistanceToNowStrict(t, { addSuffix: true });
+}
+
+function Stat({ label, value, hint, corner }: { label: string; value: ReactNode; hint?: string; corner?: ReactNode }) {
   return (
-    <Panel className="flex flex-wrap items-center gap-4 px-5 py-4">
-      <IconTile icon={icon} tone={tone} />
+    <div className="min-h-[160px] rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-5 py-5">
+      <div className="flex items-start justify-between gap-2"><span className="text-[17px] text-base-content/75">{label}</span>{corner}</div>
+      <div className="mt-3 text-[34px] font-semibold leading-none tabular-nums text-base-content">{value}</div>
+      {hint && <div className="mt-3 text-[15.5px] leading-snug text-base-content/55">{hint}</div>}
+    </div>
+  );
+}
+
+function ActionRow({ icon, title, subtitle, action }: { icon: ReactNode; title: string; subtitle?: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center gap-5 rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-6 py-5">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[12px] bg-[#f0785a]/10 text-[#f0785a]">{icon}</span>
       <div className="min-w-0 flex-1">
-        <div className="font-medium text-base-content">{title}</div>
-        {subtitle && <div className="text-[15px] text-base-content/55">{subtitle}</div>}
+        <div className="text-[18px] text-base-content">{title}</div>
+        {subtitle && <div className="text-[16px] text-base-content/60">{subtitle}</div>}
       </div>
       {action}
-    </Panel>
+    </div>
   );
 }
 
 /** Daily leads found and sends (Recharts), with the shared dated tooltip. */
 function Chart({ days }: { days: DayPoint[] }) {
   if (!days.length) return <p className="py-14 text-center text-[15px] text-base-content/45">No activity in this period yet.</p>;
-  return <div className="mt-4"><TrendChart data={days} series={SERIES} height={240} compact /></div>;
+  return <div className="mt-6"><TrendChart data={days} series={SERIES} height={280} compact /></div>;
 }
 
 interface Described { event: string; who?: string; sub?: string; avatar: boolean; icon: ReactNode; tone: Tone; label: string; labelIcon: ReactNode; labelTone: "ok" | "muted" | "error" | "plain" }

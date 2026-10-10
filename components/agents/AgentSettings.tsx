@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { LuBot, LuSend, LuShieldCheck, LuSlidersHorizontal } from "react-icons/lu";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   RiArrowDownSLine, RiCheckboxCircleFill, RiDeleteBinLine, RiErrorWarningLine, RiInformationLine, RiLineChartLine, RiLinkedinBoxFill,
   RiMailLine, RiSave3Line, RiSendPlaneLine, RiSettings3Line, RiUserAddLine,
 } from "react-icons/ri";
-import { Avatar, Field, IconTile, inputCls, Panel, Pill, primaryBtn } from "@/components/agents/ui";
+import { Avatar, Field, inputCls, Panel, Pill, primaryBtn } from "@/components/agents/ui";
 import { Tip } from "@/components/agents/campaign/kit";
 import { parseDays } from "@/components/agents/settings/kit";
 import LinkedInAccountDrawer from "@/components/agents/settings/LinkedInAccountDrawer";
@@ -18,9 +17,15 @@ export interface AgentForm {
   goal: string; tone: string; exclude_first_degree: number; reply_instructions?: string | null;
 }
 
-interface LinkedInAcc { id: string; name: string | null; email: string | null; is_authenticated: number; daily_connection_limit: number | null; daily_message_limit: number | null; working_days: string | null }
+interface LinkedInAcc {
+  id: string; name: string | null; email: string | null; is_authenticated: number; daily_connection_limit: number | null; daily_message_limit: number | null; working_days: string | null;
+  weekly_connection_limit?: number | null; weekly_message_limit?: number | null;
+}
 interface EmailAcc { id: string; from_email: string | null; from_name: string | null; daily_email_limit: number | null; ramp_up_enabled: number | null; sent_today?: number; effective_limit?: number }
 interface Option { id: string; name?: string | null; email?: string | null; from_email?: string | null; from_name?: string | null; is_authenticated?: number }
+
+/** Section heading: large and plain, no icon tile. */
+const H2 = "text-[24px] font-semibold leading-tight text-base-content";
 
 /** Fields the bottom Save bar owns. Senders save the moment they are picked or removed. */
 const EDITABLE = ["name", "mode", "min_score", "fit_weight", "daily_lead_cap", "autopilot_delay_minutes", "enrich_emails"] as const;
@@ -78,13 +83,13 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
 
   return (
     <div className="space-y-6 pb-24">
-      <Panel className="p-6">
-        <h2 className="flex items-center gap-3 text-[20px] font-semibold leading-tight text-base-content"><IconTile icon={<LuBot size={20} />} tone="coral" size={40} />Agent Name</h2>
-        <input className={`${inputCls} mt-4 max-w-xl`} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+      <Panel className="px-8 py-8">
+        <h2 className={H2}>Agent Name</h2>
+        <input className={`${inputCls} mt-5 max-w-xl !h-12 !text-[17px]`} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
       </Panel>
 
-      <Panel className="p-6">
-        <h2 className="flex items-center gap-3 text-[20px] font-semibold leading-tight text-base-content"><IconTile icon={<LuSend size={20} />} tone="linkedin" size={40} />Senders</h2>
+      <Panel className="px-8 py-8">
+        <h2 className={H2}>Senders</h2>
         <div className="mt-5 space-y-3">
           {initial.linkedin_account_id ? (
             <SenderRow
@@ -92,8 +97,8 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
               name={liRow?.name || liRow?.email || "LinkedIn account"} kind="LinkedIn sender"
               status={liRow ? (liRow.is_authenticated ? <Pill tone="success"><RiLinkedinBoxFill size={12} /> Connected</Pill> : <Pill tone="error"><RiErrorWarningLine size={12} /> Logged out</Pill>) : null}
               stats={liRow ? [
-                <><RiUserAddLine size={13} /> {connLimit}/day · {connLimit * activeDays}/wk</>,
-                <><RiSendPlaneLine size={13} /> {msgLimit}/day · {msgLimit * activeDays}/wk</>,
+                <><RiUserAddLine size={17} className="text-primary" /> {connLimit}/day · {liRow.weekly_connection_limit ?? connLimit * activeDays}/wk</>,
+                <><RiSendPlaneLine size={17} className="text-primary" /> {msgLimit}/day · {liRow.weekly_message_limit ?? msgLimit * activeDays}/wk</>,
               ] : []}
               onRemove={() => setSender("linkedin", null)} onSettings={() => setDrawer("linkedin")} />
           ) : <SenderPicker kind="linkedin" onPick={(id) => setSender("linkedin", id)} />}
@@ -112,27 +117,27 @@ export default function AgentSettings({ agentId, initial, onSaved }: { agentId: 
         </div>
       </Panel>
 
-      <Panel className="p-6">
-        <h2 className="flex items-center gap-3 text-[20px] font-semibold leading-tight text-base-content"><IconTile icon={<LuShieldCheck size={20} />} tone="amber" size={40} />Review Mode</h2>
+      <Panel className="px-8 py-8">
+        <h2 className={H2}>Review Mode</h2>
         <label className="mt-4 flex cursor-pointer items-start gap-3">
-          <input type="checkbox" className="checkbox checkbox-sm checkbox-primary mt-0.5" checked={f.mode === "copilot"} onChange={(e) => setF({ ...f, mode: e.target.checked ? "copilot" : "autopilot" })} />
+          <input type="checkbox" className="checkbox checkbox-primary mt-1" checked={f.mode === "copilot"} onChange={(e) => setF({ ...f, mode: e.target.checked ? "copilot" : "autopilot" })} />
           <span>
-            <span className="block font-medium text-base-content">Enable Review Mode</span>
-            <span className="mt-0.5 block text-[15px] text-base-content/55">When enabled, you approve each lead&apos;s messages before anything is sent. When off, the agent sends on autopilot after the review delay.</span>
+            <span className="block text-[18.5px] text-base-content">Enable Review Mode</span>
+            <span className="mt-1 block text-[16px] text-base-content/60">When enabled, you approve each lead&apos;s messages before anything is sent. When off, the agent sends on autopilot after the review delay.</span>
           </span>
         </label>
       </Panel>
 
       <Panel>
-        <button type="button" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced} className="flex w-full items-center justify-between gap-3 px-6 py-5 text-left">
+        <button type="button" onClick={() => setAdvanced(!advanced)} aria-expanded={advanced} className="flex w-full items-center justify-between gap-3 px-8 py-7 text-left">
           <span>
-            <span className="flex items-center gap-3 text-[20px] font-semibold leading-tight text-base-content"><IconTile icon={<LuSlidersHorizontal size={20} />} tone="ink" size={40} />Advanced</span>
-            <span className="mt-1 block text-[15px] text-base-content/55">Lead scoring, daily lead volume, autopilot delay and email finding.</span>
+            <span className={H2}>Advanced</span>
+            <span className="mt-1 block text-[16px] text-base-content/60">Lead scoring, daily lead volume, autopilot delay and email finding.</span>
           </span>
           <RiArrowDownSLine size={20} className={`shrink-0 text-base-content/45 transition-transform ${advanced ? "rotate-180" : ""}`} />
         </button>
         {advanced && (
-          <div className="space-y-4 border-t border-[var(--border-subtle)] px-6 py-5">
+          <div className="space-y-4 border-t border-[var(--border-subtle)] px-8 py-6">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Min score to contact" hint="Leads at or above it get emails found and go to outreach. Warm = 60, hot = 80; cooler leads wait for your approval."><input type="number" min={0} max={100} className={inputCls} value={f.min_score} onChange={(e) => setF({ ...f, min_score: Number(e.target.value) })} /></Field>
               <Field label="Leads per day"><input type="number" min={1} max={500} className={inputCls} value={f.daily_lead_cap} onChange={(e) => setF({ ...f, daily_lead_cap: Number(e.target.value) })} /></Field>
@@ -163,17 +168,17 @@ function SenderRow({ lead, name, kind, status, stats, onRemove, onSettings }: {
   lead: ReactNode; name: string; kind: string; status: ReactNode; stats: ReactNode[]; onRemove: () => void; onSettings: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 px-5 py-4">
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-200/40 px-6 py-5">
       {lead}
       <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2"><span className="truncate font-medium text-base-content">{name}</span>{status}</div>
-        <div className="text-[14.5px] text-base-content/50">{kind}</div>
+        <div className="flex flex-wrap items-center gap-2.5"><span className="truncate text-[18px] text-base-content">{name}</span>{status}</div>
+        <div className="text-[16px] text-base-content/55">{kind}</div>
       </div>
       {stats.length > 0 && <span className="hidden h-8 w-px bg-[var(--border-subtle)] sm:block" />}
-      <div className="flex flex-wrap gap-2">{stats.map((s, i) => <span key={i} className="inline-flex items-center gap-1 rounded-[6px] bg-primary/[0.07] px-2 py-1 text-[14.5px] tabular-nums text-base-content/75">{s}</span>)}</div>
+      <div className="flex flex-wrap gap-2">{stats.map((s, i) => <span key={i} className="inline-flex items-center gap-1.5 rounded-[6px] bg-base-200 px-2.5 py-1 text-[16px] tabular-nums text-base-content/70">{s}</span>)}</div>
       <div className="ml-auto flex items-center gap-4">
-        <button type="button" onClick={onRemove} className="inline-flex items-center gap-1 text-[15px] font-medium text-error hover:underline"><RiDeleteBinLine size={15} /> Remove</button>
-        <button type="button" onClick={onSettings} className="inline-flex items-center gap-1 text-[15px] font-medium text-base-content hover:text-primary"><RiSettings3Line size={15} /> Settings &amp; Limits</button>
+        <button type="button" onClick={onRemove} className="inline-flex items-center gap-2 text-[16px] text-[#e5484d] hover:underline"><RiDeleteBinLine size={19} /> Remove</button>
+        <button type="button" onClick={onSettings} className="inline-flex items-center gap-2 text-[16px] text-base-content hover:text-primary"><RiSettings3Line size={19} /> Settings &amp; Limits</button>
       </div>
     </div>
   );

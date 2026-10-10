@@ -82,17 +82,24 @@ export function dueToday(db: Database.Database, workflowId: string | null): numb
 export interface DayPoint { day: string; found: number; invitations: number; messages: number; emails: number }
 
 export function agentSeries(db: Database.Database, agentId: string, days = 7): DayPoint[] {
-  const since = `-${days - 1} days`;
-  const bucket = (sql: string) => db.prepare(sql).all(agentId, since) as Array<{ d: string; n: number }>;
-  const found = bucket(`SELECT date(created_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND created_at >= date('now', ?) GROUP BY 1`);
-  const invitations = bucket(`SELECT date(connection_requested_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND connection_requested_at >= date('now', ?) GROUP BY 1`);
-  const messages = bucket(`SELECT date(message_sent_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND message_sent_at >= date('now', ?) GROUP BY 1`);
-  const emails = db.prepare(`SELECT date(ej.created_at) d, COUNT(*) n FROM email_jobs ej JOIN targets t ON t.id = ej.target_id
-    WHERE t.agent_id = ? AND ej.status = 'sent' AND ej.created_at >= date('now', ?) GROUP BY 1`).all(agentId, since) as Array<{ d: string; n: number }>;
+  const to = new Date().toISOString().slice(0, 10);
+  const from = new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+  return agentSeriesRange(db, agentId, from, to);
+}
+
+/** One point per day from `from` to `to` (YYYY-MM-DD, inclusive, UTC days). */
+export function agentSeriesRange(db: Database.Database, agentId: string, from: string, to: string): DayPoint[] {
+  const end = `${to} 23:59:59`;
+  const bucket = (sql: string) => db.prepare(sql).all(agentId, from, end) as Array<{ d: string; n: number }>;
+  const found = bucket(`SELECT date(created_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(created_at) >= ? AND created_at <= ? GROUP BY 1`);
+  const invitations = bucket(`SELECT date(connection_requested_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(connection_requested_at) >= ? AND connection_requested_at <= ? GROUP BY 1`);
+  const messages = bucket(`SELECT date(message_sent_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(message_sent_at) >= ? AND message_sent_at <= ? GROUP BY 1`);
+  const emails = bucket(`SELECT date(ej.created_at) d, COUNT(*) n FROM email_jobs ej JOIN targets t ON t.id = ej.target_id
+    WHERE t.agent_id = ? AND ej.status = 'sent' AND date(ej.created_at) >= ? AND ej.created_at <= ? GROUP BY 1`);
   const pick = (rows: Array<{ d: string; n: number }>, day: string) => rows.find((r) => r.d === day)?.n ?? 0;
   const points: DayPoint[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    const day = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+  for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000) {
+    const day = new Date(t).toISOString().slice(0, 10);
     points.push({ day, found: pick(found, day), invitations: pick(invitations, day), messages: pick(messages, day), emails: pick(emails, day) });
   }
   return points;

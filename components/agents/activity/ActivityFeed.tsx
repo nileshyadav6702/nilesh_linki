@@ -88,12 +88,12 @@ export default function ActivityFeed({ agentId, onViewLeads }: { agentId: string
           <ul aria-busy={loading}>
             {groups.map((g, gi) => (
               <Fragment key={`${g.day}-${gi}`}>
-                <li className={`bg-base-200/60 px-5 py-2.5 text-[14.5px] font-medium text-base-content/60 border-b border-[var(--border-subtle)]`}>{g.day}</li>
+                <li className="border-b border-[var(--border-subtle)] bg-base-200/60 px-6 py-3 text-[16px] text-base-content/70">{g.day}</li>
                 {g.items.map((item) => <ActivityRow key={item.id} item={item} onViewLeads={onViewLeads} />)}
               </Fragment>
             ))}
           </ul>
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-5 py-3 text-[14.5px] text-base-content/50">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border-subtle)] px-6 py-4 text-[16px] text-base-content/50">
             <span className="tabular-nums">{`${page * PAGE_SIZE + 1}–${Math.min((page + 1) * PAGE_SIZE, total)} of ${total}`}</span>
             {pages > 1 && <Pager page={page} pages={pages} onPage={setPage} />}
           </div>

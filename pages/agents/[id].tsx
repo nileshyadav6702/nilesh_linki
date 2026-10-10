@@ -2,10 +2,8 @@ import Head from "next/head";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { toast } from "sonner";
-import type { ReactNode } from "react";
-import {
-  RiFlowChart, RiDashboardLine, RiErrorWarningLine, RiHistoryLine, RiPlayLine, RiRadarLine, RiSettings3Line, RiTeamLine,
-} from "react-icons/ri";
+import { RiErrorWarningLine, RiPlayLine } from "react-icons/ri";
+import { formatDistanceToNowStrict } from "date-fns";
 import ActivityFeed from "@/components/agents/activity/ActivityFeed";
 import AgentHeader from "@/components/agents/AgentHeader";
 import AgentOverview, { type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
@@ -39,13 +37,12 @@ interface Detail {
     email: { from_email: string | null; from_name: string | null; daily_email_limit: number | null; ramp_up_enabled: number | null; ramp_start_date: string | null } | null;
   };
   sender_pool: { linkedin: number; email: number };
+  credits?: { balance: number; next_refill: number };
 }
 
+/** Columns an agent's Leads tab leaves out (the agent is implied; lists and import date live on Contacts). */
+const AGENT_LEAD_HIDDEN = ["agent", "list", "imported"];
 const TABS = ["Overview", "Leads", "Sources", "Campaign", "Activity", "Settings"] as const;
-const TAB_ICONS: Partial<Record<(typeof TABS)[number], ReactNode>> = {
-  Overview: <RiDashboardLine size={19} />, Leads: <RiTeamLine size={19} />, Sources: <RiRadarLine size={19} />,
-  Campaign: <RiFlowChart size={19} />, Activity: <RiHistoryLine size={19} />, Settings: <RiSettings3Line size={19} />,
-};
 
 
 export default function AgentDetail() {
@@ -145,6 +142,10 @@ export default function AgentDetail() {
           onToggleOutreach={() => patch({ outreach_enabled: !sending }, sending ? "Outreach paused" : "Outreach started")}
           onToggleSourcing={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")}
           onLaunch={() => setAskLaunch(true)} onDelete={remove} onSenderSettings={() => setTab("Settings")}
+          nextLaunch={soonest?.next_run_at && finding ? {
+            lead: "Next launch", when: timeUntil(soonest.next_run_at) === "due" ? "now" : `in ${formatDistanceToNowStrict(new Date(soonest.next_run_at))}`,
+            tip: "When this agent next runs its lead sources. Found leads are scored, then the qualified ones enter the campaign.",
+          } : null}
         />
         {askLaunch && <Confirm title="Launch sources now?" action="Launch now (10 credits)" onCancel={() => setAskLaunch(false)}
           onConfirm={async () => { setAskLaunch(false); await runNow(); }}
@@ -161,21 +162,22 @@ export default function AgentDetail() {
         )}
 
         <div className="relative">
-          <TabBar tabs={TABS} value={tab} onChange={setTab} counts={{ Leads: leadCount }} icons={TAB_ICONS} />
+          <TabBar tabs={TABS} value={tab} onChange={setTab} counts={{ Leads: leadCount }} />
           {tipOpen && <LeadsFinderTip onClose={() => setTipOpen(false)} />}
         </div>
         {launched && <FindingLeadsToast leadCount={leadCount} onClose={() => { setLaunched(false); void router.replace({ pathname: router.pathname, query: { id } }, undefined, { shallow: true }); }} />}
 
         {tab === "Overview" && (
-          <AgentOverview performance={d.performance} series={d.series} activity={d.activity} dueToday={d.due_today} budget={d.linkedin_budget} onReview={() => setTab("Leads")} onActivity={() => setTab("Activity")} />
+          <AgentOverview agentId={a.id} credits={d.credits} performance={d.performance} series={d.series} activity={d.activity} dueToday={d.due_today} budget={d.linkedin_budget} onReview={() => setTab("Leads")} onActivity={() => setTab("Activity")} />
         )}
-        {tab === "Leads" && <ContactsWorkspace base={{ agent: a.id }} hidden={["agent"]} sizesKey="linki.agent-leads.columns.v1" className="h-[calc(100vh-150px)] min-h-[520px]"
+        {tab === "Leads" && <ContactsWorkspace base={{ agent: a.id }} hidden={AGENT_LEAD_HIDDEN} sizesKey="linki.agent-leads.columns.v2" className="h-[calc(100vh-150px)] min-h-[520px]"
           openLeadId={typeof router.query.lead === "string" ? router.query.lead : undefined} />}
         {tab === "Sources" && (
           <div className="space-y-4">
             {editingIcp && <TargetingDrawer icp={icp} websiteUrl={icpWebsite} onClose={() => setEditingIcp(false)} onSave={saveIcp} />}
             <AgentSources openImport={router.query.add === "1"} agentId={a.id} agentName={a.name} ownListId={a.list_id} autoEnrichEmails={!!a.enrich_emails && a.channel !== "linkedin"} icp={icp} rows={d.sources}
-              hasLinkedIn={!!a.linkedin_account_id} onChanged={load} onEditTargeting={() => setEditingIcp(true)} />
+              hasLinkedIn={!!a.linkedin_account_id} onChanged={load} onEditTargeting={() => setEditingIcp(true)}
+              sourcing={finding} onToggleSourcing={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")} />
           </div>
         )}
         {tab === "Campaign" && (

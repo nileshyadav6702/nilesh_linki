@@ -17,6 +17,9 @@ import { failToast } from "@/components/settings/billing/credits-toast";
 
 interface ListRow { id: string; name: string; target_count: number }
 
+/** Status chips on an agent's Leads tab (lib/agents/leads-query.ts STATUS_SQL). */
+const STATUS_CHIPS: Array<[string, string]> = [["all", "All"], ["scheduled", "Scheduled"], ["in_sequence", "In sequence"], ["replied", "Replied"]];
+
 async function call(url: string, method: string, body?: unknown) {
   const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : undefined, body: body ? JSON.stringify(body) : undefined });
   const d = await r.json().catch(() => ({}));
@@ -170,29 +173,31 @@ export function ContactsWorkspace({ base, hidden, sizesKey, openLeadId, classNam
 
   // Filters fixed by the page (e.g. the agent) don't count as the user's own.
   const filterCount = activeCount(c.filters) - Object.values(base ?? {}).filter(Boolean).length;
+  // An agent's Leads tab: full-width search, status chips and the shorter filter panel.
+  const agentMode = !!base?.agent;
 
   return (
     <>
       <div className={`flex flex-col gap-4 ${className}`}>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative w-full sm:w-[340px]">
+          <div className={`relative ${agentMode ? "min-w-[260px] flex-1" : "w-full sm:w-[340px]"}`}>
             <RiSearchLine size={18} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-base-content/45" />
-            <input value={qText} onChange={(e) => setQText(e.target.value)} placeholder="Search by name, email, company, location" aria-label="Search contacts"
+            <input value={qText} onChange={(e) => setQText(e.target.value)} placeholder={agentMode ? "Search leads" : "Search by name, email, company, location"} aria-label="Search contacts"
               className="h-11 w-full rounded-[8px] border border-[var(--border-subtle)] bg-base-100 pl-10 pr-3 text-[15px] outline-none focus:border-[var(--border-focus)] focus:ring-2 focus:ring-[var(--ring)]" />
           </div>
           <div className="relative">
             <button type="button" onClick={() => setFiltersOpen(!filtersOpen)} aria-expanded={filtersOpen}
               className={`inline-flex h-11 items-center gap-2 rounded-[8px] border px-4 text-[15px] font-medium transition-colors ${filterCount ? "border-primary/60 bg-primary/5 text-primary" : filtersOpen ? "border-base-content/70 bg-base-100" : "border-[var(--border-subtle)] bg-base-100 hover:bg-base-200"}`}>
-              <RiFilter3Line size={18} /> Add more filters
+              <RiFilter3Line size={18} /> {agentMode ? "Add filters" : "Add more filters"}
               {filterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[12px] text-primary-content">{filterCount}</span>}
               <RiArrowDownSLine size={18} className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
             </button>
-            {filtersOpen && <FiltersPanel filters={c.filters} patch={c.patch} clear={c.clear} onClose={() => setFiltersOpen(false)} agents={agents} lists={lists} signals={c.signals} lockAgent={!!base?.agent} />}
+            {filtersOpen && <FiltersPanel filters={c.filters} patch={c.patch} clear={c.clear} onClose={() => setFiltersOpen(false)} agents={agents} lists={lists} signals={c.signals} lockAgent={!!base?.agent} compact={agentMode} />}
           </div>
           {filterCount > 0 && <button type="button" onClick={c.clear} className="text-[15px] text-base-content/75 hover:text-base-content hover:underline">Clear all</button>}
 
-          <div className="ml-auto flex flex-wrap items-center gap-3">
-            <Dropdown label="Add to list" icon={<RiListUnordered size={18} />} disabled={!sel.length || busy} width={300}>
+          <div className={`flex flex-wrap items-center gap-3 ${agentMode ? "" : "ml-auto"}`}>
+            {!agentMode && <Dropdown label="Add to list" icon={<RiListUnordered size={18} />} disabled={!sel.length || busy} width={300}>
               {(close) => (
                 <>
                   {lists.map((l) => <Item key={l.id} icon={<RiListUnordered size={18} className="text-base-content/60" />} onClick={() => { close(); void addToList(l.id, l.name); }}>{l.name}</Item>)}
@@ -201,7 +206,7 @@ export function ContactsWorkspace({ base, hidden, sizesKey, openLeadId, classNam
                   <Item icon={<RiDeleteBin6Line size={18} />} danger onClick={() => { close(); void removeFromList(); }}>Remove from list</Item>
                 </>
               )}
-            </Dropdown>
+            </Dropdown>}
             <Dropdown label="Export to..." icon={<RiUpload2Line size={18} />} disabled={busy}>
               {(close) => (
                 <>
@@ -228,6 +233,21 @@ export function ContactsWorkspace({ base, hidden, sizesKey, openLeadId, classNam
             {busy && <RiLoader4Line size={20} className="animate-spin text-primary" aria-label="Working" />}
           </div>
         </div>
+
+        {agentMode && (
+          <div className="flex flex-wrap gap-3" role="tablist" aria-label="Lead status">
+            {STATUS_CHIPS.map(([key, label]) => {
+              const on = (c.filters.status || "all") === key;
+              return (
+                <button key={key} type="button" role="tab" aria-selected={on} onClick={() => { c.patch({ status: key }); setSelected(new Set()); }}
+                  className={`inline-flex h-11 items-center gap-3 rounded-[8px] border px-4 text-[16px] transition-colors ${on ? "border-primary/55 bg-primary/[0.06] text-primary" : "border-[var(--border-subtle)] bg-base-100 text-base-content/85 hover:bg-base-200"}`}>
+                  {label}
+                  <span className={`rounded-[6px] px-2 py-0.5 text-[15px] tabular-nums ${on ? "bg-primary/12" : "bg-base-200 text-base-content/70"}`}>{c.statusCounts[key] ?? 0}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         <section className="flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-[16px] border border-[var(--border-subtle)] bg-base-100">
           {c.rows === null ? <div className="flex flex-1 items-center justify-center"><RiLoader4Line size={28} className="animate-spin text-primary" /></div>

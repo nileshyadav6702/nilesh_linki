@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
+import { billingSummary } from "@/lib/credits/ledger";
+import { sourceItems } from "@/lib/agents/source-items";
 import { agentInputSchema, checkAgentRefs, deleteAgent, getAgent, listSources, updateAgent } from "@/lib/agents/store";
 import { activateAgentRuns, pauseAgentRuns } from "@/lib/agents/enroll";
 import { agentActivity, agentCounts, agentPerformance, agentSeries, dueToday, nextSourceRun, signalFunnel, stepOccupancy } from "@/lib/agents/analytics";
@@ -25,18 +27,24 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       WHERE s.agent_id = ? ORDER BY dr.started_at DESC LIMIT 20`).all(id);
     return res.json({
       agent, runs, counts: agentCounts(db, id),
-      sources: listSources(id, ctx.workspaceId).map((src) => ({ ...src, leads: (db.prepare("SELECT COALESCE(SUM(ingested), 0) n FROM detector_runs WHERE agent_source_id = ?").get(src.id) as { n: number }).n })),
+      sources: listSources(id, ctx.workspaceId).map((src) => ({
+        ...src, leads: (db.prepare("SELECT COALESCE(SUM(ingested), 0) n FROM detector_runs WHERE agent_source_id = ?").get(src.id) as { n: number }).n,
+        items: sourceItems(db, src),
+      })),
       funnel: signalFunnel(db, ctx.workspaceId, id), sequence: sequenceSteps(db, agent.workflow_id),
       workflow: agent.workflow_id ? db.prepare("SELECT id, name FROM workflows WHERE id = ?").get(agent.workflow_id) ?? null : null,
       linkedin_budget: agent.linkedin_account_id ? budgetSnapshot(agent.linkedin_account_id) : null,
       performance: agentPerformance(db, id),
-      series: agentSeries(db, id),
+      // 30 days, so the Overview can switch between 7 and 30 without another request.
+      series: agentSeries(db, id, 30),
       activity: agentActivity(db, id, agent.workflow_id),
       next_run_at: nextSourceRun(db, id),
       due_today: dueToday(db, agent.workflow_id),
       steps: stepOccupancy(db, agent.workflow_id),
+      // Credit balance, so the Overview can warn before outreach stops for lack of credits.
+      credits: (() => { const b = billingSummary(db, ctx.workspaceId); return { balance: b.balance, next_refill: b.next_refill }; })(),
       senders: {
-        linkedin: agent.linkedin_account_id ? db.prepare("SELECT id, name, email, daily_connection_limit, daily_message_limit, is_authenticated FROM accounts WHERE id = ?").get(agent.linkedin_account_id) ?? null : null,
+        linkedin: agent.linkedin_account_id ? db.prepare("SELECT id, name, email, daily_connection_limit, daily_message_limit, weekly_connection_limit, weekly_message_limit, working_days, is_authenticated FROM accounts WHERE id = ?").get(agent.linkedin_account_id) ?? null : null,
         email: agent.email_account_id ? db.prepare("SELECT id, from_email, from_name, daily_email_limit, ramp_up_enabled, ramp_start_date FROM email_accounts WHERE id = ?").get(agent.email_account_id) ?? null : null,
       },
       sender_pool: {

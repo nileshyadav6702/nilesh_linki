@@ -7,6 +7,7 @@ import { signalLine } from "@/components/agents/signal-line";
 import type { ContactRow } from "@/components/contacts/useContacts";
 import { SCORE_TIERS, ScoreBreakdown, signalName, strongestSignal } from "@/components/agents/leads/ScoreCard";
 import { failToast } from "@/components/settings/billing/credits-toast";
+import { Tip } from "@/components/agents/campaign/kit";
 
 /** Cells for the Contacts table: AI score with an explanation card, copyable email / phone, approval. */
 
@@ -106,7 +107,7 @@ export function PhoneCell({ row }: { row: ContactRow }) {
   );
 }
 
-const btn = "inline-flex h-8 items-center rounded-[6px] px-3 text-[13px] font-medium transition-colors disabled:opacity-60";
+const btn = "inline-flex h-9 items-center rounded-[6px] px-4 text-[15px] transition-colors disabled:opacity-60";
 
 /** Approve / Reject for agent leads awaiting a decision; a status pill once decided; nothing for list-only contacts. */
 export function ApprovalCell({ row, onDecide }: { row: ContactRow; onDecide: (id: string, decision: "approve" | "reject") => Promise<void> }) {
@@ -115,7 +116,7 @@ export function ApprovalCell({ row, onDecide }: { row: ContactRow; onDecide: (id
   if (!row.agent_id || !s) return <span className="text-[13px] text-base-content/30">—</span>;
   const go = async (d: "approve" | "reject", e: React.MouseEvent) => { e.stopPropagation(); setBusy(d); try { await onDecide(row.id, d); } finally { setBusy(null); } };
   const decided: ReactNode =
-    s === "approved" || s === "enrolled" ? <span className="rounded-full bg-success/15 px-3 py-1 text-[13px] text-[#2f7a43]">Approved</span>
+    s === "approved" || s === "enrolled" ? <span className="rounded-full border border-success/30 bg-success/12 px-3 py-1 text-[15px] text-[#2f7a43]">Approved</span>
     : s === "skipped" ? <span className="rounded-full bg-base-200 px-3 py-1 text-[13px] text-base-content/55">Rejected</span>
     : s === "disqualified" ? <span className="rounded-full bg-base-200 px-3 py-1 text-[13px] text-base-content/55">Not a fit</span>
     : null;
@@ -124,7 +125,11 @@ export function ApprovalCell({ row, onDecide }: { row: ContactRow; onDecide: (id
     <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
       {decided}
       {canApprove && <button type="button" disabled={!!busy} onClick={(e) => void go("approve", e)} className={`${btn} bg-[#5cc28a] text-white hover:bg-[#4caf7a]`}>{busy === "approve" ? <RiLoader4Line size={14} className="animate-spin" /> : "Approve"}</button>}
-      {!["skipped", "disqualified"].includes(s) && <button type="button" disabled={!!busy} onClick={(e) => void go("reject", e)} className={`${btn} border border-[var(--border-subtle)] bg-base-100 text-base-content/75 hover:border-error/40 hover:text-error`}>{busy === "reject" ? <RiLoader4Line size={14} className="animate-spin" /> : "Reject"}</button>}
+      {!["skipped", "disqualified"].includes(s) && (
+        <Tip text="Will remove the contact from the campaign & queue">
+          <button type="button" disabled={!!busy} onClick={(e) => void go("reject", e)} className={`${btn} border border-[var(--border-subtle)] bg-base-100 text-base-content/75 hover:border-error/40 hover:bg-error/5 hover:text-error`}>{busy === "reject" ? <RiLoader4Line size={14} className="animate-spin" /> : "Reject"}</button>
+        </Tip>
+      )}
       {!decided && !canApprove && s === "new" && <span className="text-[13px] text-base-content/45">Scoring…</span>}
     </div>
   );
