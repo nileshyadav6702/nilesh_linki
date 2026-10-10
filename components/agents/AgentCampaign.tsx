@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useRef, useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import {
   RiAddLine, RiArrowDownLine, RiCheckLine, RiCheckboxCircleLine, RiCloseLine, RiEyeLine, RiFilter3Line, RiFocus3Line,
-  RiLinkedinBoxFill, RiMailLine, RiMailSendLine, RiMicLine, RiPencilLine, RiSettings3Line, RiThumbUpLine, RiTimeLine, RiUserAddLine,
+  RiLinkedinBoxFill, RiMailLine, RiMailSendLine, RiMicLine, RiEditBoxLine, RiSettings3Line, RiThumbUpLine, RiTimeLine, RiUserAddLine,
 } from "react-icons/ri";
-import { IconTile, Panel, Pill, primaryBtn, secondaryBtn, type Tone } from "@/components/agents/ui";
+import { IconTile, Panel, primaryBtn, type Tone } from "@/components/agents/ui";
 import { aiName, DELAY_OPTIONS, delayLabel, STEP_TITLE, type CampaignStep } from "@/components/agents/campaign/kit";
 import { blankStep, restructure, timeline, withPositions } from "@/components/agents/campaign/sequence";
 import StepDrawer, { type StepSave } from "@/components/agents/campaign/StepDrawer";
@@ -43,6 +43,15 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
   const [delayMenu, setDelayMenu] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [sample, setSample] = useState<{ id: string; name: string | null } | null>(null);
+  // Edit mode scrolls down to "Add a step", where new steps go (once the edit view has rendered).
+  const addRef = useRef<HTMLLIElement>(null);
+  const scrollToAdd = useRef(false);
+  useEffect(() => {
+    if (!scrollToAdd.current || !addRef.current) return;
+    scrollToAdd.current = false;
+    addRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [draft]);
+  const startEditing = () => { scrollToAdd.current = true; setDraft(steps); };
 
   const load = useCallback(() => {
     if (!workflowId) return Promise.resolve();
@@ -129,57 +138,57 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
   return (
     <Panel className="relative">
       <div className="pointer-events-none absolute inset-0 rounded-[12px] opacity-70" style={DOTS} aria-hidden="true" />
-      <div className="sticky top-2 z-30 flex justify-end gap-2 px-4 pt-4 sm:px-8">
+      <div className="sticky top-3 z-30 flex justify-end gap-3 px-4 pt-6 sm:px-10">
         {editing ? (
           <>
-            <button className={secondaryBtn} disabled={busy} onClick={() => setDraft(null)}><RiCloseLine size={16} /> Cancel</button>
-            <button className={primaryBtn} disabled={busy} onClick={async () => { if (await putAll(draft!, "Sequence saved")) setDraft(null); }}><RiCheckLine size={16} /> Save changes</button>
+            <button className="inline-flex h-12 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-5 text-[16.5px] text-base-content shadow-[0_4px_14px_-8px_rgba(20,20,19,0.25)] hover:bg-base-200 disabled:opacity-50" disabled={busy} onClick={() => setDraft(null)}><RiCloseLine size={20} /> Cancel</button>
+            <button className="inline-flex h-12 items-center gap-2 rounded-[8px] bg-[#f4876b] px-5 text-[16.5px] font-semibold text-white shadow-[0_6px_16px_-6px_rgba(232,112,82,0.7)] hover:bg-[#ee7357] disabled:opacity-60" disabled={busy} onClick={async () => { if (await putAll(draft!, "Sequence saved")) setDraft(null); }}><RiCheckLine size={20} /> Save changes</button>
           </>
         ) : (
           <>
-            <button className={secondaryBtn} disabled={!steps} onClick={() => setDraft(steps)}><RiPencilLine size={15} /> Edit</button>
-            <button className={secondaryBtn} onClick={() => setSettingsOpen(true)}><RiSettings3Line size={15} /> Campaign settings</button>
+            <button className="inline-flex h-12 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-5 text-[16.5px] text-base-content shadow-[0_4px_14px_-8px_rgba(20,20,19,0.25)] hover:bg-base-200 disabled:opacity-50" disabled={!steps} onClick={startEditing}><RiEditBoxLine size={19} /> Edit</button>
+            <button className="inline-flex h-12 items-center gap-2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-5 text-[16.5px] text-base-content shadow-[0_4px_14px_-8px_rgba(20,20,19,0.25)] hover:bg-base-200 disabled:opacity-50" onClick={() => setSettingsOpen(true)}><RiSettings3Line size={19} /> Campaign settings</button>
           </>
         )}
       </div>
 
-      <div className="relative mx-auto max-w-3xl space-y-6 px-4 pb-10 pt-2 sm:px-8">
-        <div className="flex flex-wrap gap-2">
-          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-base-100 px-4 text-[15px]"><span className="h-2 w-2 rounded-full bg-primary" />{items.length} steps</span>
-          <span className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--border-subtle)] bg-base-100 px-4 text-[15px]"><span className="h-2 w-2 rounded-full bg-base-content/35" />{leadCount} leads</span>
+      <div className="relative mx-auto max-w-[1000px] space-y-7 px-4 pb-14 pt-2 sm:px-8">
+        <div className="flex flex-wrap gap-3">
+          <span className="inline-flex h-11 items-center gap-2.5 rounded-full border border-[var(--border-subtle)] bg-base-100 px-5 text-[16.5px] shadow-[0_2px_8px_-6px_rgba(20,20,19,0.3)]"><span className="h-2.5 w-2.5 rounded-full bg-[#5b5bd6]" />{items.length} steps</span>
+          <span className="inline-flex h-11 items-center gap-2.5 rounded-full border border-[var(--border-subtle)] bg-base-100 px-5 text-[16.5px] shadow-[0_2px_8px_-6px_rgba(20,20,19,0.3)]"><span className="h-2.5 w-2.5 rounded-full bg-base-content/35" />{leadCount} leads</span>
         </div>
 
-        <div className="rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-5">
-          <div className="flex flex-wrap items-start gap-3">
-            <IconTile icon={<RiFilter3Line size={18} />} tone="success" />
+        <div className="rounded-[18px] border border-[var(--border-subtle)] bg-base-100 px-7 py-6 shadow-[0_4px_18px_-12px_rgba(20,20,19,0.18)]">
+          <div className="flex flex-wrap items-start gap-4">
+            <IconTile icon={<RiFilter3Line size={23} />} tone="success" size={48} />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <span className="font-medium text-base-content">Lead sources</span>
-                <span className="text-[14.5px] text-base-content/55">{sources.count} source{sources.count === 1 ? "" : "s"} <span className="text-base-content/30">•</span> <span className="font-medium text-success">{sources.leads}</span> total leads found</span>
+                <span className="text-[19.5px] font-medium text-base-content">Lead sources</span>
+                <span className="text-[16.5px] text-base-content/60">{sources.count} source{sources.count === 1 ? "" : "s"} <span className="text-base-content/30">•</span> <span className="font-medium text-success">{sources.leads}</span> total leads found</span>
               </div>
-              <p className="mt-0.5 text-[15px] text-base-content/55">This agent continuously finds qualified leads and adds them to the campaign.</p>
-              <div className="mt-3 flex items-center justify-between gap-2">
-                <Pill tone="coral"><RiFocus3Line size={12} /> High-intent signals</Pill>
-                <button type="button" onClick={onEditSources} className="inline-flex items-center gap-1 text-[14.5px] font-medium text-base-content/60 hover:text-base-content"><RiPencilLine size={13} /> Edit</button>
+              <p className="mt-1 text-[16.5px] text-base-content/60">This agent continuously finds qualified leads and adds them to the campaign.</p>
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-2 rounded-[8px] bg-base-200 px-3.5 py-1.5 text-[17.5px] text-base-content/80"><RiFocus3Line size={19} className="text-[#b02ac6]" /> High-intent signals</span>
+                <button type="button" onClick={onEditSources} className="inline-flex items-center gap-2 text-[16.5px] text-base-content/70 hover:text-base-content"><RiEditBoxLine size={18} /> Edit</button>
               </div>
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-center text-[13.5px] text-base-content/45">Qualified leads enter campaign<RiArrowDownLine size={14} className="mt-1" /></div>
+        <div className="flex flex-col items-center text-[16px] text-base-content/50">Qualified leads enter campaign<RiArrowDownLine size={20} className="mt-1" /></div>
 
         {steps === null ? <p className="text-center text-[15px] text-base-content/40">Loading…</p> : (
           <ol className="relative space-y-6">
-            {items.length > 0 && <span className="absolute bottom-6 left-[19px] top-5 w-px bg-[var(--border-subtle)]" aria-hidden="true" />}
+            {items.length > 0 && <span className="absolute bottom-6 left-[21px] top-5 w-[2px] bg-[var(--border-subtle)]" aria-hidden="true" />}
             {items.map((it, idx) => {
               const s = it.step; const n = idx + 1;
               return (
-                <li key={s.id} className="relative pl-14">
-                  <span className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-full bg-primary text-[15px] font-semibold text-primary-content ring-4 ring-base-100">{n}</span>
+                <li key={s.id} className="relative pl-[68px]">
+                  <span className="absolute left-0 top-0 flex h-11 w-11 items-center justify-center rounded-full bg-[#ec6f55] text-[16px] font-semibold text-white shadow-[0_4px_12px_-4px_rgba(236,111,85,0.7)] ring-4 ring-base-100">{n}</span>
                   {it.delayBefore !== null && (
-                    <div className="relative mb-3 flex h-10 items-center">
+                    <div className="relative mb-4 flex h-11 items-center">
                       <button type="button" disabled={editing || busy} onClick={() => setDelayMenu(delayMenu === s.id ? null : s.id)}
-                        className="inline-flex items-center gap-1.5 rounded-full border-2 border-dotted border-[#e8a55a] bg-[#e8a55a]/10 px-3.5 py-1 text-[14.5px] font-medium text-[#b8742a] enabled:hover:bg-[#e8a55a]/20">
-                        <RiTimeLine size={14} /> {delayLabel(it.delayBefore)} after
+                        className="inline-flex items-center gap-2 rounded-full border-2 border-dotted border-[#f2c14e] bg-[#fdf6e3] px-4 py-1.5 text-[16.5px] text-[#c27a10] enabled:hover:bg-[#fbeec8]">
+                        <RiTimeLine size={19} /> {delayLabel(it.delayBefore)} after
                       </button>
                       {delayMenu === s.id && (
                         <div className="absolute left-0 top-full z-40 mt-1 max-h-72 w-44 overflow-y-auto rounded-[10px] border border-[var(--border-subtle)] bg-base-100 py-1 shadow-[var(--shadow-overlay)]">
@@ -203,11 +212,11 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
             })}
 
             {editing && (
-              <li className="relative pl-14">
-                <span className="absolute left-0 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-base-200 text-base-content/50 ring-4 ring-base-100"><RiAddLine size={18} /></span>
-                <button type="button" onClick={() => setAdding(!adding)} className="flex w-full items-center gap-3 rounded-[12px] border border-dashed border-base-content/20 bg-base-100/70 p-5 text-left hover:border-primary/40">
-                  <IconTile icon={<RiAddLine size={18} />} tone="ink" />
-                  <span><span className="block font-medium text-base-content/70">Add a step</span><span className="text-[14.5px] text-base-content/45">Message, invitation, profile visit…</span></span>
+              <li ref={addRef} className="relative pl-[68px]">
+                <span className="absolute left-0 top-5 flex h-11 w-11 items-center justify-center rounded-full bg-base-200 text-base-content/55 ring-4 ring-base-100"><RiAddLine size={22} /></span>
+                <button type="button" onClick={() => setAdding(!adding)} className="flex w-full items-center gap-4 rounded-[18px] border-2 border-dashed border-base-content/15 bg-base-100/70 px-7 py-7 text-left hover:border-primary/40">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-[10px] bg-base-200 text-base-content/55"><RiAddLine size={26} /></span>
+                  <span><span className="block text-[19px] text-base-content/75">Add a step</span><span className="text-[16px] text-base-content/45">Message, invitation, profile visit…</span></span>
                 </button>
                 {adding && (
                   <div className="absolute bottom-full left-14 z-40 mb-2 w-80 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-2 shadow-[var(--shadow-overlay)]">
@@ -226,11 +235,11 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
               </li>
             )}
 
-            <li className="relative pl-14">
-              <span className="absolute left-0 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-success text-white ring-4 ring-base-100"><RiCheckLine size={18} /></span>
-              <div className="flex items-center gap-3 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-4">
-                <IconTile icon={<RiCheckboxCircleLine size={18} />} tone="success" size={36} />
-                <div><div className="font-medium text-base-content">Campaign complete</div><div className="text-[13.5px] text-base-content/50">Leads finish here once every step has run.</div></div>
+            <li className="relative pl-[68px]">
+              <span className="absolute left-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-success text-white ring-4 ring-base-100"><RiCheckLine size={22} /></span>
+              <div className="flex items-center gap-4 rounded-[18px] border border-[var(--border-subtle)] bg-base-100 px-7 py-5">
+                <IconTile icon={<RiCheckboxCircleLine size={23} />} tone="success" size={48} />
+                <div><div className="text-[18.5px] text-base-content">Campaign complete</div><div className="text-[16px] text-base-content/55">Leads finish here once every step has run.</div></div>
               </div>
             </li>
           </ol>
