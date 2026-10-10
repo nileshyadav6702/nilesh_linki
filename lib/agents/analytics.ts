@@ -211,9 +211,12 @@ export function agentActivity(db: Database.Database, agentId: string, workflowId
  */
 export interface StepOccupancy { id: string; track: string; step_type: string; step_order: number; delay_seconds: number; contacts: number; invited?: number; accepted?: number }
 
-/** Per action step: the current_step window [from, to) of leads sitting after it; to = null for the last one. */
+/**
+ * Per action step: the current_step window [from, to) of leads sitting after it; to = null for the
+ * last one. Every step counts, as the runner runs every step (the legacy `enabled` column is not read).
+ */
 export function stepWindows(db: Database.Database, workflowId: string): Map<string, { track: string; from: number; to: number | null }> {
-  const rows = db.prepare("SELECT id, track, step_type, step_order FROM workflow_steps WHERE workflow_id = ? AND COALESCE(enabled, 1) = 1 ORDER BY track, step_order")
+  const rows = db.prepare("SELECT id, track, step_type, step_order FROM workflow_steps WHERE workflow_id = ? ORDER BY track, step_order")
     .all(workflowId) as Array<{ id: string; track: string; step_type: string; step_order: number }>;
   const out = new Map<string, { track: string; from: number; to: number | null }>();
   const actions = rows.filter((r) => r.step_type !== "delay");
