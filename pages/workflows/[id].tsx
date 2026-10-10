@@ -1061,7 +1061,7 @@ function Wizard({
         // InMail subject reuses the email_subject column (an InMail step never sends email).
         email_subject: isEmail ? (ws.emailSubject || null) : isInMail ? (ws.emailSubject || null) : null,
         email_body: isEmail ? (ws.emailBody || null) : null,
-        email_variants: isEmail ? ws.emailVariants.map((v) => ({ subject: v.subject, body: v.body })) : [],
+        email_variants: isEmail ? ws.emailVariants.map((v) => ({ id: v.id, subject: v.subject, body: v.body })) : [],
         email_signature: isEmail ? (ws.emailSignature) : null,
         email_position: isEmail ? emailPosition : null,
         email_delivery_mode: isEmail ? ws.emailDeliveryMode : null,

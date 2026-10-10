@@ -90,3 +90,22 @@ describe("editing a live sequence keeps every lead in place", () => {
     expect([step("B"), step("C")]).not.toContain(now[1]);
   });
 });
+
+describe("A/B email variants survive a save", () => {
+  it("keeps variant ids (and their send history) when the sequence is saved again", async () => {
+    const db = getDb();
+    const wf = `wf-ab-${++n}`;
+    db.prepare("INSERT INTO workflows (id, name, workspace_id) VALUES (?, 'AB', ?)").run(wf, WS);
+    db.prepare("INSERT INTO workflow_steps (id, workflow_id, step_order, step_type, track) VALUES (?, ?, 1, 'email', 'email')").run(`${wf}-E`, wf);
+    const email = { id: `${wf}-E`, step_type: "email", track: "email", email_subject: "A", email_body: "a" };
+    await save(wf, [{ ...email, email_variants: [{ subject: "B", body: "b" }, { subject: "C", body: "c" }] }]);
+    const variants = () => db.prepare("SELECT id, subject FROM workflow_step_email_variants WHERE step_id = ? ORDER BY position").all(`${wf}-E`) as Array<{ id: string; subject: string }>;
+    const [b, c] = variants();
+    // Edit B's subject, drop C, add D.
+    await save(wf, [{ ...email, email_variants: [{ id: b.id, subject: "B2", body: "b" }, { id: null, subject: "D", body: "d" }] }]);
+    const after = variants();
+    expect(after[0]).toEqual({ id: b.id, subject: "B2" });
+    expect(after[1].subject).toBe("D");
+    expect(after.map((v) => v.id)).not.toContain(c.id);
+  });
+});

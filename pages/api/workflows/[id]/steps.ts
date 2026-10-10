@@ -112,7 +112,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const delStmt = db.prepare("DELETE FROM workflow_steps WHERE id = ?");
     const clearLinks = db.prepare("DELETE FROM workflow_step_templates WHERE step_id = ?");
     const addLink = db.prepare("INSERT OR IGNORE INTO workflow_step_templates (step_id, template_id) VALUES (?, ?)");
-    const clearEmailVariants = db.prepare("DELETE FROM workflow_step_email_variants WHERE step_id = ?");
+    const stepVariantIds = db.prepare("SELECT id FROM workflow_step_email_variants WHERE step_id = ?");
+    const updateEmailVariant = db.prepare("UPDATE workflow_step_email_variants SET subject = ?, body = ?, position = ? WHERE id = ? AND step_id = ?");
+    const deleteEmailVariant = db.prepare("DELETE FROM workflow_step_email_variants WHERE id = ?");
     const addEmailVariant = db.prepare("INSERT INTO workflow_step_email_variants (id, step_id, subject, body, position) VALUES (?, ?, ?, ?, ?)");
 
     // A step's AI template: one of this workspace's templates, "none", or automatic (null).
@@ -153,11 +155,18 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
           newIds.push(stepId);
           clearLinks.run(stepId);
           if (Array.isArray(s.template_ids)) for (const tid of s.template_ids as string[]) addLink.run(stepId, tid);
-          clearEmailVariants.run(stepId);
+          // A variant keeps its id across saves: sends and A/B results are keyed by it, so
+          // re-creating variants on every save would reset the test.
           if (Array.isArray(s.email_variants)) {
-            (s.email_variants as Array<{ subject?: string; body?: string }>).slice(0, 3).forEach((v, vi) => {
-              addEmailVariant.run(randomUUID(), stepId, v.subject ?? "", v.body ?? "", vi);
+            const current = new Set((stepVariantIds.all(stepId) as Array<{ id: string }>).map((v) => v.id));
+            const kept = new Set<string>();
+            (s.email_variants as Array<{ id?: string | null; subject?: string; body?: string }>).slice(0, 3).forEach((v, vi) => {
+              if (typeof v.id === "string" && current.has(v.id) && !kept.has(v.id)) {
+                updateEmailVariant.run(v.subject ?? "", v.body ?? "", vi, v.id, stepId);
+                kept.add(v.id);
+              } else addEmailVariant.run(randomUUID(), stepId, v.subject ?? "", v.body ?? "", vi);
             });
+            for (const id of current) if (!kept.has(id)) deleteEmailVariant.run(id);
           }
         }
         // Delete the steps no longer in the list (their branches cascade — the step is gone).
