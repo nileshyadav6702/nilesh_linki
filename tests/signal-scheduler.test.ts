@@ -120,7 +120,11 @@ describe("signal scheduler", () => {
     recordResult(db, u(), { candidates: 0, ingested: 0, error: "Daily data budget of $5 reached" }, NOW, () => 0);
     expect(u().next_run_at).toBe("2026-10-08T00:00:00.000Z");
     expect(u().state).toBe("waiting");
+    recordResult(db, u(), { candidates: 0, ingested: 0, error: "Treg balance is empty. Top up at treg.to to resume lead discovery." }, NOW, () => 0);
+    expect(u()).toMatchObject({ state: "attention" });
+    expect(Date.parse(u().next_run_at) - NOW).toBe(2 * HOUR);
     recordResult(db, u(), { candidates: 0, ingested: 0, error: "Set up the agent's targeting first" }, NOW, () => 0);
+    expect(Date.parse(u().next_run_at) - NOW).toBe(24 * HOUR);
     expect(u()).toMatchObject({ state: "attention", last_error: "Set up the agent's targeting first" });
     // Changing the setup wakes it up right away.
     db.prepare("UPDATE agent_sources SET config_json = ? WHERE id = ?").run(JSON.stringify({ feeds: ["https://example.com/feed"] }), ids[0]);

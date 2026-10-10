@@ -93,6 +93,9 @@ export function backoffHours(failCount: number, cadenceHours: number): number {
 
 /** How often a unit needing attention re-checks its setup. */
 export const ATTENTION_RECHECK_HOURS = 24;
+/** An empty data-provider balance is fixed by a top-up, not a setup change: re-check sooner. */
+export const BALANCE_RECHECK_HOURS = 2;
+export const isBalanceError = (message: string) => /balance is empty/i.test(message);
 
 /** Order of due units: intent × (1 + recent yield) × how overdue (capped). Higher first. */
 export function priority(type: string, yieldAvg: number | null, overdueHours: number, cadenceHours: number): number {

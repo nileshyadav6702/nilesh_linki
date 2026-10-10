@@ -226,7 +226,8 @@ export function recordResult(db: DB, u: SourceUnit & { linkedin_account_id?: str
   if (r.error) {
     const cls = R.classifyError(r.error, r.errorName);
     if (cls === "transient") { fail = u.fail_count + 1; next = now + R.backoffHours(fail, interval) * HOUR; }
-    else if (cls === "config") { state = "attention"; note = r.error; next = now + R.ATTENTION_RECHECK_HOURS * HOUR; }
+    // A top-up fixes an empty balance without any setup change: look again every couple of hours.
+    else if (cls === "config") { state = "attention"; note = r.error; next = now + (R.isBalanceError(r.error) ? R.BALANCE_RECHECK_HOURS : R.ATTENTION_RECHECK_HOURS) * HOUR; }
     else if (cls === "blocked") { state = "waiting"; note = "LinkedIn asked to slow down; resumes after the pause"; next = now + 24 * HOUR + rand() * HOUR; }
     else {
       state = "waiting";
