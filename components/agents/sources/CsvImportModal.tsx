@@ -18,8 +18,8 @@ function Stepper({ step }: { step: number }) {
         const n = i + 1, done = n < step, on = n === step;
         return (
           <li key={s} className={`flex items-center gap-3 ${i < STEPS.length - 1 ? "flex-1" : ""}`} aria-current={on ? "step" : undefined}>
-            <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[14.5px] font-medium ${on ? "bg-neutral text-neutral-content" : done ? "bg-primary/15 text-primary" : "bg-base-200 text-base-content/50"}`}>{n}</span>
-            <span className={`text-[15px] ${on ? "text-base-content" : done ? "text-primary" : "text-base-content/45"}`}>{s}</span>
+            <span className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[15.5px] font-medium ${on ? "bg-neutral text-neutral-content" : done ? "bg-primary/15 text-primary" : "bg-base-200 text-base-content/50"}`}>{n}</span>
+            <span className={`text-[16.5px] ${on ? "text-base-content" : done ? "text-primary" : "text-base-content/45"}`}>{s}</span>
             {i < STEPS.length - 1 && <span className={`h-px flex-1 ${done ? "bg-primary/40" : "bg-[var(--border-subtle)]"}`} />}
           </li>
         );
@@ -110,9 +110,9 @@ export default function CsvImportModal({ agentId, agentName, autoEnrichEmails, o
   }
 
   const footer = step === 1
-    ? <button type="button" onClick={close} className="h-10 rounded-[8px] px-4 text-[15px] font-medium text-base-content/75 hover:bg-base-200">Cancel</button>
+    ? <button type="button" onClick={close} className="h-10 rounded-[8px] px-4 text-[16.5px] font-medium text-base-content/75 hover:bg-base-200">Cancel</button>
     : <>
-        <button type="button" disabled={importing} onClick={() => setStep(step - 1)} className="inline-flex h-10 items-center gap-1 rounded-[8px] px-4 text-[15px] font-medium text-base-content/75 hover:bg-base-200"><RiArrowLeftSLine size={16} /> Back</button>
+        <button type="button" disabled={importing} onClick={() => setStep(step - 1)} className="inline-flex h-10 items-center gap-1 rounded-[8px] px-4 text-[16.5px] font-medium text-base-content/75 hover:bg-base-200"><RiArrowLeftSLine size={16} /> Back</button>
         {step === 2
           ? <button type="button" className={primaryBtn} disabled={!canReview} onClick={() => setStep(3)}>Continue to review</button>
           : <button type="button" className={primaryBtn} disabled={!ready || importing} onClick={runImport}>
@@ -129,28 +129,28 @@ export default function CsvImportModal({ agentId, agentName, autoEnrichEmails, o
             <div className="space-y-6">
               <div>
                 <h3 className="text-[22px] font-semibold text-base-content">Upload your CSV file</h3>
-                <p className="mt-1 text-[15px] text-base-content/55">Drop or browse a CSV file with the contacts you want to import.</p>
+                <p className="mt-1 text-[16.5px] text-base-content/55">Drop or browse a CSV file with the contacts you want to import.</p>
               </div>
               <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={onDrop}
                 className={`mx-auto flex max-w-[860px] flex-col items-center gap-3 rounded-[16px] border-2 border-dashed px-6 py-12 text-center transition-colors ${drag ? "border-primary/60 bg-primary/10" : "border-primary/20 bg-primary/5"}`}>
                 <RiUploadCloud2Line size={44} className="text-base-content/45" aria-hidden="true" />
                 <p className="text-[20px] font-medium text-base-content">Drop your CSV file here</p>
-                <p className="text-[15px] text-base-content/55">or click to browse your computer</p>
+                <p className="text-[16.5px] text-base-content/55">or click to browse your computer</p>
                 <button type="button" className={primaryBtn} onClick={() => input.current?.click()}><RiUpload2Line size={16} /> Choose CSV File</button>
                 <input ref={input} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => { void take(e.target.files?.[0]); e.target.value = ""; }} />
-                <p className="text-[14.5px] text-base-content/50">Supported format: CSV · Max size: 10MB</p>
-                {error && <p role="alert" className="text-[15px] text-error">{error}</p>}
+                <p className="text-[15.5px] text-base-content/50">Supported format: CSV · Max size: 10MB</p>
+                {error && <p role="alert" className="text-[16.5px] text-error">{error}</p>}
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-[12px] border border-[var(--border-subtle)] p-5">
                   <h4 className="flex items-center gap-2 font-medium text-base-content"><RiCheckboxCircleLine size={18} className="text-success" /> Required CSV Columns</h4>
-                  <ul className="mt-3 space-y-2 text-[15px] text-base-content/75">
+                  <ul className="mt-3 space-y-2 text-[16.5px] text-base-content/75">
                     {["First Name", "Last Name", "LinkedIn Profile URL or Email"].map((c) => <li key={c} className="flex items-center gap-2"><RiCheckLine size={16} className="text-primary" /> {c}</li>)}
                   </ul>
                 </div>
                 <div className="rounded-[12px] border border-[var(--border-subtle)] p-5">
                   <h4 className="flex items-center gap-2 font-medium text-base-content"><RiInformationLine size={18} className="text-primary" /> Format Guidelines</h4>
-                  <ul className="mt-3 space-y-2 text-[15px] text-base-content/70">
+                  <ul className="mt-3 space-y-2 text-[16.5px] text-base-content/70">
                     <li className="flex gap-2"><RiCodeSSlashLine size={15} className="mt-0.5 shrink-0 text-primary" /> <span>Use commas to separate columns. The first line <b className="text-base-content">must be a header row</b> with column names (e.g. first_name, last_name, linkedin_url).</span></li>
                     <li className="flex gap-2"><RiLink size={15} className="mt-0.5 shrink-0 text-primary" /> LinkedIn URLs must look like https://linkedin.com/in/username</li>
                     <li className="flex gap-2"><RiAddLine size={15} className="mt-0.5 shrink-0 text-primary" /> Email, company, title and other columns are optional.</li>

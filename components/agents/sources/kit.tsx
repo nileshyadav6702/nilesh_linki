@@ -49,18 +49,18 @@ export function Modal({ title, subtitle, onClose, children, footer, labelId, wid
   const panel = useRef<HTMLDivElement>(null);
   const { shown, onKeyDown } = useDialog(panel, onClose);
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 text-left sm:p-6">
+    <div className="app-sans fixed inset-0 z-[60] flex items-center justify-center p-3 text-left sm:p-6">
       <button type="button" tabIndex={-1} aria-label="Close" onClick={onClose}
         className={`absolute inset-0 bg-[#141413]/40 transition-opacity duration-200 motion-reduce:transition-none ${shown ? "opacity-100" : "opacity-0"}`} />
       <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={labelId} tabIndex={-1} onKeyDown={onKeyDown}
         className={`relative flex max-h-[92vh] w-full flex-col overflow-hidden rounded-[16px] bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition duration-200 motion-reduce:transition-none ${wide ? "max-w-[1240px]" : "max-w-[720px]"} ${shown ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}>
         <header className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-6 py-5">
           <div className="min-w-0">
-            <h2 id={labelId} className="text-[20px] font-medium leading-tight text-base-content">{title}</h2>
-            <p className="mt-1 text-[15px] text-base-content/55">{subtitle}</p>
+            <h2 id={labelId} className="text-[24px] font-medium leading-tight text-base-content">{title}</h2>
+            <p className="mt-1 text-[16.5px] text-base-content/55">{subtitle}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-base-content/50 hover:bg-base-200 hover:text-base-content">
-            <RiCloseLine size={20} />
+            <RiCloseLine size={26} />
           </button>
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>

@@ -115,3 +115,22 @@ export function importPostEngagers(db: DB, agent: Agent, listId: string, engager
   })();
   return { imported, existing, list_id: list.id };
 }
+
+/** A person read from a LinkedIn page (search results, profile visitors). */
+export interface ImportPerson { name: string; profileUrl: string; headline?: string | null; title?: string | null; company?: string | null; location?: string | null; imageUrl?: string | null }
+
+/** People → contacts in one of the workspace's lists, which is attached to the agent. */
+export function importPeople(db: DB, agent: Agent, listId: string, people: ImportPerson[], source: string): { imported: number; existing: number; list_id: string } {
+  const list = ownList(db, agent.workspace_id, listId);
+  let imported = 0, existing = 0;
+  db.transaction(() => {
+    const link = db.prepare("INSERT OR IGNORE INTO list_targets (list_id, target_id) VALUES (?, ?)");
+    for (const p of people) {
+      const r = upsertLead(db, agent.workspace_id, null, { name: p.name, headline: p.headline, profileUrl: p.profileUrl, title: p.title, company: p.company, location: p.location, profileImageUrl: p.imageUrl }, source);
+      if (r.created) imported++; else existing++;
+      link.run(list.id, r.targetId);
+    }
+    attachListToAgent(db, agent.id, agent.workspace_id, list.id);
+  })();
+  return { imported, existing, list_id: list.id };
+}

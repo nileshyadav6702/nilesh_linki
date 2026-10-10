@@ -6,6 +6,8 @@ import type { Engager } from "@/lib/linkedin/engagers";
 // test error even when the handler catches it.
 const calls: Array<[string, string]> = [];
 let engagersImpl: () => Promise<Engager[]> = async () => [];
+const people = [{ name: "Vera Visitor", profileUrl: "https://www.linkedin.com/in/vera-visitor", headline: "VP Sales at Acme" }, { name: "Sam Search", profileUrl: "https://www.linkedin.com/in/sam-search", title: "Head of Growth" }];
+vi.mock("@/lib/agents/audience-imports", () => ({ readPeopleSearchWithAccount: async () => people, readProfileVisitorsWithAccount: async () => people.slice(0, 1) }));
 vi.mock("@/lib/agents/post-engagers", () => ({ POST_ENGAGER_LIMIT: 100, fetchPostEngagersWithAccount: (a: string, u: string) => { calls.push([a, u]); return engagersImpl(); } }));
 
 import { getDb } from "@/lib/db";
@@ -187,5 +189,22 @@ describe("POST /api/agents/:id/linkedin-import", () => {
     const busy = await call(linkedinHandler, agent.id, { kind: "post_preview", post_url: postUrl, account_id: "acc-on" });
     expect(busy.statusCode).toBe(409);
     expect((await call(linkedinHandler, agent.id, { kind: "post_preview", post_url: "https://www.linkedin.com/in/jane", account_id: "acc-on" })).statusCode).toBe(400);
+  });
+});
+
+describe("LinkedIn search and profile visitor imports", () => {
+  it("checks the search URL and imports read people into the list", async () => {
+    const agent = newAgent();
+    const bad = await call(linkedinHandler, agent.id, { kind: "search", url: "https://www.linkedin.com/feed/", count: 10, account_id: "acc-on", list_id: "li-target" });
+    expect(bad.statusCode).toBe(400);
+    const off = await call(linkedinHandler, agent.id, { kind: "visitors", account_id: "acc-off", list_id: "li-target" });
+    expect(off.statusCode).toBeGreaterThanOrEqual(400);
+    const search = await call(linkedinHandler, agent.id, { kind: "search", url: "https://www.linkedin.com/search/results/people/?keywords=vp%20sales", count: 10, account_id: "acc-on", list_id: "li-target" });
+    expect(search.statusCode).toBe(200);
+    expect(search.body).toMatchObject({ list_id: "li-target" });
+    const visitors = await call(linkedinHandler, agent.id, { kind: "visitors", account_id: "acc-on", list_id: "li-target" });
+    expect(visitors.statusCode).toBe(200);
+    expect(attached(agent.id)).toContain("li-target");
+    expect(getDb().prepare("SELECT COUNT(*) n FROM targets WHERE workspace_id = ? AND linkedin_url LIKE ?").get(WS, "%vera-visitor%")).toEqual({ n: 1 });
   });
 });

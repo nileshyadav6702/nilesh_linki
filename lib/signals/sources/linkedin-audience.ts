@@ -35,7 +35,7 @@ export async function extractPeople(page: Page, scope = "main, [role='dialog']")
   }, scope);
 }
 
-async function scrollToEnd(page: Page, rounds = 12) {
+export async function scrollToEnd(page: Page, rounds = 12) {
   let last = 0;
   for (let i = 0; i < rounds; i++) {
     await page.evaluate(() => {
