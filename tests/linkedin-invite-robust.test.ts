@@ -116,3 +116,21 @@ describe("uncertain invitations and already-pending", () => {
     expect((db.prepare("SELECT status FROM linkedin_actions WHERE id = 'a-pend'").get() as { status: string }).status).toBe("sent");
   });
 });
+
+describe("Connect as a link", () => {
+  it("clicks the custom-invite link so LinkedIn opens the dialog in-page", async () => {
+    const html = `<!doctype html><html><body><main><section class="pv-top-card">Jane Doe · 2nd</section>
+<a href="/preload/custom-invite/?vanityName=jane-doe" aria-label="Invite Jane Doe to connect" id="inv">Connect</a></main>
+<script>
+let pending = false;
+document.getElementById("inv").onclick = (e) => {
+  e.preventDefault();
+  const d = document.createElement("div"); d.setAttribute("role", "dialog");
+  d.innerHTML = '<p>Add a note to your invitation?</p><button aria-label="Send without a note">Send without a note</button>';
+  document.body.appendChild(d);
+  d.querySelector("button").onclick = () => { d.remove(); pending = true; document.querySelector("main").insertAdjacentHTML("beforeend", '<button aria-label="Pending, click to withdraw">Pending</button>'); };
+};
+</script></body></html>`;
+    await expect(run(html)).resolves.toMatchObject({ noteSent: false });
+  }, 60_000);
+});

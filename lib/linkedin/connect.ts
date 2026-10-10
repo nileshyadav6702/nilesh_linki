@@ -68,10 +68,12 @@ export async function sendConnectionRequest(page: Page, linkedinUrl: string, not
 
   // Open the invitation: a direct Connect button/link on the card, else Connect in the "More" menu.
   const direct = page.locator('main a[aria-label*="Invite"][aria-label*="to connect"]:visible, main a[href*="custom-invite"]:visible, main button[aria-label*="Invite"][aria-label*="to connect"]:visible').first();
+  let directHref: string | null = null;
   if (await direct.count()) {
-    const href = await direct.getAttribute("href");
-    if (href) await page.goto(href.startsWith("http") ? href : `https://www.linkedin.com${href}`, { waitUntil: "domcontentloaded", timeout: 30000 });
-    else await direct.click();
+    // Click it like a person would: LinkedIn opens the invitation dialog in-page. Loading the
+    // custom-invite URL as a fresh page often shows no dialog (the old way's "dialog did not open").
+    directHref = await direct.getAttribute("href");
+    await direct.click();
   } else {
     const more = profileMore(page);
     if (!(await more.count())) throw new InviteNotConfirmedError("No Connect button or More menu on the profile");
@@ -91,12 +93,17 @@ export async function sendConnectionRequest(page: Page, linkedinUrl: string, not
   }
 
   // Wait for the invitation dialog itself.
-  const dialog = page.locator('[role="dialog"]:visible, [role="alertdialog"]:visible').last();
-  try {
-    await dialog.waitFor({ timeout: 12000 });
-  } catch {
+  const dialog = page.locator('[role="dialog"]:visible, [role="alertdialog"]:visible, .artdeco-modal:visible, [data-test-modal]:visible').last();
+  let opened = await dialog.waitFor({ timeout: 12000 }).then(() => true, () => false);
+  if (!opened && directHref) {
+    // Fallback: the invite page itself.
+    await page.goto(directHref.startsWith("http") ? directHref : `https://www.linkedin.com${directHref}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await assertSignedIn(page);
+    opened = await dialog.waitFor({ timeout: 12000 }).then(() => true, () => false);
+  }
+  if (!opened) {
     if (await showsPending(page)) return { noteSent: false, publicUrl }; // some layouts send straight away
-    throw new InviteNotConfirmedError("The invitation dialog did not open");
+    throw new InviteNotConfirmedError(`The invitation dialog did not open (${await describePage(page)})`);
   }
   const dialogText = await dialog.innerText().catch(() => "");
   if (/enter (their|the member's) email|to verify this member knows you/i.test(dialogText)) {
@@ -163,4 +170,13 @@ export async function sendConnectionRequest(page: Page, linkedinUrl: string, not
   await page.waitForTimeout(2000);
   if (await showsPending(page)) return { noteSent, publicUrl };
   throw new InviteNotConfirmedError("LinkedIn does not show the invitation as pending");
+}
+
+/** What the page showed when an invitation couldn't be opened: for the run log, to diagnose layout changes. */
+async function describePage(page: Page): Promise<string> {
+  try {
+    const labels = await page.locator("main button:visible, main a[aria-label]:visible").evaluateAll((els) =>
+      els.map((e) => (e.getAttribute("aria-label") || (e as HTMLElement).innerText || "").trim().replace(/\s+/g, " ").slice(0, 40)).filter(Boolean).slice(0, 8));
+    return `${page.url().replace(/\?.*$/, "")}; buttons: ${labels.join(" | ") || "none"}`;
+  } catch { return page.url(); }
 }
