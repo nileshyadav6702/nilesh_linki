@@ -257,15 +257,27 @@ function parseTime(s: string): number {
  * Where a lead stands in its sequence. `stepTypes` is the track's steps in runner order
  * (current_step indexes it); delays are skipped when naming the previous and next step.
  */
-export function computeOutreach(stepTypes: string[], tr: TrackState, connectedAt: string | null, now = Date.now()): OutreachDetail {
+/** `invited`: the invitation went out but isn't accepted yet (the track still sits on the invitation step). */
+export function computeOutreach(stepTypes: string[], tr: TrackState, connectedAt: string | null, now = Date.now(), invited = false): OutreachDetail {
   const actions = stepTypes.map((type, idx) => ({ type, idx })).filter((s) => s.type !== "delay")
     .map((s, i) => ({ ...s, order: i + 1 }));
-  const ref = (s: { type: string; order: number }): OutreachStepRef => ({ type: s.type, order: s.order, label: OUTREACH_STEP_LABEL[s.type] ?? s.type });
-  const done = actions.filter((s) => s.idx < tr.current_step);
+  // Messages and emails are named for their place on the track: "Message - Icebreaker", "Email - Follow-up"…
+  const writes = (t: string) => t === "message" || t === "sales_inmail" || t === "email";
+  const kind = (s: { type: string; idx: number }) => {
+    const same = actions.filter((x) => (x.type === "email") === (s.type === "email") && writes(x.type));
+    const pos = same.findIndex((x) => x.idx === s.idx) + 1;
+    return pos === 1 ? "Icebreaker" : pos === same.length && same.length > 2 ? "Closing" : "Follow-up";
+  };
+  const ref = (s: { type: string; order: number; idx: number }): OutreachStepRef => ({
+    type: s.type, order: s.order, label: `${OUTREACH_STEP_LABEL[s.type] ?? s.type}${writes(s.type) ? ` - ${kind(s)}` : ""}`,
+  });
+  const firstAhead = actions.find((s) => s.idx >= tr.current_step);
+  const sentInvite = invited && firstAhead?.type === "connect" ? firstAhead.idx : -1;
+  const done = actions.filter((s) => s.idx < tr.current_step || s.idx === sentInvite);
   const last = done[done.length - 1];
   const prev = last ? { ...ref(last), ...(last.type === "connect" && connectedAt ? { accepted: true } : {}) } : null;
   const live = tr.state === "in_progress" || tr.state === "pending";
-  const upcoming = live ? actions.find((s) => s.idx >= tr.current_step) : undefined;
+  const upcoming = live ? actions.find((s) => s.idx >= tr.current_step && s.idx !== sentInvite) : undefined;
   const next = upcoming ? ref(upcoming) : null;
   let waiting: string | null = null;
   if (next && (next.type === "message" || next.type === "sales_inmail") && !connectedAt && done.some((s) => s.type === "connect")) {
@@ -278,7 +290,8 @@ export function computeOutreach(stepTypes: string[], tr: TrackState, connectedAt
 
 /** Outreach detail for each lead on a page: one track lookup per lead, step lists cached per workflow+track. */
 export function outreachFor(db: Database.Database, leads: Array<{ id: string; connected_at: string | null }>): Map<string, OutreachDetail> {
-  const trackStmt = db.prepare(`SELECT rt.track, rt.state, rt.current_step, rt.next_step_at, r.workflow_id
+  const trackStmt = db.prepare(`SELECT rt.id, rt.track, rt.state, rt.current_step, rt.next_step_at, r.workflow_id,
+        EXISTS (SELECT 1 FROM linkedin_actions la WHERE la.track_id = rt.id AND la.type = 'connect' AND la.status IN ('sent','uncertain')) invited
       FROM run_profile_tracks rt JOIN run_profiles rp ON rp.id = rt.run_profile_id JOIN runs r ON r.id = rp.run_id
      WHERE rp.target_id = ?
      ORDER BY rt.state = 'in_progress' DESC, COALESCE(rt.last_step_at, rt.created_at) DESC, rt.track = 'linkedin' DESC LIMIT 1`);
@@ -286,11 +299,11 @@ export function outreachFor(db: Database.Database, leads: Array<{ id: string; co
   const cache = new Map<string, string[]>();
   const out = new Map<string, OutreachDetail>();
   for (const l of leads) {
-    const tr = trackStmt.get(l.id) as (TrackState & { workflow_id: string | null }) | undefined;
+    const tr = trackStmt.get(l.id) as (TrackState & { workflow_id: string | null; invited: number }) | undefined;
     if (!tr || !tr.workflow_id) continue;
     const key = `${tr.workflow_id}:${tr.track}`;
     if (!cache.has(key)) cache.set(key, (stepsStmt.all(tr.workflow_id, tr.track) as Array<{ step_type: string }>).map((s) => s.step_type));
-    out.set(l.id, computeOutreach(cache.get(key)!, tr, l.connected_at));
+    out.set(l.id, computeOutreach(cache.get(key)!, tr, l.connected_at, Date.now(), !!tr.invited));
   }
   return out;
 }

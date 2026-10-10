@@ -55,28 +55,39 @@ function localTime(iso: string): string {
 
 /** "Invitation · Completed — Step 1 → Message · Next — Step 2 · Waiting for …" (prev → next). */
 export function OutreachCell({ outreach }: { outreach: Outreach | null }) {
-  if (!outreach || (!outreach.prev && !outreach.next)) return <span className="whitespace-nowrap text-[14.5px] text-base-content/45">Not contacted yet</span>;
+  if (!outreach || (!outreach.prev && !outreach.next)) return <span className="whitespace-nowrap text-[16px] text-base-content/45">Not contacted yet</span>;
   const { prev, next } = outreach;
   const waiting = outreach.waiting && outreach.next_at && outreach.waiting.startsWith("Waiting until") ? `Waiting until ${localTime(outreach.next_at)}` : outreach.waiting;
   const ended = !next && outreach.state !== "in_progress" && outreach.state !== "pending";
+  // Not started yet: just what comes first.
+  if (!prev && next) {
+    return (
+      <div className="text-[16px] leading-snug">
+        <div className="text-base-content">{next.label}</div>
+        <div className="text-base-content/50">Next — Step {next.order}</div>
+        {waiting && <div className="text-[#e8740c]">{waiting}</div>}
+      </div>
+    );
+  }
   return (
-    <div className="flex items-start gap-2.5 text-[14.5px] leading-snug">
-      {prev && (
-        <div className="min-w-0 max-w-[140px]">
-          <div className="font-medium text-base-content/85">{prev.label}{prev.accepted && <span className="font-normal text-[#3a8c4f]"> (Accepted)</span>}</div>
-          <div className="text-base-content/45">Completed — Step {prev.order}</div>
-        </div>
-      )}
-      {prev && (next || ended) && <RiArrowRightLine size={14} className="mt-0.5 shrink-0 text-base-content/35" aria-hidden="true" />}
-      {next ? (
-        <div className="min-w-0 max-w-[220px]">
-          <div className="font-medium text-base-content/85">{next.label}</div>
-          <div className="text-base-content/45">Next — Step {next.order}</div>
-          {waiting && <div className="text-[#b8742a]">{waiting}</div>}
-        </div>
-      ) : ended && (
-        <div className="text-base-content/45">{outreach.state === "completed" ? "Sequence finished" : outreach.state === "failed" ? "Stopped (error)" : "Stopped"}</div>
-      )}
+    <div className="grid grid-cols-[minmax(0,150px)_22px_minmax(0,1fr)] items-start gap-x-2 text-[16px] leading-snug">
+      <div className="min-w-0">
+        {prev ? <>
+          <div className="text-base-content">{prev.label}</div>
+          {prev.accepted && <div className="font-medium text-[#1f9d55]">(Accepted)</div>}
+          <div className="text-base-content/50">Completed — Step {prev.order}</div>
+        </> : <div className="text-base-content/45">Not started</div>}
+      </div>
+      <RiArrowRightLine size={19} className="mt-0.5 text-base-content/45" aria-hidden="true" />
+      <div className="min-w-0">
+        {next ? <>
+          <div className="text-base-content">{next.label}</div>
+          <div className="text-base-content/50">Next — Step {next.order}</div>
+          {waiting && <div className="text-[#e8740c]">{waiting}</div>}
+        </> : ended
+          ? <div className="text-base-content/50">{outreach.state === "completed" ? "Sequence finished" : outreach.state === "failed" ? "Stopped (error)" : "Stopped"}</div>
+          : <div className="text-base-content/45">—</div>}
+      </div>
     </div>
   );
 }

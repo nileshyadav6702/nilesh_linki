@@ -162,7 +162,7 @@ describe("outreach detail", () => {
   it("names the previous and next action steps, skipping delays", () => {
     const o = computeOutreach(steps, { track: "linkedin", state: "in_progress", current_step: 1, next_step_at: null }, null);
     expect(o.prev).toEqual({ type: "connect", order: 1, label: "Invitation" });
-    expect(o.next).toEqual({ type: "message", order: 2, label: "Message" });
+    expect(o.next).toEqual({ type: "message", order: 2, label: "Message - Icebreaker" });
     expect(o.waiting).toBe("Waiting for LinkedIn invitation acceptance.");
   });
   it("marks an accepted invitation and waits for the scheduled time", () => {
@@ -171,6 +171,12 @@ describe("outreach detail", () => {
     expect(o.prev).toMatchObject({ type: "connect", accepted: true });
     expect(o.waiting).toBe("Waiting until 2026-05-02 09:30 UTC");
     expect(computeOutreach(steps, { track: "linkedin", state: "in_progress", current_step: 2, next_step_at: "2026-04-01 00:00:00" }, "x", now).waiting).toBeNull();
+  });
+  it("counts a sent, not yet accepted invitation as done", () => {
+    const o = computeOutreach(steps, { track: "linkedin", state: "in_progress", current_step: 0, next_step_at: null }, null, Date.now(), true);
+    expect(o.prev).toEqual({ type: "connect", order: 1, label: "Invitation" });
+    expect(o.next).toMatchObject({ type: "message", order: 2, label: "Message - Icebreaker" });
+    expect(o.waiting).toBe("Waiting for LinkedIn invitation acceptance.");
   });
   it("has no next step once the track is finished", () => {
     const o = computeOutreach(steps, { track: "linkedin", state: "completed", current_step: 4, next_step_at: null }, null);

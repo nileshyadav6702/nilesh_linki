@@ -100,7 +100,7 @@ export default function ContactsTable({ rows, selected, toggle, toggleAll, onOpe
     } as ColumnDef<ContactRow>] : []),
     { id: "email", header: "Email", size: 130, minSize: 100, maxSize: 280, cell: ({ row: { original: r } }) => <div className="flex justify-center"><EmailCell row={r} onFound={onChanged} /></div> },
     { id: "phone", header: "Phone", size: 130, minSize: 100, maxSize: 280, cell: ({ row: { original: r } }) => <div className="flex justify-center"><PhoneCell row={r} /></div> },
-    { id: "outreach", header: "Outreach step", size: 360, minSize: 220, maxSize: 600, cell: ({ row: { original: r } }) => <OutreachCell outreach={r.outreach} /> },
+    { id: "outreach", header: "Outreach step", size: 430, minSize: 300, maxSize: 600, cell: ({ row: { original: r } }) => <OutreachCell outreach={r.outreach} /> },
     { id: "imported", header: "Import date", size: 150, minSize: 110, maxSize: 260, cell: ({ row: { original: r } }) => <span className="whitespace-nowrap text-[14px] text-base-content/65">{timeAgo(r.created_at)}</span> },
     {
       id: "list", header: "List", size: 210, minSize: 120, maxSize: 420,

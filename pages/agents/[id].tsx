@@ -154,7 +154,7 @@ export default function AgentDetail() {
         {tab === "Overview" && (
           <AgentOverview agentId={a.id} credits={d.credits} performance={d.performance} series={d.series} activity={d.activity} dueToday={d.due_today} budget={d.linkedin_budget} onReview={() => setTab("Leads")} onActivity={() => setTab("Activity")} />
         )}
-        {tab === "Leads" && <ContactsWorkspace base={{ agent: a.id }} hidden={AGENT_LEAD_HIDDEN} sizesKey="linki.agent-leads.columns.v2" className="h-[calc(100vh-150px)] min-h-[520px]"
+        {tab === "Leads" && <ContactsWorkspace base={{ agent: a.id }} hidden={AGENT_LEAD_HIDDEN} sizesKey="linki.agent-leads.columns.v3" className="h-[calc(100vh-150px)] min-h-[520px]"
           openLeadId={typeof router.query.lead === "string" ? router.query.lead : undefined} />}
         {tab === "Sources" && (
           <div className="space-y-4">
