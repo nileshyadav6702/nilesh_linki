@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { requireWorkspace, recordAudit } from "@/lib/workspace";
+import { endRuns } from "@/lib/agents/enroll";
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const db = getDb();
@@ -78,10 +79,24 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   if (req.method === "PATCH") {
-    const { status } = req.body;
-    if (!status) return res.status(400).json({ error: "status required" });
-    db.prepare("UPDATE runs SET status = ? WHERE id = ? AND workspace_id = ?").run(status, id, ctx.workspaceId);
-    recordAudit(ctx, "run.status_changed", "run", id, { status });
+    const { status } = req.body ?? {};
+    const run = db.prepare("SELECT status FROM runs WHERE id = ? AND workspace_id = ?").get(id, ctx.workspaceId) as { status: string } | undefined;
+    if (!run) return res.status(404).json({ error: "Run not found" });
+    // Pause, resume, or stop for good. Anything else (a typo, "failed", "pending") would leave the
+    // run in a state the runner never picks up again.
+    if (status === "paused") {
+      if (run.status !== "running" && run.status !== "pending") return res.status(409).json({ error: `A ${run.status} run can't be paused` });
+      db.prepare("UPDATE runs SET status = 'paused' WHERE id = ?").run(id);
+    } else if (status === "running") {
+      if (run.status !== "paused" && run.status !== "pending") return res.status(409).json({ error: `A ${run.status} run can't be resumed` });
+      db.prepare("UPDATE runs SET status = 'running', started_at = COALESCE(started_at, datetime('now')) WHERE id = ?").run(id);
+    } else if (status === "completed") {
+      // Stopped: the leads' remaining steps end too, or reopening the run would resume them all.
+      if (run.status !== "completed") endRuns(db, [id], "Campaign stopped");
+    } else {
+      return res.status(400).json({ error: "status must be paused, running or completed" });
+    }
+    recordAudit(ctx, "run.status_changed", "run", id, { status, from: run.status });
     return res.json({ ok: true });
   }
 

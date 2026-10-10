@@ -121,12 +121,17 @@ export function moveAgentMailbox(db: Database.Database, agent: Agent, mailboxId:
 /** The agent is being deleted: its leads' sequences stop and its runs end (they'd lose the approved drafts). */
 export function endAgentRuns(db: Database.Database, agent: Agent): number {
   const runs = (db.prepare(`SELECT id FROM runs WHERE ${AGENT_RUNS} AND status IN ('pending','running','paused')`).all(...agentRunArgs(agent)) as Array<{ id: string }>).map((r) => r.id);
+  return endRuns(db, runs, "Agent deleted");
+}
+
+/** Runs stopped for good: their leads' remaining steps are skipped and queued campaign emails cancelled. */
+export function endRuns(db: Database.Database, runs: string[], reason: string): number {
   if (!runs.length) return 0;
   const ph = runs.map(() => "?").join(",");
   db.transaction(() => {
-    db.prepare(`UPDATE run_profile_tracks SET state = 'skipped', error_message = 'Agent deleted', next_step_at = NULL
-      WHERE state IN ('pending','in_progress') AND run_profile_id IN (SELECT id FROM run_profiles WHERE run_id IN (${ph}))`).run(...runs);
-    db.prepare(`UPDATE email_jobs SET status = 'cancelled', last_error = 'Agent deleted', updated_at = datetime('now') WHERE status = 'pending' AND source = 'campaign' AND run_id IN (${ph})`).run(...runs);
+    db.prepare(`UPDATE run_profile_tracks SET state = 'skipped', error_message = ?, next_step_at = NULL
+      WHERE state IN ('pending','in_progress') AND run_profile_id IN (SELECT id FROM run_profiles WHERE run_id IN (${ph}))`).run(reason, ...runs);
+    db.prepare(`UPDATE email_jobs SET status = 'cancelled', last_error = ?, updated_at = datetime('now') WHERE status = 'pending' AND source = 'campaign' AND run_id IN (${ph})`).run(reason, ...runs);
     db.prepare(`UPDATE runs SET status = 'completed', completed_at = COALESCE(completed_at, datetime('now')) WHERE id IN (${ph})`).run(...runs);
   })();
   return runs.length;
