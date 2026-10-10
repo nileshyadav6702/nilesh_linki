@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { localDayBoundsUtc, localWeekStartUtc } from "@/lib/outreach/schedule";
 
 /**
@@ -198,6 +198,31 @@ export function applyWeeklyQuota(db: DB, accountId: string, limits: QuotaLimits,
   limits.daily_connection_limit = clamp(limits.daily_connection_limit ?? 20, limits.weekly_connection_limit, today.connect, week.connect);
   limits.daily_message_limit = clamp(limits.daily_message_limit ?? 50, limits.weekly_message_limit, today.message, week.message);
   limits.daily_visit_limit = clamp(limits.daily_visit_limit ?? 150, limits.weekly_visit_limit, today.visit, week.visit);
+}
+
+const WARMUP_DAYS = 14;
+
+/**
+ * Today's caps, made less machine-like:
+ *  - variation: each account sends 80–100% of its caps, a different share each day (stable for
+ *    the day, so every pass agrees), instead of exactly the same number every day;
+ *  - warm-up: an account new to automation starts at 40% and reaches its full caps over two
+ *    weeks, counted from its first automated action, rather than going 0 to full overnight.
+ * A cap of at least 1 never drops to 0. Returns the factor applied.
+ */
+export function applyDailyVariation(db: DB, accountId: string, limits: QuotaLimits & { daily_inmail_limit?: number | null }, now = new Date()): number {
+  const day = localDayBoundsUtc(limits.timezone || "UTC", now).start.slice(0, 10);
+  const variation = 0.8 + createHash("sha256").update(`${accountId}:${day}`).digest().readUInt32BE(0) / 0xffffffff * 0.2;
+  const first = (db.prepare("SELECT MIN(created_at) t FROM linkedin_actions WHERE account_id = ? AND status IN ('sent','uncertain')").get(accountId) as { t: string | null }).t;
+  const daysIn = first ? Math.floor((now.getTime() - Date.parse(`${first.replace(" ", "T")}Z`)) / 86_400_000) : 0;
+  const warmup = daysIn >= WARMUP_DAYS ? 1 : 0.4 + 0.6 * Math.max(0, daysIn) / WARMUP_DAYS;
+  const factor = variation * warmup;
+  const scale = (cap: number | null | undefined) => (cap == null ? cap : cap <= 0 ? cap : Math.max(1, Math.round(cap * factor)));
+  limits.daily_connection_limit = scale(limits.daily_connection_limit ?? 20) as number;
+  limits.daily_message_limit = scale(limits.daily_message_limit ?? 50) as number;
+  limits.daily_visit_limit = scale(limits.daily_visit_limit ?? 150) as number;
+  if (limits.daily_inmail_limit != null) limits.daily_inmail_limit = scale(limits.daily_inmail_limit);
+  return factor;
 }
 
 /**

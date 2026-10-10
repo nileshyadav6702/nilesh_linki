@@ -2,7 +2,7 @@ import { getDb } from "@/lib/db";
 import { isWithinSchedule } from "./schedule";
 import { WORKER_ID, type ActiveLease } from "@/lib/email/infrastructure";
 import { shouldSyncAccepted, syncAcceptedConnections } from "@/lib/linkedin/sync-accepted";
-import { markTrackActionsUncertain, recoverStaleLinkedinActions, linkedinActionsToday, claimTrack, releaseTrack, applyWeeklyQuota } from "@/lib/linkedin/actions";
+import { markTrackActionsUncertain, recoverStaleLinkedinActions, linkedinActionsToday, claimTrack, releaseTrack, applyWeeklyQuota, applyDailyVariation } from "@/lib/linkedin/actions";
 import { premium } from "@/lib/premium";
 
 import { guard, WatchdogTimeoutError } from "@/lib/watchdog";
@@ -127,6 +127,8 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
     inmailsSentToday.set(accountId, linkedinActionsToday(db, accountId, "inmail", tz));
     // Likes share the visit cap; voice notes share the message cap.
     visitsSentToday.set(accountId, linkedinActionsToday(db, accountId, "visit", tz) + linkedinActionsToday(db, accountId, "like", tz));
+    // Today's share of the caps (daily variation, new-account warm-up), then the weekly quota.
+    applyDailyVariation(db, accountId, accountLimits);
     // A weekly quota (Settings → LinkedIn seat) caps today at what is left of the week.
     applyWeeklyQuota(db, accountId, accountLimits, { connect: connectsSentToday.get(accountId) ?? 0, message: messagesSentToday.get(accountId) ?? 0, visit: visitsSentToday.get(accountId) ?? 0 });
     // LinkedIn's own weekly invitation limit was hit: no new invitations until it resets.
