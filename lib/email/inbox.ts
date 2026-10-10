@@ -316,80 +316,89 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
           }
         }
 
-        // ── Bounce detection: scan last 50 messages for mailer-daemon ─────────
-        if (box.messages.total > 0) {
-          const total = box.messages.total;
+        // ── Bounce and complaint detection: the last 50 messages of a folder ─────────
+        const scanDsns = (total: number) => new Promise<void>((resFetch) => {
           const start = Math.max(1, total - 49);
           const range = `${start}:${total}`;
-
-          await new Promise<void>((resFetch) => {
-            const fetch = imap.seq.fetch(range, {
-              // MESSAGE-ID identifies the DSN itself, which is what makes recording it
-              // idempotent. Sequence numbers cannot serve that purpose — they shift as mail
-              // arrives, and this range is re-read on every poll.
-              bodies: ["HEADER.FIELDS (FROM TO MESSAGE-ID DATE SUBJECT)", "TEXT"],
-              struct: false,
-            });
-
-            type RawMsg = { header: string; body: string };
-            const msgs: RawMsg[] = [];
-
-            fetch.on("message", (msg) => {
-              const entry: RawMsg = { header: "", body: "" };
-              msg.on("body", (stream, info) => {
-                const chunks: Buffer[] = [];
-                stream.on("data", (c: Buffer) => chunks.push(c));
-                stream.once("end", () => {
-                  const text = Buffer.concat(chunks).toString();
-                  if (info.which.startsWith("HEADER")) entry.header = text;
-                  else entry.body = text.slice(0, 3000);
-                });
-              });
-              msg.once("end", () => msgs.push(entry));
-            });
-
-            fetch.once("error", () => resFetch());
-            fetch.once("end", () => {
-              for (const msg of msgs) {
-                const fromRaw = parseHeaderValue(msg.header, "From");
-                const toRaw = parseHeaderValue(msg.header, "To");
-
-                const emailMatch = fromRaw.match(/<([^>]+)>/) ?? fromRaw.match(/([^\s]+@[^\s]+)/);
-                const fromEmail = emailMatch?.[1]?.toLowerCase().trim();
-                // A spam complaint from the provider's feedback loop (ARF): record it, which suppresses
-                // the address and counts toward the mailbox's complaint rate (auto-pause).
-                const report = msg.body ? parseFeedbackReport(msg.body) : null;
-                if (report?.recipient) {
-                  recordProviderEvent({ workspaceId: account.workspace_id, provider: "arf",
-                    providerEventId: parseHeaderValue(msg.header, "Message-ID") || `arf:${report.recipient}:${report.messageId ?? ""}`,
-                    eventType: "complained", recipient: report.recipient, messageId: report.messageId ?? undefined });
-                  continue;
-                }
-                if (!fromEmail || !isBounce(fromEmail)) continue;
-                // Only a permanent failure is a bounce: delay notices and soft bounces (4.x.x, mailbox
-                // full) must not suppress the address or count against the mailbox.
-                if (classifyDsn(parseHeaderValue(msg.header, "Subject"), msg.body) !== "hard") continue;
-
-                const dsnMessageId = parseHeaderValue(msg.header, "Message-ID") || `seq-fallback:${hashStr(msg.header + msg.body)}`;
-
-                // Also extract Final-Recipient from DSN bodies (SES bounce format)
-                const finalRecipient = msg.body.match(/Final-Recipient:\s*rfc822;\s*([^\s\r\n]+)/i)?.[1] ?? "";
-                // Final-Recipient is the DSN's own statement of which address failed, so it
-                // outranks a scrape of the body — the body also contains our own sending
-                // address, the postmaster, and anything quoted from the original message.
-                const authoritative = finalRecipient.trim().toLowerCase();
-                const scraped = extractEmails(msg.body + " " + toRaw + " " + finalRecipient);
-                const candidates = authoritative && !BOUNCE_SENDER_PATTERNS.some(p => p.test(authoritative))
-                  ? [authoritative, ...scraped.filter(c => c !== authoritative)]
-                  : scraped;
-
-                bounces += applyBounceCandidates(db, {
-                  account, emailAccountId, dsnMessageId, authoritative, candidates, ourAddresses,
-                });
-              }
-              resFetch();
-            });
+          const fetch = imap.seq.fetch(range, {
+            // MESSAGE-ID identifies the DSN itself, which is what makes recording it
+            // idempotent. Sequence numbers cannot serve that purpose — they shift as mail
+            // arrives, and this range is re-read on every poll.
+            bodies: ["HEADER.FIELDS (FROM TO MESSAGE-ID DATE SUBJECT)", "TEXT"],
+            struct: false,
           });
+
+          type RawMsg = { header: string; body: string };
+          const msgs: RawMsg[] = [];
+
+          fetch.on("message", (msg) => {
+            const entry: RawMsg = { header: "", body: "" };
+            msg.on("body", (stream, info) => {
+              const chunks: Buffer[] = [];
+              stream.on("data", (c: Buffer) => chunks.push(c));
+              stream.once("end", () => {
+                const text = Buffer.concat(chunks).toString();
+                if (info.which.startsWith("HEADER")) entry.header = text;
+                else entry.body = text.slice(0, 3000);
+              });
+            });
+            msg.once("end", () => msgs.push(entry));
+          });
+
+          fetch.once("error", () => resFetch());
+          fetch.once("end", () => {
+            for (const msg of msgs) {
+              const fromRaw = parseHeaderValue(msg.header, "From");
+              const toRaw = parseHeaderValue(msg.header, "To");
+
+              const emailMatch = fromRaw.match(/<([^>]+)>/) ?? fromRaw.match(/([^\s]+@[^\s]+)/);
+              const fromEmail = emailMatch?.[1]?.toLowerCase().trim();
+              // A spam complaint from the provider's feedback loop (ARF): record it, which suppresses
+              // the address and counts toward the mailbox's complaint rate (auto-pause).
+              const report = msg.body ? parseFeedbackReport(msg.body) : null;
+              if (report?.recipient) {
+                recordProviderEvent({ workspaceId: account.workspace_id, provider: "arf",
+                  providerEventId: parseHeaderValue(msg.header, "Message-ID") || `arf:${report.recipient}:${report.messageId ?? ""}`,
+                  eventType: "complained", recipient: report.recipient, messageId: report.messageId ?? undefined });
+                continue;
+              }
+              if (!fromEmail || !isBounce(fromEmail)) continue;
+              // Only a permanent failure is a bounce: delay notices and soft bounces (4.x.x, mailbox
+              // full) must not suppress the address or count against the mailbox.
+              if (classifyDsn(parseHeaderValue(msg.header, "Subject"), msg.body) !== "hard") continue;
+
+              const dsnMessageId = parseHeaderValue(msg.header, "Message-ID") || `seq-fallback:${hashStr(msg.header + msg.body)}`;
+
+              // Also extract Final-Recipient from DSN bodies (SES bounce format)
+              const finalRecipient = msg.body.match(/Final-Recipient:\s*rfc822;\s*([^\s\r\n]+)/i)?.[1] ?? "";
+              // Final-Recipient is the DSN's own statement of which address failed, so it
+              // outranks a scrape of the body — the body also contains our own sending
+              // address, the postmaster, and anything quoted from the original message.
+              const authoritative = finalRecipient.trim().toLowerCase();
+              const scraped = extractEmails(msg.body + " " + toRaw + " " + finalRecipient);
+              const candidates = authoritative && !BOUNCE_SENDER_PATTERNS.some(p => p.test(authoritative))
+                ? [authoritative, ...scraped.filter(c => c !== authoritative)]
+                : scraped;
+
+              bounces += applyBounceCandidates(db, {
+                account, emailAccountId, dsnMessageId, authoritative, candidates, ourAddresses,
+              });
+            }
+            resFetch();
+          });
+        });
+        if (box.messages.total > 0) await scanDsns(box.messages.total);
+        // Bounces and feedback reports often land in Spam (an unknown sender, a "Delivery
+        // Status Notification" subject): read that folder too, the same way.
+        // Best effort: a server that can't list or open it just skips this part.
+        try {
+          const junkPath = await new Promise<string | null>((resBoxes) => imap.getBoxes((e, boxes) => resBoxes(e || !boxes ? null : findJunkBox(boxes))));
+          if (junkPath && !settled) {
+            const junk = await new Promise<Imap.Box | null>((resOpen) => imap.openBox(junkPath, true, (e, b) => resOpen(e ? null : b)));
+            if (junk && junk.messages.total > 0) await scanDsns(junk.messages.total);
+          }
+        } catch (junkErr) {
+          console.warn("[email-inbox] spam folder scan skipped:", junkErr instanceof Error ? junkErr.message : junkErr);
         }
 
         done();
@@ -408,6 +417,22 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
   return { replies, bounces };
 }
 
+
+/** The mailbox's spam folder: the one flagged \Junk (any depth), else one named Spam / Junk / Bulk Mail. */
+export function findJunkBox(boxes: Imap.MailBoxes): string | null {
+  let flagged: string | null = null;
+  let named: string | null = null;
+  const walk = (level: Imap.MailBoxes, prefix: string) => {
+    for (const [name, box] of Object.entries(level)) {
+      const path = prefix + name;
+      if (!flagged && (box.attribs ?? []).some((a) => /^\\junk$/i.test(a))) flagged = path;
+      if (!named && /^(spam|junk|junk e-?mail|bulk mail)$/i.test(name)) named = path;
+      if (box.children) walk(box.children, path + (box.delimiter || "/"));
+    }
+  };
+  walk(boxes, "");
+  return flagged ?? named;
+}
 
 /** Every email account with IMAP configured (used by the always-on poller). */
 export function listImapEmailAccountIds(workspaceId?: string): string[] {

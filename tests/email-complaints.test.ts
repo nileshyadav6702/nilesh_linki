@@ -51,3 +51,15 @@ describe("spam complaints (ARF feedback reports)", () => {
     expect(recordProviderEvent({ workspaceId: WS, provider: "arf", providerEventId: "<arf-1@yahoo>", eventType: "complained", recipient: r.recipient!, messageId: r.messageId! }).duplicate).toBe(true);
   });
 });
+
+describe("the spam folder", () => {
+  it("is found by its \Junk flag, else by name", async () => {
+    const { findJunkBox } = await import("@/lib/email/inbox");
+    const box = (attribs: string[] = [], children?: Record<string, unknown>) => ({ attribs, delimiter: "/", children: children ?? null, parent: null });
+    // Gmail: [Gmail]/Spam flagged \Junk
+    expect(findJunkBox({ INBOX: box(), "[Gmail]": box(["\Noselect"], { "All Mail": box(["\All"]), Spam: box(["\Junk"]) }) } as never)).toBe("[Gmail]/Spam");
+    // Outlook without special-use flags
+    expect(findJunkBox({ INBOX: box(), "Junk Email": box() } as never)).toBe("Junk Email");
+    expect(findJunkBox({ INBOX: box(), Sent: box() } as never)).toBeNull();
+  });
+});
