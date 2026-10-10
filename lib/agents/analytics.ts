@@ -155,11 +155,20 @@ export function stepOccupancy(db: Database.Database, workflowId: string | null):
     const w = windows.get(s.id);
     if (!w) return { ...s, contacts: 0 };
     const where = afterStepWhere(w);
-    const contacts = (db.prepare(`SELECT COUNT(DISTINCT rp.target_id) n ${TRACKS_IN_RUN} AND ${where.sql}`).get(workflowId, s.track, ...where.params) as { n: number }).n;
-    if (s.step_type !== "connect") return { ...s, contacts };
+    if (s.step_type !== "connect") {
+      const contacts = (db.prepare(`SELECT COUNT(DISTINCT rp.target_id) n ${TRACKS_IN_RUN} AND ${where.sql}`).get(workflowId, s.track, ...where.params) as { n: number }).n;
+      return { ...s, contacts };
+    }
+    // An invitation step holds the lead until the invitation is accepted (or it gives up), so
+    // "past the step" misses every pending invitation. Count the invitations actually sent from
+    // this step (linkedin_actions), plus anyone already past it.
+    const invitedHere = "EXISTS (SELECT 1 FROM linkedin_actions la WHERE la.track_id = rt.id AND la.step_id = ? AND la.type = 'connect' AND la.status IN ('sent','uncertain'))";
     const past = db.prepare(`SELECT COUNT(DISTINCT rp.target_id) invited, COUNT(DISTINCT CASE WHEN t.connected_at IS NOT NULL THEN rp.target_id END) accepted
-      ${TRACKS_IN_RUN.replace("JOIN runs r", "JOIN targets t ON t.id = rp.target_id JOIN runs r")} AND (rt.state = 'completed' OR rt.current_step >= ?)`)
-      .get(workflowId, s.track, s.step_order) as { invited: number; accepted: number };
+      ${TRACKS_IN_RUN.replace("JOIN runs r", "JOIN targets t ON t.id = rp.target_id JOIN runs r")} AND (rt.state = 'completed' OR rt.current_step >= ? OR ${invitedHere})`)
+      .get(workflowId, s.track, s.step_order, s.id) as { invited: number; accepted: number };
+    // At this step now: invited and waiting for an answer (still on it), or accepted and waiting for the next step.
+    const contacts = (db.prepare(`SELECT COUNT(DISTINCT rp.target_id) n ${TRACKS_IN_RUN} AND (${where.sql} OR (rt.state = 'in_progress' AND rt.current_step < ? AND ${invitedHere}))`)
+      .get(workflowId, s.track, ...where.params, s.step_order, s.id) as { n: number }).n;
     return { ...s, contacts, invited: past.invited, accepted: past.accepted };
   });
 }

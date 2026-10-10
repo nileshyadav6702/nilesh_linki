@@ -66,5 +66,14 @@ describe("agent workspace", () => {
     expect(invite).toMatchObject({ invited: 1, accepted: 0 });
     expect(steps.filter((s) => s.step_type !== "connect").every((s) => s.contacts === 0)).toBe(true);
     expect(dueToday(db, workflowId)).toBe(1);
+
+    // A second lead: invitation sent, not yet accepted, so the track still sits on the invitation step.
+    const connectStep = (db.prepare("SELECT id FROM workflow_steps WHERE workflow_id = ? AND track = 'linkedin' AND step_order = 1").get(workflowId) as { id: string }).id;
+    db.prepare("INSERT INTO targets (id, workspace_id, agent_id, linkedin_url) VALUES ('t-occ2', ?, ?, 'https://www.linkedin.com/in/occ2')").run(WS, agent.id);
+    db.prepare("INSERT INTO run_profiles (id, run_id, target_id) VALUES ('rp-occ2', ?, 't-occ2')").run(runId);
+    db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step, next_step_at) VALUES ('tr-occ2', 'rp-occ2', 'linkedin', 'in_progress', 0, datetime('now', '+6 hours'))").run();
+    db.prepare(`INSERT INTO linkedin_actions (id, idempotency_key, account_id, run_id, track_id, step_id, target_id, type, status)
+      VALUES ('la-occ2', 'li:connect:occ2', NULL, ?, 'tr-occ2', ?, 't-occ2', 'connect', 'sent')`).run(runId, connectStep);
+    expect(stepOccupancy(db, workflowId).find((s) => s.track === "linkedin" && s.step_order === 1)).toMatchObject({ contacts: 2, invited: 2, accepted: 0 });
   });
 });
