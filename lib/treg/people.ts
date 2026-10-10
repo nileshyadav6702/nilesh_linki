@@ -132,3 +132,16 @@ export async function tregPeopleSearch(workspaceId: string, icp: Icp, size: numb
   if (first.leads.length || token || !industryFilter?.include) return first;
   return searchOnce(workspaceId, icypeasQuery(icp, { industries: false })!, size);
 }
+
+/**
+ * The ICP's persona titles at one company (a funded company, a hiring one…), found by its website
+ * domain when known, else its name. Rows are paid (~$0.0004 each): ask for a handful.
+ */
+export async function tregPeopleAtCompany(workspaceId: string, icp: Icp, company: { name: string; domain?: string | null }, size = 3): Promise<LeadCandidate[]> {
+  const base = icypeasQuery(icp, { industries: false });
+  if (!base) return [];
+  const query: Obj = { currentJobTitle: base.currentJobTitle };
+  if (company.domain) query.currentCompanyWebsite = { include: [company.domain] };
+  else query.currentCompanyName = { include: [company.name] };
+  return (await searchOnce(workspaceId, query, Math.max(1, Math.min(10, size)))).leads;
+}

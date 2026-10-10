@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { TregError, tregEnabled } from "@/lib/treg/client";
 import { tregCompany, tregProfile } from "@/lib/treg/linkedin";
 import { applyFunding, saveCompany } from "@/lib/treg/company";
+import { tregFetchPages } from "@/lib/treg/web";
 import { NEEDS_DATA_MAX_ATTEMPTS, NEEDS_DATA_RETRY_HOURS } from "@/lib/linkedin/needs-data";
 
 /**
@@ -70,7 +71,40 @@ export async function enrichForScoring(db: DB, workspaceId: string, targetIds: s
     }
   };
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  await addWebsiteText(db, workspaceId, targetIds).catch((err) => console.warn("[treg-enrich] website text:", err instanceof Error ? err.message : err));
   return done;
+}
+
+/** Homepages read per enrichment pass (TinyFish through treg is free; Crawl4AI fallback $0.00015). */
+const WEBSITES_PER_PASS = 20;
+
+/** "Title — description — first lines" of a homepage, trimmed for the scoring prompt. */
+export function websiteSummary(p: { title: string | null; description: string | null; text: string }): string {
+  const lines = p.text.split("\n").map((l) => l.replace(/[#*_>\[\]()!|]/g, " ").replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim())
+    .filter((l) => l.length > 25);
+  return [p.title, p.description, ...lines].filter(Boolean).join(" — ").slice(0, 1500);
+}
+
+/** Each lead company's homepage, once per company, so scoring knows what the company actually sells. */
+export async function addWebsiteText(db: DB, workspaceId: string, targetIds: string[]): Promise<number> {
+  if (!targetIds.length) return 0;
+  const rows = db.prepare(`SELECT DISTINCT c.id, COALESCE(c.domain, c.website) site FROM targets t JOIN companies c ON c.id = t.company_id
+    WHERE t.id IN (${targetIds.map(() => "?").join(",")}) AND c.website_fetched_at IS NULL AND COALESCE(c.domain, c.website) IS NOT NULL`)
+    .all(...targetIds).slice(0, WEBSITES_PER_PASS) as Array<{ id: string; site: string }>;
+  const urls = new Map<string, string>();
+  for (const r of rows) {
+    try { urls.set(r.id, `https://${new URL(/^https?:\/\//.test(r.site) ? r.site : `https://${r.site}`).hostname}/`); } catch { /* bad site */ }
+  }
+  if (!urls.size) return 0;
+  const pages = await tregFetchPages(workspaceId, [...new Set(urls.values())], { fallback: true });
+  const save = db.prepare("UPDATE companies SET website_text = ?, website_fetched_at = datetime('now') WHERE id = ?");
+  let n = 0;
+  for (const [id, url] of urls) {
+    const p = pages.get(url);
+    save.run(p ? websiteSummary(p) || null : null, id);
+    if (p) n++;
+  }
+  return n;
 }
 
 type DB = Database.Database;

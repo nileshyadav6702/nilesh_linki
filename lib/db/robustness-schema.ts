@@ -243,6 +243,9 @@ const STATEMENTS: string[] = [
   "ALTER TABLE source_units ADD COLUMN cost_avg_micro REAL",
   // Per-agent daily data budget (USD); null = the default (AGENT_DATA_BUDGET_USD, $0.50).
   "ALTER TABLE agents ADD COLUMN daily_data_budget_usd REAL",
+  // What the company's own homepage says it does (read once, free fetch), for scoring.
+  "ALTER TABLE companies ADD COLUMN website_text TEXT",
+  "ALTER TABLE companies ADD COLUMN website_fetched_at TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

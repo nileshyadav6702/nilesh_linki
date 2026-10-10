@@ -1,4 +1,5 @@
 import type { SourceRunner } from "@/lib/signals/sources/types";
+import { discoverBoards } from "@/lib/signals/sources/careers";
 
 export interface JobPosting { title: string; url: string; location: string | null; postedAt: string | null }
 
@@ -46,10 +47,18 @@ export function matchesRoles(title: string, keywords: string[]): boolean {
   return keywords.some((k) => t.includes(k.toLowerCase()));
 }
 
-/** Watches company job boards; open roles matching the agent's keywords become hiring signals. */
+/** Companies whose careers pages are read per run when no boards are configured (free reads). */
+const DISCOVER_PER_RUN = 6;
+
+/**
+ * Watches company job boards; open roles matching the agent's keywords become hiring signals.
+ * Without configured boards, the boards are found from the careers pages of the agent's lead companies.
+ */
 export const hiringRunner: SourceRunner = async (ctx) => {
   const keywords = ctx.config.role_keywords.length ? ctx.config.role_keywords : (ctx.icp?.personas ?? []).flatMap((p) => p.departments).slice(0, 8);
-  for (const board of ctx.config.boards) {
+  const boards = ctx.config.boards.length ? ctx.config.boards
+    : await discoverBoards(ctx.db, ctx.workspaceId, ctx.agent.id, ctx.cursor, ctx.lean ? 2 : DISCOVER_PER_RUN);
+  for (const board of boards) {
     let json: unknown;
     try {
       const res = await fetch(boardUrl(board.ats, board.slug), { headers: { Accept: "application/json" } });
@@ -97,10 +106,17 @@ export function isSurge(now: number, base: number | null): boolean {
  * only build that history.
  */
 export const hiringSurgeRunner: SourceRunner = async (ctx) => {
-  const row = ctx.db.prepare("SELECT config_json FROM agent_sources WHERE agent_id = ? AND source_type = 'hiring' ORDER BY created_at LIMIT 1").get(ctx.agent.id) as { config_json: string } | undefined;
+  // The boards Job openings watches: typed in, or found on the lead companies' careers pages.
+  const row = ctx.db.prepare("SELECT config_json, cursor_json FROM agent_sources WHERE agent_id = ? AND source_type = 'hiring' ORDER BY created_at LIMIT 1").get(ctx.agent.id) as { config_json: string; cursor_json: string | null } | undefined;
   let boards: Array<{ ats: Ats; slug: string; company?: string }> = [];
   try { boards = (JSON.parse(row?.config_json || "{}").boards ?? []) as typeof boards; } catch { /* no boards */ }
-  if (!boards.length) throw new Error("Hiring surge watches the job boards under Job openings: add at least one board there");
+  if (!boards.length) {
+    try {
+      const found = Object.values((JSON.parse(row?.cursor_json || "{}").discovered ?? {}) as Record<string, { board: { ats: Ats; slug: string } | null; company: string }>);
+      boards = found.filter((d) => d.board).map((d) => ({ ...d.board!, company: d.company }));
+    } catch { /* nothing found yet */ }
+  }
+  if (!boards.length) throw new Error("Hiring surge watches the job boards under Job openings: turn on Job openings (or add a board) first");
   const all = (ctx.cursor.counts as Record<string, CountHistory> | undefined) ?? {};
   const nowIso = new Date().toISOString();
   for (const board of boards) {

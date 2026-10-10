@@ -29,7 +29,7 @@ export const fitBatchSchema = z.object({
 interface LeadRow {
   id: string; full_name: string | null; headline: string | null; title: string | null; company: string | null;
   location: string | null; summary: string | null; company_industry: string | null; company_size: string | null; company_description: string | null;
-  company_specialties?: string | null; company_founded?: number | null; company_type?: string | null;
+  company_specialties?: string | null; company_founded?: number | null; company_type?: string | null; company_website_text?: string | null;
 }
 
 export function hasProfileText(l: Pick<LeadRow, "headline" | "summary" | "title">): boolean {
@@ -53,7 +53,7 @@ export function ruleFit(l: Pick<LeadRow, "headline" | "title">, icp: Icp | null)
  */
 const LEAD_COLUMNS = `t.id, t.full_name, t.headline, t.title, t.company, t.location, t.summary,
         c.industry company_industry, COALESCE(c.employee_count, c.employee_range) company_size, c.description company_description,
-        c.specialties company_specialties, c.founded_year company_founded, c.org_type company_type`;
+        c.specialties company_specialties, c.founded_year company_founded, c.org_type company_type, c.website_text company_website_text`;
 
 /** Same rows re-read after enrichment filled them in. */
 function reloadRows(db: Database.Database, rows: LeadRow[]): LeadRow[] {
@@ -241,6 +241,8 @@ async function scoreBatch(db: Database.Database, agent: Agent, icp: Icp, icpId: 
         index, name: l.full_name, headline: l.headline, title: l.title, company: l.company, location: l.location,
         about: l.summary?.slice(0, 500) ?? null, company_industry: l.company_industry, company_size: l.company_size,
         company_description: l.company_description?.slice(0, 300) ?? null,
+        // What the company's homepage says it sells: the best evidence for industry / service-provider calls.
+        company_website: l.company_website_text?.slice(0, 600) ?? null,
         company_specialties: l.company_specialties?.slice(0, 200) ?? null, company_founded: l.company_founded ?? null, company_type: l.company_type ?? null, signals: topSignals(db, l.id),
       })),
       feedback: feedbackExamples(db, agent.id),

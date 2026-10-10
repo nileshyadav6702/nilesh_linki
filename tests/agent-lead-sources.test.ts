@@ -54,16 +54,17 @@ describe("lead source rules", () => {
 });
 
 describe("PUT /api/agents/:id/sources", () => {
-  it("rejects unknown types, bad URLs, long topics and job openings without boards", async () => {
+  it("rejects unknown types, bad URLs and long topics; job openings may go without boards", async () => {
     const a = newAgent();
     expect((await put(a.id, { sources: [{ source_type: "website_visit", enabled: true, config: {} }] })).statusCode).toBe(400);
     const badUrl = await put(a.id, { sources: [{ source_type: "competitor_engagement", enabled: true, config: { urls: ["https://www.linkedin.com/in/someone"] } }] });
     expect(badUrl.statusCode).toBe(400);
     expect((badUrl.body as { error: string }).error).toMatch(/company page/);
     expect((await put(a.id, { sources: [{ source_type: "keyword_engagement", enabled: true, config: { keywords: ["one two three four"] } }] })).statusCode).toBe(400);
-    expect((await put(a.id, { sources: [{ source_type: "hiring", enabled: true, config: { boards: [] } }] })).statusCode).toBe(400);
     expect((await put(a.id, { sources: [{ source_type: "keyword_engagement", enabled: true, config: { keywords: ["ok"], extra: 1 } }] })).statusCode).toBe(400);
     expect(listSources(a.id, WS)).toHaveLength(0);
+    // Without boards, Job openings finds them on the lead companies' careers pages.
+    expect((await put(a.id, { sources: [{ source_type: "hiring", enabled: true, config: { boards: [] } }] })).statusCode).toBe(200);
   });
 
   it("saves one row per type, canonicalises URLs and keeps knobs the drawer does not edit", async () => {

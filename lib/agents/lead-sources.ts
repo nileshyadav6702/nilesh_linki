@@ -55,7 +55,6 @@ function checkDraft(type: DrawerSignalType, s: { enabled: boolean; config: z.inf
     const needsUrls = type === "competitor_engagement" || type === "influencer_engagement" || type === "own_content_engagement";
     if (needsUrls && !config.urls?.length) throw new LeadSourceError("Add at least one LinkedIn page before turning this source on");
     if (type === "keyword_engagement" && !config.keywords?.length) throw new LeadSourceError("Add at least one topic");
-    if (type === "hiring" && !config.boards?.length) throw new LeadSourceError("Job openings needs at least one job board (e.g. greenhouse:acme)");
     if (type === "tech_stack" && !config.keywords?.length) throw new LeadSourceError("Add at least one technology to track");
     if (type === "company_followers" && !config.urls?.length) throw new LeadSourceError("Add your company page to track its followers");
   }
@@ -108,8 +107,8 @@ export function saveLeadSources(db: DB, agentId: string, workspaceId: string, in
   const was = countSignals(before);
   const now = countSignals(next);
   if (now > SIGNAL_BUDGET && now > was) throw new LeadSourceError(`An agent can track up to ${SIGNAL_BUDGET} signals (this would be ${now})`);
-  // Hiring surge watches the job boards listed under Job openings.
-  if (next.hiring_surge?.enabled && !next.hiring?.config.boards?.length) throw new LeadSourceError("Hiring surge watches the job boards under Job openings: add at least one board there");
+  // Hiring surge watches the boards of Job openings (typed in, or found on lead companies' careers pages).
+  if (next.hiring_surge?.enabled && !next.hiring?.config.boards?.length && !next.hiring?.enabled) throw new LeadSourceError("Hiring surge watches the job boards of Job openings: turn on Job openings too");
 
   for (const id of input.attach_list_ids) {
     if (!db.prepare("SELECT 1 FROM lists WHERE id = ? AND workspace_id = ?").get(id, workspaceId)) throw new LeadSourceError("List not found", 404);

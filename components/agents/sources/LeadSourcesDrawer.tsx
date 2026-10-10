@@ -18,10 +18,9 @@ export interface DrawerSourceRow { id: string; source_type: string; config_json:
 function problems(d: Drafts, icpQuery: string): string[] {
   const out: string[] = [];
   if (d.own_content_engagement.enabled && !d.own_content_engagement.config.urls?.length) out.push("People engaging with you: add your LinkedIn profile or company page.");
-  if (d.hiring.enabled && !d.hiring.config.boards?.length) out.push("Job openings: add at least one job board.");
   const q = (d.lookalike.config.keywords?.[0] ?? "").trim();
   if (d.lookalike.enabled && (q ? q.length < 2 : !icpQuery)) out.push("Lookalike: add a Sales Navigator keyword query.");
-  if (d.hiring_surge.enabled && !d.hiring.config.boards?.length) out.push("Hiring surge: add at least one job board under Buying events.");
+  if (d.hiring_surge.enabled && !d.hiring.enabled && !d.hiring.config.boards?.length) out.push("Hiring surge: turn on Job openings too (it watches the same job boards).");
   if (d.company_followers.enabled && !d.company_followers.config.urls?.length) out.push("Company page followers: add your company page.");
   return out;
 }
