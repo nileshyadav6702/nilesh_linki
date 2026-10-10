@@ -21,6 +21,16 @@ function secret(): string | null {
   return process.env.EMAIL_TRACKING_SECRET || process.env.NEXTAUTH_SECRET || null;
 }
 
+/**
+ * Keys a link may have been signed with: the current one, then any retired ones listed in
+ * EMAIL_TRACKING_SECRET_PREVIOUS (comma-separated). Links already in inboxes must keep working
+ * after a secret rotation, or people can't unsubscribe and complain instead.
+ */
+function verificationKeys(): string[] {
+  const previous = (process.env.EMAIL_TRACKING_SECRET_PREVIOUS ?? "").split(",").map((k) => k.trim()).filter(Boolean);
+  return [secret(), ...previous, process.env.NEXTAUTH_SECRET].filter((k, i, all): k is string => !!k && all.indexOf(k) === i);
+}
+
 function baseUrl(): string | null {
   const value = (process.env.EMAIL_TRACKING_BASE_URL || process.env.NEXTAUTH_URL || "").replace(/\/$/, "");
   return /^https?:\/\//i.test(value) ? value : null;
@@ -40,8 +50,8 @@ export function createUnsubscribeToken(workspaceId: string, email: string): stri
 
 /** The (workspace, address) a token was minted for, or null if it is malformed or forged. */
 export function verifyUnsubscribeToken(token: string): { workspaceId: string; email: string } | null {
-  const key = secret();
-  if (!key || token.length > 1024) return null;
+  const keys = verificationKeys();
+  if (!keys.length || token.length > 1024) return null;
   const dot = token.lastIndexOf(".");
   if (dot < 1) return null;
   let parsed: unknown;
@@ -50,9 +60,11 @@ export function verifyUnsubscribeToken(token: string): { workspaceId: string; em
   const [workspaceId, email] = parsed as [string, string];
   if (!workspaceId || !/^[^\s@]+@[^\s@]+$/.test(email)) return null;
   const supplied = Buffer.from(token.slice(dot + 1));
-  const expected = Buffer.from(sign(workspaceId, email, key));
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
-  return { workspaceId, email };
+  for (const key of keys) {
+    const expected = Buffer.from(sign(workspaceId, email, key));
+    if (supplied.length === expected.length && timingSafeEqual(supplied, expected)) return { workspaceId, email };
+  }
+  return null;
 }
 
 export function unsubscribeUrl(workspaceId: string, email: string): string | null {
@@ -102,7 +114,7 @@ export function unsubscribeAddress(workspaceId: string, email: string, source = 
         SELECT rp.id FROM run_profiles rp JOIN targets t ON t.id = rp.target_id WHERE t.workspace_id = ? AND lower(t.email) = ?)`)
       .run(workspaceId, address).changes;
     const jobsCancelled = db.prepare(`UPDATE email_jobs SET status = 'cancelled', last_error = 'Recipient unsubscribed', updated_at = datetime('now')
-      WHERE workspace_id = ? AND recipient = ? AND status = 'pending' AND source = 'campaign'`).run(workspaceId, address).changes;
+      WHERE workspace_id = ? AND lower(recipient) = ? AND status = 'pending' AND source = 'campaign'`).run(workspaceId, address).changes;
     emitDomainEvent({ workspaceId, type: "email.unsubscribed", entityType: target ? "contact" : "email", entityId: target?.id ?? address, payload: { email: address, source } });
     return { tracksStopped, jobsCancelled };
   })();

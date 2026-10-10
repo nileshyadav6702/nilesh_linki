@@ -28,13 +28,18 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     res.setHeader("Allow", ["GET", "POST"]);
     return res.status(405).end();
   }
-  if (isRateLimited(req, "unsubscribe", 30, 60_000)) {
-    res.setHeader("Retry-After", "60");
-    return page(res, 429, "Too many requests", "<p>Please try again in a minute.</p>");
-  }
   const token = String(req.query.token ?? "");
   const verified = verifyUnsubscribeToken(token);
-  if (!verified) return page(res, 400, "Invalid link", "<p>This unsubscribe link is invalid or has been altered.</p>");
+  // Only bad tokens are rate limited (guessing). A valid signed link can't be forged, and
+  // one-click POSTs arrive from a few mail-provider IPs shared by everyone: limiting those
+  // would drop real unsubscribes.
+  if (!verified) {
+    if (isRateLimited(req, "unsubscribe", 30, 60_000)) {
+      res.setHeader("Retry-After", "60");
+      return page(res, 429, "Too many requests", "<p>Please try again in a minute.</p>");
+    }
+    return page(res, 400, "Invalid link", "<p>This unsubscribe link is invalid or has been altered. To stop these emails, reply to one of them with the word \"unsubscribe\".</p>");
+  }
 
   if (req.method === "GET") {
     return page(res, 200, "Unsubscribe", `<p>Stop receiving emails at <strong>${maskEmail(verified.email)}</strong>?</p>

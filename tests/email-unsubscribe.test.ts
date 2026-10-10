@@ -102,10 +102,34 @@ describe("/api/u/[token]", () => {
     expect(isAddressSuppressed(WS, "victim2@example.com")).toBeNull();
   });
 
-  it("rate-limits repeated requests from one client", () => {
-    const token = createUnsubscribeToken(WS, "spam@example.com")!;
+  it("rate-limits repeated bad tokens from one client", () => {
     let last = 0;
-    for (let i = 0; i < 31; i++) { const res = mockRes(); handler(mockReq("GET", token, "10.0.0.9"), res); last = res.statusCode; }
+    for (let i = 0; i < 31; i++) { const res = mockRes(); handler(mockReq("GET", `guess${i}.abc`, "10.0.0.9"), res); last = res.statusCode; }
     expect(last).toBe(429);
+  });
+
+  it("never rate-limits a valid one-click unsubscribe (mail providers POST from shared IPs)", () => {
+    let last = 0;
+    for (let i = 0; i < 40; i++) {
+      const res = mockRes();
+      handler(mockReq("POST", createUnsubscribeToken(WS, `bulk${i}@example.com`)!, "10.0.0.10"), res);
+      last = res.statusCode;
+    }
+    expect(last).toBe(200);
+    expect(isAddressSuppressed(WS, "bulk39@example.com")).not.toBeNull();
+  });
+
+  it("links signed with a retired secret keep working after rotation", () => {
+    const old = createUnsubscribeToken(WS, "rotated@example.com")!;
+    process.env.EMAIL_TRACKING_SECRET = "unsub-test-secret-v2";
+    process.env.EMAIL_TRACKING_SECRET_PREVIOUS = "unsub-test-secret";
+    try {
+      expect(verifyUnsubscribeToken(old)).toEqual({ workspaceId: WS, email: "rotated@example.com" });
+      delete process.env.EMAIL_TRACKING_SECRET_PREVIOUS;
+      expect(verifyUnsubscribeToken(old)).toBeNull();
+    } finally {
+      process.env.EMAIL_TRACKING_SECRET = "unsub-test-secret";
+      delete process.env.EMAIL_TRACKING_SECRET_PREVIOUS;
+    }
   });
 });
