@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { newReplyText } from "@/lib/email/reply-text";
 import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { getDb } from "@/lib/db";
 import { addSuppression, removeSuppression } from "@/lib/platform/suppression";
@@ -31,7 +32,7 @@ export async function classifyAndDispatch(replyId: string, overrideKind?: ReplyK
     // the same model (which would repeat the error). It dispatches through the same safe path.
     const verdict: Verdict = overrideKind
       ? { kind: overrideKind, confidence: 1, summary: "Manually reclassified", suggested_action: "manual", return_date: null }
-      : await classifyReply(workspaceId, String(reply.subject ?? ""), String(reply.body_text ?? ""));
+      : await classifyReply(workspaceId, String(reply.subject ?? ""), newReplyText(String(reply.body_text ?? "")));
     const now = new Date().toISOString();
     db.prepare(`UPDATE email_replies SET classified_at = ?, classification_json = ?, classification_error = NULL,
       sentiment = ?, inbox_status = 'open', sla_due_at = COALESCE(sla_due_at, datetime('now', '+4 hours')) WHERE id = ?`)
@@ -41,7 +42,8 @@ export async function classifyAndDispatch(replyId: string, overrideKind?: ReplyK
 
     // A human override to unsubscribe is an explicit, deliberate choice; the model's inferred
     // unsubscribe still requires explicit opt-out language in the reply.
-    const explicitOptOut = overrideKind ? overrideKind === "unsubscribe" : EXPLICIT_OPT_OUT.test(String(reply.body_text ?? ""));
+    // Only the words the person wrote: a quoted footer ("Unsubscribe: <link>") is not an opt-out.
+    const explicitOptOut = overrideKind ? overrideKind === "unsubscribe" : EXPLICIT_OPT_OUT.test(newReplyText(String(reply.body_text ?? "")));
     let dispatch: Record<string, unknown> = { action: "human_review" };
     if (verdict.kind === "unsubscribe" && explicitOptOut) {
       // Genuine opt-out — honour it: suppress workspace-wide and unenroll.
@@ -127,7 +129,8 @@ function parseVerdict(content: string): Verdict | null {
 
 async function classifyReply(workspaceId: string, subject: string, body: string): Promise<Verdict> {
   const text = `${subject}\n${body}`.trim();
-  const deterministic = ruleVerdict(text);
+  // The subject quotes ours ("Re: …"): the rules read the reply's own words only; the model sees both.
+  const deterministic = ruleVerdict(body);
   if (deterministic && deterministic.confidence >= 0.97) return deterministic;
   const apiKey = aiApiKey(workspaceId);
   if (!apiKey) return deterministic ?? { kind: "human_review", confidence: 0.4, summary: "No AI classifier configured; manual review required", suggested_action: "review" };
