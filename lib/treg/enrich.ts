@@ -78,8 +78,12 @@ export async function enrichForScoring(db: DB, workspaceId: string, targetIds: s
 /** Homepages read per enrichment pass (TinyFish through treg is free; Crawl4AI fallback $0.00015). */
 const WEBSITES_PER_PASS = 20;
 
-/** "Title — description — first lines" of a homepage, trimmed for the scoring prompt. */
+const ERROR_PAGE = /^(error\b|page cannot be displayed|access denied|forbidden|not found|404\b|403\b|just a moment|attention required|site (is )?(under construction|not found)|domain (is )?for sale)/i;
+
+/** "Title — description — first lines" of a homepage, trimmed for the scoring prompt; "" for error pages. */
 export function websiteSummary(p: { title: string | null; description: string | null; text: string }): string {
+  // Error, block and parked-domain pages say nothing about the company.
+  if (ERROR_PAGE.test((p.title ?? p.text).trim()) || ERROR_PAGE.test(p.text.trim().slice(0, 80))) return "";
   const lines = p.text.split("\n").map((l) => l.replace(/[#*_>\[\]()!|]/g, " ").replace(/https?:\/\/\S+/g, "").replace(/\s+/g, " ").trim())
     .filter((l) => l.length > 25);
   return [p.title, p.description, ...lines].filter(Boolean).join(" — ").slice(0, 1500);

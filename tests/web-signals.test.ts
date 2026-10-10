@@ -95,5 +95,7 @@ describe("funding news queries and homepage summaries", () => {
   it("keeps the meaningful lines of a homepage", () => {
     const s = websiteSummary({ title: "Acme", description: "CRM for dentists", text: "# Menu\nLogin\nAcme helps dental clinics manage patients and bookings.\n[Docs](https://acme.com/docs)" });
     expect(s).toBe("Acme — CRM for dentists — Acme helps dental clinics manage patients and bookings.");
+    expect(websiteSummary({ title: null, description: null, text: "Error. Page cannot be displayed. Please contact your service provider for more details." })).toBe("");
+    expect(websiteSummary({ title: "Just a moment...", description: null, text: "Checking your browser" })).toBe("");
   });
 });
