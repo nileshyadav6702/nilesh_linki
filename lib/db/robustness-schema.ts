@@ -11,6 +11,9 @@ const STATEMENTS: string[] = [
   "ALTER TABLE targets ADD COLUMN signal_strength REAL",
   "ALTER TABLE targets ADD COLUMN contact_relevance REAL",
   "ALTER TABLE targets ADD COLUMN score_breakdown TEXT",
+  // Campaign settings: the language AI messages are written in (null = the user's account language) and split LinkedIn messages.
+  "ALTER TABLE agents ADD COLUMN language TEXT",
+  "ALTER TABLE agents ADD COLUMN split_messages INTEGER NOT NULL DEFAULT 0",
   // LinkedIn seat settings: country, weekly quotas (lib/linkedin/actions.ts applyWeeklyQuota), inbox filter and AI reply drafts.
   "ALTER TABLE accounts ADD COLUMN country TEXT",
   "ALTER TABLE accounts ADD COLUMN weekly_connection_limit INTEGER",

@@ -15,6 +15,7 @@ export interface AgentForm {
   name: string; mode: string; min_score: number; fit_weight: number; daily_lead_cap: number; autopilot_delay_minutes: number;
   linkedin_account_id: string | null; email_account_id: string | null; workflow_id: string | null; booking_url: string | null; enrich_emails: number;
   goal: string; tone: string; exclude_first_degree: number; reply_instructions?: string | null;
+  language?: string | null; split_messages?: number;
 }
 
 interface LinkedInAcc {

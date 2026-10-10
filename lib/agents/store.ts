@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { LANGUAGES } from "@/lib/user-profile";
 import { tregEnabled } from "@/lib/treg/client";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
@@ -14,6 +15,10 @@ export interface Agent {
   reply_instructions?: string | null;
   outreach_enabled: number; goal: "conversations" | "meetings"; tone: "professional" | "conversational" | "direct";
   channel: "linkedin" | "multi" | "email"; exclude_first_degree: number;
+  /** Language AI messages are written in; null = the user's account language. */
+  language?: string | null;
+  /** Send LinkedIn messages as 2-4 shorter ones when they have several paragraphs. */
+  split_messages?: number;
   created_at: string; updated_at: string;
 }
 
@@ -54,6 +59,8 @@ export const agentInputSchema = z.object({
   tone: z.enum(["professional", "conversational", "direct"]).default("professional"),
   channel: z.enum(["linkedin", "multi", "email"]).default("multi"),
   exclude_first_degree: z.boolean().default(true),
+  language: z.enum(LANGUAGES).nullish(),
+  split_messages: z.boolean().optional(),
 });
 export type AgentInput = z.infer<typeof agentInputSchema>;
 
@@ -92,12 +99,12 @@ export function createAgent(workspaceId: string, input: AgentInput): Agent {
   return getAgent(id, workspaceId)!;
 }
 
-const PATCHABLE = ["name", "icp_id", "mode", "min_score", "fit_weight", "workflow_id", "linkedin_account_id", "email_account_id", "autopilot_delay_minutes", "daily_lead_cap", "enrich_emails", "booking_url", "status", "goal", "tone", "channel", "exclude_first_degree", "outreach_enabled", "reply_instructions"] as const;
+const PATCHABLE = ["name", "icp_id", "mode", "min_score", "fit_weight", "workflow_id", "linkedin_account_id", "email_account_id", "autopilot_delay_minutes", "daily_lead_cap", "enrich_emails", "booking_url", "status", "goal", "tone", "channel", "exclude_first_degree", "outreach_enabled", "reply_instructions", "language", "split_messages"] as const;
 
 export function updateAgent(id: string, workspaceId: string, patch: Record<string, unknown>): Agent | null {
   const fields = PATCHABLE.filter((f) => patch[f] !== undefined);
   if (!fields.length) return getAgent(id, workspaceId);
-  const values = fields.map((f) => (["enrich_emails", "exclude_first_degree", "outreach_enabled"].includes(f) ? (patch[f] ? 1 : 0) : patch[f] ?? null));
+  const values = fields.map((f) => (["enrich_emails", "exclude_first_degree", "outreach_enabled", "split_messages"].includes(f) ? (patch[f] ? 1 : 0) : patch[f] ?? null));
   getDb().prepare(`UPDATE agents SET ${fields.map((f) => `${f} = ?`).join(", ")}, updated_at = datetime('now') WHERE id = ? AND workspace_id = ?`).run(...values, id, workspaceId);
   return getAgent(id, workspaceId);
 }

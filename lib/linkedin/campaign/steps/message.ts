@@ -1,6 +1,7 @@
 import { getSessionPage } from "@/lib/linkedin/session";
 import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { sendMessage } from "@/lib/linkedin/message";
+import { splitMessage } from "@/lib/linkedin/split-message";
 import { settledPriorAction } from "@/lib/linkedin/actions";
 import { peekApprovedDraft, consumeDraft } from "@/lib/linkedin/step-drafts";
 import { premium } from "@/lib/premium";
@@ -102,7 +103,9 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
   log(db, runId, target.id, "info", `Sending message to ${name}`);
   const sent = await sendLinkedinAction(db, messageAction, async () => {
     const page = await getSessionPage(accountId);
-    try { await sendMessage(page, fullName, messageText); } finally { await page.close(); }
+    // Campaign settings → "Split messages into a conversation".
+    const split = !!(db.prepare("SELECT a.split_messages FROM targets t JOIN agents a ON a.id = t.agent_id WHERE t.id = ?").get(target.id) as { split_messages: number } | undefined)?.split_messages;
+    try { await sendMessage(page, fullName, messageText, { parts: split ? splitMessage(messageText) : undefined }); } finally { await page.close(); }
   });
   if (!sent.claimed) { settlePriorLinkedinAction(db, runId, tr, steps, target.id, name, "message", sent.status); return; }
   await saveSessionAfterSend(accountId);

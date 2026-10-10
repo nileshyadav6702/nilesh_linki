@@ -171,7 +171,8 @@ export default function AgentDetail() {
             stats={d.steps}
             leadCount={leadCount}
             sources={{ count: d.sources.filter((s) => s.enabled).length, leads: d.sources.reduce((n, s) => n + (Number((s as { leads?: number }).leads) || 0), 0) }}
-            settings={{ goal: a.goal, tone: a.tone, exclude_first_degree: a.exclude_first_degree }}
+            settings={{ goal: a.goal, tone: a.tone, exclude_first_degree: a.exclude_first_degree, language: a.language, split_messages: a.split_messages }}
+            hasEmailSender={!!a.email_account_id}
             onChanged={load}
             onCreate={async () => { await patch({ create_default_campaign: true }, "Sequence created"); }}
             onEditSources={() => setTab("Sources")}

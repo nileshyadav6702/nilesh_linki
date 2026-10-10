@@ -107,8 +107,12 @@ function contextData(agent: Agent, icp: Icp | null, lead: LeadContext) {
   };
 }
 
-/** Messages are written in the ICP's language (callers swap in the user's own when they generate). */
-const writeIn = (icp: Icp | null) => `Write every message in ${icp?.language?.trim() || "English"}.`;
+/**
+ * The language messages are written in: the agent's campaign language when set (Campaign
+ * settings), else the ICP's (callers swap in the user's own account language when they generate).
+ */
+const writeIn = (icp: Icp | null, agent?: Pick<Agent, "language"> | null) =>
+  `Write every message in ${agent?.language?.trim() || icp?.language?.trim() || "English"}.`;
 
 /**
  * The workspace's AI outreach template for a step (Settings → AI Outreach Templates), as the model
@@ -146,7 +150,7 @@ export async function writeSequence(agent: Agent, icp: Icp | null, steps: Sequen
     instructions: [
       "Write the outreach sequence for this lead: one message for each entry in data.steps, in order, as one coherent arc.",
       `Tone: ${TONE[agent.tone] ?? TONE.professional}`,
-      writeIn(icp),
+      writeIn(icp, agent),
       TEMPLATE_RULE,
       ...RULES,
     ],
@@ -179,7 +183,7 @@ export async function rewriteStep(agent: Agent, icp: Icp | null, step: SequenceS
         : "Write a fresh alternative to data.current_draft for the same step; same goal, different wording and angle.",
       `This step's role: ${roleOf(step, totalOnTrack)}. Do not repeat the other messages in data.other_steps.`,
       `Tone: ${TONE[agent.tone] ?? TONE.professional}`,
-      writeIn(icp),
+      writeIn(icp, agent),
       TEMPLATE_RULE,
       ...RULES,
     ],

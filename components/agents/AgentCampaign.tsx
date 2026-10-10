@@ -9,7 +9,7 @@ import { aiName, DELAY_OPTIONS, delayLabel, STEP_TITLE, type CampaignStep } from
 import { blankStep, restructure, timeline, withPositions } from "@/components/agents/campaign/sequence";
 import StepDrawer, { type StepSave } from "@/components/agents/campaign/StepDrawer";
 import StepContactsModal from "@/components/agents/campaign/StepContactsModal";
-import CampaignSettings from "@/components/agents/campaign/CampaignSettings";
+import CampaignSettings, { type CampaignSettingsInitial } from "@/components/agents/campaign/CampaignSettings";
 import StepCard, { type StepStat } from "@/components/agents/campaign/StepCard";
 import LikePostsDrawer from "@/components/agents/campaign/LikePostsDrawer";
 import VoiceDrawer from "@/components/agents/campaign/VoiceDrawer";
@@ -29,9 +29,9 @@ const ADDABLE: Array<{ type: string; title: string; sub: string; icon: ReactNode
 const DOTS = { backgroundImage: "radial-gradient(var(--border-subtle) 1px, transparent 1px)", backgroundSize: "16px 16px" };
 
 /** The agent's sequence: lead sources, then every step in run order, editable in place. */
-export default function AgentCampaign({ agentId, workflowId, stats, leadCount, sources, settings, onChanged, onCreate, onEditSources }: {
+export default function AgentCampaign({ agentId, workflowId, stats, leadCount, sources, settings, hasEmailSender = false, onChanged, onCreate, onEditSources }: {
   agentId: string; workflowId: string | null; stats: StepStat[]; leadCount: number; sources: { count: number; leads: number };
-  settings: { goal: string; tone: string; exclude_first_degree: number };
+  settings: CampaignSettingsInitial; hasEmailSender?: boolean;
   onChanged: () => void; onCreate: () => Promise<void>; onEditSources: () => void;
 }) {
   const [steps, setSteps] = useState<CampaignStep[] | null>(null);
@@ -250,7 +250,9 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
           onClose={() => setEditStep(null)} onSave={(s) => saveStep(editingItem.step, s)} />
       )}
       {contactsOf && <StepContactsModal agentId={agentId} stepId={contactsOf.id} title={contactsOf.title} invite={contactsOf.invite} onClose={() => setContactsOf(null)} onChanged={onChanged} />}
-      {settingsOpen && <CampaignSettings agentId={agentId} initial={settings} onClose={() => setSettingsOpen(false)} onSaved={onChanged} />}
+      {settingsOpen && <CampaignSettings agentId={agentId} initial={settings} workflowId={workflowId} hasEmailSender={hasEmailSender}
+        connectStep={(steps ?? []).find((s) => s.step_type === "connect") ?? null}
+        onClose={() => setSettingsOpen(false)} onSaved={() => { void load(); onChanged(); }} />}
     </Panel>
   );
 }
