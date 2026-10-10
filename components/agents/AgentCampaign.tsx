@@ -38,7 +38,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
   const [draft, setDraft] = useState<CampaignStep[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [editStep, setEditStep] = useState<string | null>(null);
-  const [contactsOf, setContactsOf] = useState<{ id: string; title: string; invite: boolean } | null>(null);
+  const [contactsOf, setContactsOf] = useState<{ id: string; title: string; invite: boolean; accepted?: boolean } | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [delayMenu, setDelayMenu] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -80,7 +80,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
   }
 
   async function saveStep(step: CampaignStep, s: StepSave) {
-    if (s.delaySeconds === undefined && s.visitBefore === undefined) {
+    if (s.delaySeconds === undefined && s.visitBefore === undefined && s.likeBefore === undefined) {
       setBusy(true);
       const r = await fetch(`/api/workflows/${workflowId}/steps/${step.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(s.fields) });
       setBusy(false);
@@ -90,7 +90,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
       await load();
       return onChanged();
     }
-    if (await putAll(restructure(steps ?? [], step.id, { fields: s.fields, delaySeconds: s.delaySeconds, visitBefore: s.visitBefore }), "Step saved")) setEditStep(null);
+    if (await putAll(restructure(steps ?? [], step.id, { fields: s.fields, delaySeconds: s.delaySeconds, visitBefore: s.visitBefore, likeBefore: s.likeBefore }), "Step saved")) setEditStep(null);
   }
 
   async function saveSkip(step: CampaignStep, days: number) {
@@ -206,6 +206,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
                     aiLabel={aiName(s, countOn(s.step_type === "email" ? "email" : "message"))}
                     onRemove={() => removeStep(s.id)} onEdit={() => setEditStep(s.id)} onRecord={() => setEditStep(s.id)}
                     onContacts={() => setContactsOf({ id: s.id, title: `Step ${n} — ${STEP_TITLE[s.step_type] ?? s.step_type}`, invite: s.step_type === "connect" })}
+                    onAccepted={() => setContactsOf({ id: s.id, title: `Step ${n} — ${STEP_TITLE[s.step_type] ?? s.step_type}`, invite: true, accepted: true })}
                     onSaveSkip={(days) => void saveSkip(s, days)} />
                 </li>
               );
@@ -254,11 +255,12 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
       )}
       {editingItem && workflowId && !["like_posts", "voice"].includes(editingItem.step.step_type) && (
         <StepDrawer step={editingItem.step} stepNumber={items.indexOf(editingItem) + 1} delayBefore={editingItem.delayBefore} visitBefore={editingItem.visitBefore}
+          likeBefore={editingItem.likeBefore} agentId={agentId} language={settings.language ?? null}
           channelMessageCount={countOn(editingItem.step.step_type === "email" ? "email" : "message")} workflowId={workflowId}
           sampleTargetId={sample?.id ?? null} sampleTargetName={sample?.name ?? null} busy={busy}
           onClose={() => setEditStep(null)} onSave={(s) => saveStep(editingItem.step, s)} />
       )}
-      {contactsOf && <StepContactsModal agentId={agentId} stepId={contactsOf.id} title={contactsOf.title} invite={contactsOf.invite} onClose={() => setContactsOf(null)} onChanged={onChanged} />}
+      {contactsOf && <StepContactsModal agentId={agentId} stepId={contactsOf.id} title={contactsOf.title} invite={contactsOf.invite} accepted={contactsOf.accepted} onClose={() => setContactsOf(null)} onChanged={onChanged} />}
       {settingsOpen && <CampaignSettings agentId={agentId} initial={settings} workflowId={workflowId} hasEmailSender={hasEmailSender}
         connectStep={(steps ?? []).find((s) => s.step_type === "connect") ?? null}
         onClose={() => setSettingsOpen(false)} onSaved={() => { void load(); onChanged(); }} />}

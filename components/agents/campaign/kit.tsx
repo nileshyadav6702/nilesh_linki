@@ -13,6 +13,8 @@ export interface CampaignStep {
   skip_after_days?: number | null;
   /** connect: withdraw the pending invitation after this many days; 0 = never. */
   withdraw_after_days?: number | null;
+  /** AI message steps: AI outreach template to follow; null = automatic, "none" = let Kairo write freely. */
+  ai_template_id?: string | null;
   /** voice: length of the recorded message; null = nothing recorded yet. */
   voice_duration_ms?: number | null;
   [key: string]: unknown;
@@ -95,15 +97,22 @@ export function SideDrawer({ title, icon, onClose, footer, children, width = 640
 }
 
 /** Selectable card with a radio dot; children show only while selected. */
-export function RadioCard({ on, onSelect, title, subtitle, badge, children }: { on: boolean; onSelect: () => void; title: ReactNode; subtitle?: ReactNode; badge?: ReactNode; children?: ReactNode }) {
+export function RadioCard({ on, onSelect, title, subtitle, badge, highlight = false, children }: {
+  on: boolean; onSelect: () => void; title: ReactNode; subtitle?: ReactNode; badge?: ReactNode;
+  /** The recommended option: a warm tinted card while selected. */
+  highlight?: boolean; children?: ReactNode;
+}) {
+  const tone = on
+    ? highlight ? "border-[#f0785a]/55 bg-gradient-to-br from-[#fdeee9] via-[#fdf4f1] to-base-100" : "border-base-content/25 bg-base-200/40"
+    : "border-[var(--border-subtle)] bg-base-100 hover:border-base-content/20";
   return (
-    <div className={`relative rounded-[12px] border transition-colors ${on ? "border-primary/50 bg-primary/[0.04]" : "border-[var(--border-subtle)] bg-base-100"}`}>
-      {badge && <span className="absolute -top-2.5 left-4 rounded-full bg-primary px-2.5 py-0.5 text-[12.5px] font-semibold uppercase tracking-[1px] text-primary-content">{badge}</span>}
-      <button type="button" onClick={onSelect} className="flex w-full items-start gap-3 px-5 py-4 text-left">
-        <span className={`mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-primary" : "border-base-content/25"}`}>{on && <span className="h-2 w-2 rounded-full bg-primary" />}</span>
-        <span className="min-w-0"><span className="block font-medium text-base-content">{title}</span>{subtitle && <span className="mt-0.5 block text-[15px] text-base-content/55">{subtitle}</span>}</span>
+    <div className={`relative rounded-[14px] border transition-colors ${tone}`}>
+      {badge && <span className="absolute -top-3 left-5 rounded-[6px] bg-[#f0785a] px-2.5 py-0.5 text-[13.5px] font-semibold uppercase tracking-[0.5px] text-white">{badge}</span>}
+      <button type="button" onClick={onSelect} className="flex w-full items-start gap-4 px-6 py-5 text-left">
+        <span className={`mt-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-[#f0785a]" : "border-base-content/25"}`}>{on && <span className="h-2.5 w-2.5 rounded-full bg-[#f0785a]" />}</span>
+        <span className="min-w-0"><span className="block text-[18.5px] text-base-content">{title}</span>{subtitle && <span className="mt-1 block text-[16.5px] leading-snug text-base-content/65">{subtitle}</span>}</span>
       </button>
-      {on && children && <div className="px-5 pb-5">{children}</div>}
+      {on && children && <div className="px-6 pb-6">{children}</div>}
     </div>
   );
 }

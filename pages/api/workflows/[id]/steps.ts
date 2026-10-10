@@ -105,7 +105,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       byTrack[track].push({ ...s, track });
     }
 
-    const cols = "step_order, track, step_type, template_id, delay_seconds, connect_note, message_body, email_subject, email_body, email_signature, email_position, email_delivery_mode, email_track_opens, email_track_clicks, message_position, ai_enabled, ai_model, ai_prompt, ai_max_words, ai_language, send_mode, like_count, skip_after_days, withdraw_after_days";
+    const cols = "step_order, track, step_type, template_id, delay_seconds, connect_note, message_body, email_subject, email_body, email_signature, email_position, email_delivery_mode, email_track_opens, email_track_clicks, message_position, ai_enabled, ai_model, ai_prompt, ai_max_words, ai_language, send_mode, like_count, skip_after_days, withdraw_after_days, ai_template_id";
     const updateStmt = db.prepare(`UPDATE workflow_steps SET ${cols.split(", ").map(c => `${c} = ?`).join(", ")} WHERE id = ?`);
     const insertStmt = db.prepare(`INSERT INTO workflow_steps (id, workflow_id, ${cols}) VALUES (${Array(2 + cols.split(", ").length).fill("?").join(", ")})`);
     const delStmt = db.prepare("DELETE FROM workflow_steps WHERE id = ?");
@@ -114,6 +114,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const clearEmailVariants = db.prepare("DELETE FROM workflow_step_email_variants WHERE step_id = ?");
     const addEmailVariant = db.prepare("INSERT INTO workflow_step_email_variants (id, step_id, subject, body, position) VALUES (?, ?, ?, ?, ?)");
 
+    // A step's AI template: one of this workspace's templates, "none", or automatic (null).
+    const aiTemplate = (t: unknown): string | null => (t === "none" ? "none"
+      : typeof t === "string" && db.prepare("SELECT 1 FROM ai_templates WHERE id = ? AND workspace_id = ?").get(t, ctx.workspaceId) ? t : null);
     const reconcile = db.transaction(() => {
       for (const track of ["linkedin", "email"] as const) {
         const existing = db.prepare("SELECT id FROM workflow_steps WHERE workflow_id = ? AND track = ? ORDER BY step_order").all(workflowId, track) as Array<{ id: string }>;
@@ -135,6 +138,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
             s.message_position ?? 1, s.ai_enabled ? 1 : 0, s.ai_model ?? null, s.ai_prompt ?? null, s.ai_max_words ?? null, s.ai_language ?? "English",
             s.send_mode === "fixed" ? "fixed" : "ai",
             clampInt(s.like_count, 1, 3, 1), clampInt(s.skip_after_days, 0, 60, 7), clampInt(s.withdraw_after_days, 0, 90, 30),
+            aiTemplate(s.ai_template_id),
           ];
           let stepId: string | undefined = typeof s.id === "string" && claimed.has(s.id) ? s.id : spare.shift();
           if (stepId) updateStmt.run(...vals, stepId);

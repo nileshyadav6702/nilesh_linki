@@ -87,7 +87,7 @@ export default function CampaignSettings({ agentId, initial, connectStep, workfl
   }, []);
 
   async function save() {
-    if (fallbackOn && (!Number.isInteger(days) || days < 1 || days > 90)) return toast.error("Pick between 1 and 90 days for the email fallback");
+    if (fallbackOn && (!Number.isInteger(days) || days < 1 || days > 60)) return toast.error("Pick between 1 and 60 days for the email fallback");
     setBusy(true);
     const r = await fetch(`/api/agents/${agentId}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -170,7 +170,7 @@ export default function CampaignSettings({ agentId, initial, connectStep, workfl
                   <button type="button" role="radio" aria-checked={fallbackOn} onClick={() => setFallbackOn(true)} className="inline-flex items-center gap-3">
                     <span className={radio(fallbackOn)}>{fallbackOn && <span className="h-3 w-3 rounded-full bg-[#f0785a]" />}</span> After
                   </button>
-                  <input type="number" min={1} max={90} disabled={!fallbackOn} value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Days before the email fallback"
+                  <input type="number" min={1} max={60} disabled={!fallbackOn} value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="Days before the email fallback"
                     className={`${inputCls} !h-12 !w-24 !text-[17px] disabled:opacity-50`} />
                   <span>days</span>
                 </div>

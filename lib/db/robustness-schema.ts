@@ -11,6 +11,8 @@ const STATEMENTS: string[] = [
   "ALTER TABLE targets ADD COLUMN signal_strength REAL",
   "ALTER TABLE targets ADD COLUMN contact_relevance REAL",
   "ALTER TABLE targets ADD COLUMN score_breakdown TEXT",
+  // AI message steps: which AI outreach template guides the writing (null = automatic, 'none' = no template).
+  "ALTER TABLE workflow_steps ADD COLUMN ai_template_id TEXT",
   // Campaign settings: the language AI messages are written in (null = the user's account language) and split LinkedIn messages.
   "ALTER TABLE agents ADD COLUMN language TEXT",
   "ALTER TABLE agents ADD COLUMN split_messages INTEGER NOT NULL DEFAULT 0",

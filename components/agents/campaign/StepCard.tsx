@@ -54,9 +54,9 @@ function SkipPill({ days, disabled, onSave }: { days: number; disabled: boolean;
 }
 
 /** One action step of the Campaign timeline. */
-export default function StepCard({ item, n, stat, editing, busy, aiLabel, workflowId, onRemove, onEdit, onContacts, onRecord, onSaveSkip }: {
+export default function StepCard({ item, n, stat, editing, busy, aiLabel, workflowId, onRemove, onEdit, onContacts, onAccepted, onRecord, onSaveSkip }: {
   item: Item; n: number; stat: StepStat | undefined; editing: boolean; busy: boolean; aiLabel: string; workflowId: string;
-  onRemove: () => void; onEdit: () => void; onContacts: () => void; onRecord: () => void; onSaveSkip: (days: number) => void;
+  onRemove: () => void; onEdit: () => void; onContacts: () => void; onAccepted?: () => void; onRecord: () => void; onSaveSkip: (days: number) => void;
 }) {
   const s = item.step;
   const look = STEP_ICON[s.step_type] ?? STEP_ICON.message;
@@ -122,7 +122,7 @@ export default function StepCard({ item, n, stat, editing, busy, aiLabel, workfl
           {s.step_type === "connect" && (
             <span className="inline-flex items-center gap-1.5">
               <Tip text={`Invitation has been sent to ${stat?.invited ?? 0} contact${stat?.invited === 1 ? "" : "s"} (${stat?.accepted ?? 0} accepted)`}>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-success/12 px-3.5 py-1 text-[#2f8a4c]"><RiCheckLine size={17} />{stat?.accepted ?? 0} accepted</span>
+                <button type="button" onClick={onAccepted} className="inline-flex items-center gap-1.5 rounded-full bg-success/12 px-3.5 py-1 text-[#2f8a4c] hover:bg-success/20"><RiCheckLine size={17} />{stat?.accepted ?? 0} accepted</button>
               </Tip>
               <Tip text={withdraw > 0
                 ? `Invitations that aren't accepted within ${withdraw} days are automatically withdrawn. This helps maintain the health of your LinkedIn account.`

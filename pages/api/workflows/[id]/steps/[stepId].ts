@@ -25,6 +25,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     if (has("ai_enabled")) put("ai_enabled", body.ai_enabled ? 1 : 0);
     const int = (k: string, min: number, max: number) => { const n = Math.round(Number(body[k])); if (Number.isFinite(n)) put(k, Math.min(max, Math.max(min, n))); };
+    if (has("ai_template_id")) {
+      const t = body.ai_template_id;
+      if (t !== null && t !== "none" && !(typeof t === "string" && db.prepare("SELECT 1 FROM ai_templates WHERE id = ? AND workspace_id = ?").get(t, ctx.workspaceId))) return res.status(400).json({ error: "Unknown AI template" });
+      put("ai_template_id", t ?? null);
+    }
     if (has("like_count")) int("like_count", 1, 3);
     if (has("skip_after_days")) int("skip_after_days", 0, 60);
     if (has("withdraw_after_days")) int("withdraw_after_days", 0, 90);

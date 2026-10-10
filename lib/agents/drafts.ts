@@ -6,7 +6,7 @@ import type { Icp } from "@/lib/icp/schema";
 import type { Agent } from "@/lib/agents/store";
 import { workflowChannels, type Channel } from "@/lib/agents/enroll";
 import { getDb } from "@/lib/db";
-import { kindForStep, templateFor, tokensForPrompt } from "@/lib/ai-templates/store";
+import { getTemplate, kindForStep, templateFor, tokensForPrompt } from "@/lib/ai-templates/store";
 
 export interface StrongSignal { id: string; type: string; title: string; snippet: string | null; source_url: string | null; occurred_at: string }
 
@@ -35,6 +35,8 @@ export interface SequenceStep {
   channel: Channel | null;
   /** The same text goes to everyone (set in the Campaign tab), so the agent writes no draft for it. */
   fixed?: boolean;
+  /** AI outreach template the step follows; null = automatic, "none" = no template. */
+  ai_template_id?: string | null;
   label: string;
 }
 
@@ -42,8 +44,8 @@ const STEP_LABEL: Record<string, string> = { visit: "Visit profile", connect: "C
 
 export function sequenceSteps(db: Database.Database, workflowId: string | null): SequenceStep[] {
   if (!workflowId) return [];
-  const rows = db.prepare(`SELECT id, track, step_type, step_order, delay_seconds, send_mode FROM workflow_steps
-    WHERE workflow_id = ? AND COALESCE(enabled, 1) = 1 ORDER BY track DESC, step_order`).all(workflowId) as Array<{ id: string; track: string; step_type: string; step_order: number; delay_seconds: number | null; send_mode: string | null }>;
+  const rows = db.prepare(`SELECT id, track, step_type, step_order, delay_seconds, send_mode, ai_template_id FROM workflow_steps
+    WHERE workflow_id = ? AND COALESCE(enabled, 1) = 1 ORDER BY track DESC, step_order`).all(workflowId) as Array<{ id: string; track: string; step_type: string; step_order: number; delay_seconds: number | null; send_mode: string | null; ai_template_id: string | null }>;
   const out: SequenceStep[] = [];
   const day: Record<string, number> = { linkedin: 0, email: 0 };
   const pos: Record<string, number> = { linkedin: 0, email: 0 };
@@ -58,6 +60,7 @@ export function sequenceSteps(db: Database.Database, workflowId: string | null):
       channel: r.step_type === "message" ? "linkedin_message" : r.step_type === "email" ? "email" : null,
       label: STEP_LABEL[r.step_type] ?? r.step_type,
       fixed: r.send_mode === "fixed",
+      ai_template_id: r.ai_template_id,
     });
   }
   // Interleave the two parallel tracks by expected day, LinkedIn first on ties.
@@ -119,7 +122,11 @@ const writeIn = (icp: Icp | null, agent?: Pick<Agent, "language"> | null) =>
  * reads it: tokens become [FirstName], [AI block: …], [CTA]. Null in default mode or with no match.
  */
 function stepTemplate(agent: Agent, step: SequenceStep, totalOnTrack: number) {
-  const t = templateFor(getDb(), agent.workspace_id, step.channel === "email" ? "email" : "linkedin", kindForStep(step.position, totalOnTrack));
+  // The step's own choice wins: "none" = no template, an id = that template; null = the workspace's automatic pick.
+  if (step.ai_template_id === "none") return null;
+  const db = getDb();
+  const t = step.ai_template_id ? getTemplate(db, agent.workspace_id, step.ai_template_id)
+    : templateFor(db, agent.workspace_id, step.channel === "email" ? "email" : "linkedin", kindForStep(step.position, totalOnTrack));
   return t ? { subject: tokensForPrompt(t.subject), body: tokensForPrompt(t.body), instructions: tokensForPrompt(t.ai_instructions) } : null;
 }
 
