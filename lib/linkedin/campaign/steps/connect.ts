@@ -11,6 +11,16 @@ import { enforceSchedule, log, nowIso, trAdvance, trWait } from "../track-state"
 import type { Target } from "../types";
 import type { StepContext } from "./context";
 
+const NOTE_LIMIT = 300;
+
+/** A note that fits LinkedIn's limit, ending at the last whole word (unless that loses too much). */
+export function fitInvitationNote(note: string, limit = NOTE_LIMIT): string {
+  if (note.length <= limit) return note;
+  const cut = note.slice(0, limit);
+  const space = cut.lastIndexOf(" ");
+  return (space > limit - 60 ? cut.slice(0, space) : cut).trimEnd();
+}
+
 export async function runConnectStep(ctx: StepContext): Promise<void> {
   const { db, runId, tr, target, steps, step, name, accountId, accountLimits } = ctx;
   if (!enforceSchedule(db, tr, runId, target.id, name, accountLimits)) return;
@@ -41,7 +51,14 @@ export async function runConnectStep(ctx: StepContext): Promise<void> {
   db.prepare("UPDATE run_profile_tracks SET last_step_at = datetime('now') WHERE id = ?").run(tr.id);
   log(db, runId, target.id, "info", `Sending connection request to ${name}`);
   const linkedinUrl = await getLinkedinUrl(db, target, accountId);
-  const note = step.connect_note?.trim() ? renderOutreachTemplate(step.connect_note, freshTarget, loadTargetCustomValues(db, target.workspace_id, target.id)) : null;
+  let note = step.connect_note?.trim() ? renderOutreachTemplate(step.connect_note, freshTarget, loadTargetCustomValues(db, target.workspace_id, target.id)).trim() : null;
+  // LinkedIn takes 300 characters. A long note (merged fields can push it over) ends at the last
+  // whole word that fits, and the log says so, instead of being cut mid-word without a trace.
+  if (note && note.length > NOTE_LIMIT) {
+    const fitted = fitInvitationNote(note);
+    log(db, runId, target.id, "warn", `Invitation note for ${name} is ${note.length} characters (LinkedIn allows ${NOTE_LIMIT}) — shortened to ${fitted.length}`);
+    note = fitted;
+  }
   let noteSent = false;
   let publicUrl: string | null = null;
   const sent = await sendLinkedinAction(db, connect, async () => {

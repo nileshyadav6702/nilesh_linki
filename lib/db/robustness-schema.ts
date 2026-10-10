@@ -259,6 +259,9 @@ const STATEMENTS: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_runs_agent ON runs(agent_id, status)",
   // Sender's postal address for the campaign email footer (CAN-SPAM).
   "ALTER TABLE email_accounts ADD COLUMN postal_address TEXT",
+  // The text a message / InMail attempt carried, so a retry after a failed send reuses it
+  // instead of paying the AI to write a different one.
+  "ALTER TABLE linkedin_actions ADD COLUMN body TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

@@ -2,7 +2,7 @@ import { getSessionPage } from "@/lib/linkedin/session";
 import { aiApiKey, modelFor } from "@/lib/ai/models";
 import { sendMessage } from "@/lib/linkedin/message";
 import { splitMessage } from "@/lib/linkedin/split-message";
-import { settledPriorAction } from "@/lib/linkedin/actions";
+import { failedAttemptBody, settledPriorAction } from "@/lib/linkedin/actions";
 import { peekApprovedDraft, consumeDraft } from "@/lib/linkedin/step-drafts";
 import { premium } from "@/lib/premium";
 import { emitDomainEvent } from "@/lib/platform/events";
@@ -10,7 +10,7 @@ import { renderOutreachTemplate } from "@/lib/outreach/render";
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
 import { CONNECTION_RECHECK_HOURS } from "../constants";
 import { invitationExpired, skipNotConnected, skipToEmail } from "../invitation-fallback";
-import { actionInput, holdForAi, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction, stepTemplateBody } from "../step-helpers";
+import { actionInput, holdForAi, holdForMissingContent, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction, stepTemplateBody } from "../step-helpers";
 import { ensureSalesNavEnriched } from "../pre-enrich";
 import { enforceSchedule, log, nowIso, trAdvance, trFail, trRecordContext, trWait } from "../track-state";
 import type { Target } from "../types";
@@ -44,9 +44,14 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
   // An AI agent's approved draft for this step replaces the step's own content. Read now,
   // consumed only after the send succeeds, so a failed send keeps the approved copy.
   const approvedDraft = peekApprovedDraft(db, target.id, "linkedin_message", step.id, (step.message_position ?? 1) === 1);
+  const retryText = approvedDraft ? null : failedAttemptBody(db, messageAction.key);
   if (approvedDraft) {
     messageText = approvedDraft.body;
     log(db, runId, target.id, "info", `Using the approved agent draft for ${name}`);
+  } else if (retryText) {
+    // A retry after a failed send: the same words, not a new (and newly paid-for) AI message.
+    messageText = retryText;
+    log(db, runId, target.id, "info", `Retrying the same message for ${name}`);
   } else if (step.ai_enabled) {
     // Missing AI setup is the user's to fix: hold the step, never skip it as if it were done.
     if (!premium?.ai) {
@@ -96,8 +101,7 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
     if (!messageText && step.message_body) messageText = renderOutreachTemplate(step.message_body, freshTarget, customVals);
   }
   if (!messageText) {
-    log(db, runId, target.id, "warn", `No message body for message step — skipping ${name}`);
-    trAdvance(db, tr, steps);
+    holdForMissingContent(db, runId, tr, target.id, name, "the message step has no text");
     return;
   }
 
@@ -105,7 +109,7 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
   const fullName = target.full_name;
   db.prepare("UPDATE run_profile_tracks SET last_step_at = datetime('now') WHERE id = ?").run(tr.id);
   log(db, runId, target.id, "info", `Sending message to ${name}`);
-  const sent = await sendLinkedinAction(db, messageAction, async () => {
+  const sent = await sendLinkedinAction(db, { ...messageAction, body: messageText }, async () => {
     const page = await getSessionPage(accountId);
     // Campaign settings → "Split messages into a conversation".
     const split = !!(db.prepare("SELECT a.split_messages FROM targets t JOIN agents a ON a.id = t.agent_id WHERE t.id = ?").get(target.id) as { split_messages: number } | undefined)?.split_messages;

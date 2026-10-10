@@ -11,7 +11,7 @@ import { renderOutreachTemplate, findUnresolvedTokens } from "@/lib/outreach/ren
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
 import { EMAIL_RECHECK_INTERVAL_MS } from "../constants";
 import { effectiveEmailLimit, emailPaceGate, rescheduleToTomorrow } from "../schedule";
-import { holdForAi } from "../step-helpers";
+import { holdForAi, holdForMissingContent } from "../step-helpers";
 import { ensureApolloEnriched } from "../pre-enrich";
 import { enforceSchedule, log, trAdvance, trFail, trRecordContext, trReschedule, trSkip } from "../track-state";
 import type { Target } from "../types";
@@ -166,8 +166,7 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
   }
 
   if (!emailBody) {
-    log(db, runId, target.id, "warn", `No email body for email step — skipping ${name}`);
-    trAdvance(db, tr, steps);
+    holdForMissingContent(db, runId, tr, target.id, name, "the email step has no body");
     return;
   }
 

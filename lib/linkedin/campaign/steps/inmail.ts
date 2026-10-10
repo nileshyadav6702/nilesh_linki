@@ -1,10 +1,10 @@
 import { getSessionPage } from "@/lib/linkedin/session";
 import { aiApiKey, modelFor } from "@/lib/ai/models";
-import { settledPriorAction } from "@/lib/linkedin/actions";
+import { failedAttemptBody, settledPriorAction } from "@/lib/linkedin/actions";
 import { premium } from "@/lib/premium";
 import { renderOutreachTemplate } from "@/lib/outreach/render";
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
-import { actionInput, holdForAi, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction, stepTemplateBody } from "../step-helpers";
+import { actionInput, holdForAi, holdForMissingContent, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction, stepTemplateBody } from "../step-helpers";
 import { ensureSalesNavEnriched } from "../pre-enrich";
 import { enforceSchedule, log, nowIso, trAdvance, trFail, trRecordContext, trSkip } from "../track-state";
 import type { Target } from "../types";
@@ -35,7 +35,13 @@ export async function runInmailStep(ctx: StepContext): Promise<void> {
 
   let inmailBody = "";
   let inmailSubject = "";
-  if (step.ai_enabled) {
+  // A retry after a failed send reuses the same InMail rather than writing (and paying for) a new one.
+  const retry = (() => { try { return JSON.parse(failedAttemptBody(db, inmailAction.key) ?? "null") as { subject: string; body: string } | null; } catch { return null; } })();
+  if (retry?.body) {
+    inmailBody = retry.body;
+    inmailSubject = retry.subject ?? "";
+    log(db, runId, target.id, "info", `Retrying the same InMail for ${name}`);
+  } else if (step.ai_enabled) {
     if (!premium?.ai) {
       holdForAi(db, runId, tr, target.id, name, "the AI writer is unavailable in this build");
       return;
@@ -85,13 +91,11 @@ export async function runInmailStep(ctx: StepContext): Promise<void> {
     inmailSubject = renderOutreachTemplate(step.email_subject ?? "", freshTarget, customVals).trim();
   }
   if (!inmailBody) {
-    log(db, runId, target.id, "warn", `No body for InMail step — skipping ${name}`);
-    trAdvance(db, tr, steps);
+    holdForMissingContent(db, runId, tr, target.id, name, "the InMail step has no message");
     return;
   }
   if (!inmailSubject) {
-    log(db, runId, target.id, "warn", `No subject for InMail step (required) — skipping ${name}`);
-    trAdvance(db, tr, steps);
+    holdForMissingContent(db, runId, tr, target.id, name, "the InMail step has no subject (LinkedIn requires one)");
     return;
   }
 
@@ -99,7 +103,7 @@ export async function runInmailStep(ctx: StepContext): Promise<void> {
   log(db, runId, target.id, "info", `Sending InMail to ${name}`);
   const inmail = premium.inmail;
   const salesNavUrl = freshTarget.sales_nav_url;
-  const sent = await sendLinkedinAction(db, inmailAction, async () => {
+  const sent = await sendLinkedinAction(db, { ...inmailAction, body: JSON.stringify({ subject: inmailSubject, body: inmailBody }) }, async () => {
     const page = await getSessionPage(accountId);
     try { await inmail.sendInMail(page, salesNavUrl, inmailSubject, inmailBody); } finally { await page.close(); }
   });

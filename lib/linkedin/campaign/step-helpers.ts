@@ -48,7 +48,7 @@ export function settlePriorLinkedinAction(
 
 /** Claim, then send. On a thrown send the claim is closed as failed (retryable) or uncertain. */
 export async function sendLinkedinAction(
-  db: ReturnType<typeof getDb>, input: ReturnType<typeof actionInput>, send: () => Promise<void>,
+  db: ReturnType<typeof getDb>, input: ReturnType<typeof actionInput> & { body?: string | null }, send: () => Promise<void>,
 ): Promise<{ claimed: true; id: string } | { claimed: false; status: "sent" | "uncertain" }> {
   const claim = claimLinkedinAction(db, input);
   if (!claim.claimed) return { claimed: false, status: claim.status };
@@ -60,6 +60,16 @@ export async function sendLinkedinAction(
   }
   markLinkedinActionSent(db, claim.id);
   return claim;
+}
+
+/**
+ * The step has nothing to send (an empty template, a missing InMail subject): the user must fix
+ * the step. Hold the lead on it, never skip it as if it had been sent.
+ */
+export function holdForMissingContent(db: ReturnType<typeof getDb>, runId: string, tr: TrackRun, targetId: string, name: string, what: string) {
+  const why = `Nothing to send: ${what}. Fix the step to continue`;
+  trHold(db, tr, AI_BLOCKED_RETRY_HOURS, why);
+  log(db, runId, targetId, "warn", `${why} — holding ${name}, checking again in ${AI_BLOCKED_RETRY_HOURS}h`);
 }
 
 /** AI writing is blocked on something the user must fix: hold the step, never skip it. */

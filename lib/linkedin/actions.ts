@@ -36,6 +36,8 @@ export interface LinkedinActionInput {
   trackId: string;
   stepId: string;
   targetId: string;
+  /** The text being sent (messages, InMail), kept for a retry. */
+  body?: string | null;
 }
 
 export type ClaimResult =
@@ -61,13 +63,13 @@ export function claimLinkedinAction(db: DB, input: LinkedinActionInput): ClaimRe
     const prior = priorLinkedinAction(db, input.key);
     if (!prior) {
       const id = randomUUID();
-      db.prepare(`INSERT INTO linkedin_actions (id, idempotency_key, account_id, run_id, track_id, step_id, target_id, type, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sending')`).run(id, input.key, input.accountId, input.runId, input.trackId, input.stepId, input.targetId, input.type);
+      db.prepare(`INSERT INTO linkedin_actions (id, idempotency_key, account_id, run_id, track_id, step_id, target_id, type, status, body)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'sending', ?)`).run(id, input.key, input.accountId, input.runId, input.trackId, input.stepId, input.targetId, input.type, input.body ?? null);
       return { claimed: true, id };
     }
     if (prior.status === "failed") {
-      db.prepare(`UPDATE linkedin_actions SET status = 'sending', attempt = attempt + 1, last_error = NULL,
-        created_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND status = 'failed'`).run(prior.id);
+      db.prepare(`UPDATE linkedin_actions SET status = 'sending', attempt = attempt + 1, last_error = NULL, body = COALESCE(?, body),
+        created_at = datetime('now'), updated_at = datetime('now') WHERE id = ? AND status = 'failed'`).run(input.body ?? null, prior.id);
       return { claimed: true, id: prior.id };
     }
     if (prior.status === "sending") {
@@ -77,6 +79,11 @@ export function claimLinkedinAction(db: DB, input: LinkedinActionInput): ClaimRe
     }
     return { claimed: false, id: prior.id, status: prior.status };
   })();
+}
+
+/** The text of an earlier attempt at this action that failed (not sent), to send again unchanged. */
+export function failedAttemptBody(db: DB, key: string): string | null {
+  return (db.prepare("SELECT body FROM linkedin_actions WHERE idempotency_key = ? AND status = 'failed' AND body IS NOT NULL").get(key) as { body: string } | undefined)?.body ?? null;
 }
 
 /** LinkedIn accepted it. Also resolves an 'uncertain' row whose orphaned attempt finished later. */
