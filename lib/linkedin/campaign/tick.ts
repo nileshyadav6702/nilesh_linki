@@ -1,9 +1,10 @@
 import { getDb } from "@/lib/db";
+import { isWithinSchedule } from "./schedule";
 import { WORKER_ID, type ActiveLease } from "@/lib/email/infrastructure";
 import { shouldSyncAccepted, syncAcceptedConnections } from "@/lib/linkedin/sync-accepted";
 import { markTrackActionsUncertain, recoverStaleLinkedinActions, linkedinActionsToday, claimTrack, releaseTrack, applyWeeklyQuota } from "@/lib/linkedin/actions";
 import { premium } from "@/lib/premium";
-import { localDayBoundsUtc } from "@/lib/outreach/schedule";
+
 import { guard, WatchdogTimeoutError } from "@/lib/watchdog";
 import {
   ACCEPTED_SYNC_TIMEOUT_MS, EXECUTE_STEP_TIMEOUT_MS, PROFILE_DELAY_MAX, PROFILE_DELAY_MIN, REPLY_SYNC_TIMEOUT_MS, TICK_SOFT_BUDGET_MS,
@@ -189,20 +190,21 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
       const sentToday = isInmailFirst
         ? (inmailsSentToday.get(run.account_id) ?? 0)
         : (connectsSentToday.get(run.account_id) ?? 0);
-      const actionsLeft = Math.max(0, dailyLimit - sentToday);
-      const firstStepTypeSql = isInmailFirst ? "'sales_inmail'" : "'connect'";
-      // Same account-local day as the cap (this compared against UTC date('now')).
-      const enrollDay = localDayBoundsUtc(limits.timezone || "UTC");
-      const scheduledToday = (db.prepare(
+      // Today's window still open → what's left of today's cap; closed (evening, weekend) → the
+      // next working day's full cap, since everything enrolled now is scheduled there.
+      const windowOpen = isWithinSchedule(limits) && !closingSoon(limits);
+      const budget = Math.max(0, windowOpen ? dailyLimit - sentToday : dailyLimit);
+      const firstActionType = isInmailFirst ? "inmail" : "connect";
+      // Enrolled but not started, whatever day it's scheduled for (counting only today's slots let
+      // every after-hours pass enrol 5 more). Leads already invited and waiting don't count.
+      const notStarted = (db.prepare(
         `SELECT COUNT(*) as c FROM run_profile_tracks rt
          JOIN run_profiles rp ON rp.id = rt.run_profile_id
          JOIN runs r ON r.id = rp.run_id
-         JOIN workflow_steps ws ON ws.workflow_id = r.workflow_id AND ws.track = 'linkedin' AND ws.step_order = 1
-         WHERE r.account_id = ? AND rt.track = 'linkedin' AND rt.state = 'in_progress'
-         AND ws.step_type = ${firstStepTypeSql}
-         AND datetime(rt.next_step_at) >= ? AND datetime(rt.next_step_at) < ?`
-      ).get(run.account_id, enrollDay.start, enrollDay.end) as { c: number }).c;
-      slotsRemaining.set(run.account_id, Math.max(0, actionsLeft - scheduledToday));
+         WHERE r.account_id = ? AND rt.track = 'linkedin' AND rt.state = 'in_progress' AND rt.current_step = 0 AND rt.last_step_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM linkedin_actions la WHERE la.track_id = rt.id AND la.type = ? AND la.status IN ('sent','uncertain','sending'))`
+      ).get(run.account_id, firstActionType) as { c: number }).c;
+      slotsRemaining.set(run.account_id, Math.max(0, budget - notStarted));
     }
     const slotsLeft = slotsRemaining.get(run.account_id)!;
     if (slotsLeft > 0) {
@@ -210,8 +212,9 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
       const pending = db.prepare(
         `SELECT rt.id, rt.run_profile_id, rt.track FROM run_profile_tracks rt
          JOIN run_profiles rp ON rp.id = rt.run_profile_id
+         JOIN targets t ON t.id = rp.target_id
          WHERE rp.run_id = ? AND rt.track = 'linkedin' AND rt.state = 'pending'
-         ORDER BY rt.id LIMIT ?`
+         ORDER BY COALESCE(t.intent_score, 0) DESC, rp.created_at LIMIT ?`
       ).all(run.run_id, toEnroll) as Array<{ id: string; run_profile_id: string; track: string }>;
       spreadEnrollBatch(db, run.run_id, pending, limits, "linkedin");
       slotsRemaining.set(run.account_id, slotsLeft - pending.length);
@@ -368,4 +371,12 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
     heartbeat(db, stillActive);
     await randomDelay(PROFILE_DELAY_MIN, PROFILE_DELAY_MAX);
   }
+}
+
+/** Less than 15 minutes of today's window left (spreadEnrollBatch then schedules tomorrow). */
+function closingSoon(limits: { active_hours_end?: number | null; timezone?: string | null }): boolean {
+  const tz = limits.timezone || "UTC";
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "numeric", hourCycle: "h23" }).formatToParts(new Date());
+  const h = Number(parts.find((p) => p.type === "hour")?.value ?? 0) + Number(parts.find((p) => p.type === "minute")?.value ?? 0) / 60;
+  return h >= (limits.active_hours_end ?? 18) - 0.25;
 }

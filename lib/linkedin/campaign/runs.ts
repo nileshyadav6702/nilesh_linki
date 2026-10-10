@@ -1,7 +1,8 @@
 import { getDb } from "@/lib/db";
+import { isWithinSchedule } from "./schedule";
 import { campaignEmailsToday } from "@/lib/linkedin/actions";
 import { emitDomainEvent } from "@/lib/platform/events";
-import { localDayBoundsUtc, zonedParts, zonedTimeToUtcMs } from "@/lib/outreach/schedule";
+import { zonedParts, zonedTimeToUtcMs } from "@/lib/outreach/schedule";
 import { effectiveEmailLimit, getLocalParts, rescheduleToTomorrow } from "./schedule";
 import { log } from "./track-state";
 import type { AccountLimits, EmailAccountLimits, ScheduleConfig, TrackRun } from "./types";
@@ -143,22 +144,23 @@ export function enrollPendingEmailTracks(
   limits: EmailAccountLimits,
   sentToday: number,
 ): void {
-  const emailsLeft = Math.max(0, effectiveEmailLimit(limits) - sentToday);
-  // "Today" on the mailbox's calendar, like the cap it is checked against (was UTC date('now')).
-  const day = localDayBoundsUtc(limits.timezone || "UTC");
-  const scheduledToday = (db.prepare(
+  // Window open → what's left of today's cap; closed → the next working day's full cap.
+  const windowOpen = isWithinSchedule(limits);
+  const emailsLeft = Math.max(0, windowOpen ? effectiveEmailLimit(limits) - sentToday : effectiveEmailLimit(limits));
+  // Enrolled on this mailbox but not started yet, whatever day it is scheduled for.
+  const notStarted = (db.prepare(
     `SELECT COUNT(*) as c FROM run_profile_tracks rt
      JOIN run_profiles rp ON rp.id = rt.run_profile_id
-     WHERE rp.email_account_id = ? AND rt.track = 'email' AND rt.state = 'in_progress'
-     AND datetime(rt.next_step_at) >= ? AND datetime(rt.next_step_at) < ?`
-  ).get(emailAccountId, day.start, day.end) as { c: number }).c;
-  const slotsLeft = Math.max(0, emailsLeft - scheduledToday);
+     WHERE rp.email_account_id = ? AND rt.track = 'email' AND rt.state = 'in_progress' AND rt.last_step_at IS NULL`
+  ).get(emailAccountId) as { c: number }).c;
+  const slotsLeft = Math.max(0, emailsLeft - notStarted);
   if (slotsLeft <= 0) return;
   const pending = db.prepare(
     `SELECT rt.id, rt.run_profile_id, rt.track FROM run_profile_tracks rt
      JOIN run_profiles rp ON rp.id = rt.run_profile_id
+     JOIN targets t ON t.id = rp.target_id
      WHERE rp.run_id = ? AND rp.email_account_id = ? AND rt.track = 'email' AND rt.state = 'pending'
-     ORDER BY rt.id LIMIT ?`
+     ORDER BY COALESCE(t.intent_score, 0) DESC, rp.created_at LIMIT ?`
   ).all(runId, emailAccountId, Math.min(slotsLeft, 5)) as Array<{ id: string; run_profile_id: string; track: string }>;
   spreadEnrollBatch(db, runId, pending, limits, "email");
 }

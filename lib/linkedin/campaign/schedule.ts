@@ -92,8 +92,15 @@ export function rescheduleToTomorrow(account: ScheduleConfig): string {
   // Advance a day on the ACCOUNT's calendar, not the server's. Anchoring at local noon
   // keeps the +24h hop on the intended day across DST transitions.
   const { year, month, day } = zonedParts(tz);
-  const tomorrow = new Date(zonedTimeToUtcMs(tz, year, month, day, 12) + 86_400_000);
-  return randomSlotInActiveWindow(account, tomorrow);
+  const allowed = (account.working_days || "1,2,3,4,5").split(",").map(Number).map((d) => (d === 0 ? 7 : d));
+  // The next WORKING day (a Friday-evening reschedule lands on Monday, not Saturday).
+  for (let k = 1; k <= 8; k++) {
+    const candidate = new Date(zonedTimeToUtcMs(tz, year, month, day, 12) + k * 86_400_000);
+    const wd = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(candidate);
+    const iso = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].indexOf(wd) + 1;
+    if (allowed.includes(iso)) return randomSlotInActiveWindow(account, candidate);
+  }
+  return randomSlotInActiveWindow(account, new Date(zonedTimeToUtcMs(tz, year, month, day, 12) + 86_400_000));
 }
 
 export function nextScheduledSlot(account: ScheduleConfig): string {
