@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { getDb } from "@/lib/db";
+import { currentCostTag } from "@/lib/treg/cost-context";
 
 /**
  * treg.to: one key (TREG_API_KEY) for ~100 data vendors, paid per call. Lead discovery and
@@ -53,8 +54,12 @@ export interface TregResult<T> { data: T; costMicro: number; servedBy: string | 
 
 function record(workspaceId: string | null, endpoint: string, purpose: string, status: number | null, costMicro: number, servedBy: string | null, error: string | null) {
   try {
-    getDb().prepare("INSERT INTO treg_calls (id, workspace_id, endpoint, purpose, status, cost_micro, served_by, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(randomUUID(), workspaceId, endpoint, purpose, status, costMicro, servedBy, error?.slice(0, 300) ?? null);
+    // Attributed to the agent / signal / item / run it served (lib/treg/cost-context.ts).
+    const t = currentCostTag();
+    getDb().prepare(`INSERT INTO treg_calls (id, workspace_id, endpoint, purpose, status, cost_micro, served_by, error, agent_id, source_id, source_type, item_key, run_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(randomUUID(), workspaceId, endpoint, purpose, status, costMicro, servedBy, error?.slice(0, 300) ?? null,
+        t.agentId ?? null, t.sourceId ?? null, t.sourceType ?? null, t.itemKey ?? null, t.runId ?? null);
   } catch { /* reporting must never break a call */ }
 }
 

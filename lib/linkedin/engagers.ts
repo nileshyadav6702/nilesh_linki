@@ -14,7 +14,11 @@ export interface VoyagerLike {
   capturePage?(url: string, opts: { match: RegExp; scrolls?: number; kind?: BudgetKind }): Promise<string[]>;
 }
 
-export interface PostRef { activityUrn: string; text: string; postedAt: string | null; url: string }
+export interface PostRef {
+  activityUrn: string; text: string; postedAt: string | null; url: string;
+  /** Total reactions when the source reports them: an unchanged count means no new engagers to buy. */
+  reactions?: number | null;
+}
 
 export interface Engager {
   name: string;

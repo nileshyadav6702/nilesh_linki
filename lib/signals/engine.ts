@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { withCostTag } from "@/lib/treg/cost-context";
 import { sourceNeedsLinkedIn } from "@/lib/agents/store";
 import type Database from "better-sqlite3";
 import type { BrowserContext } from "playwright";
@@ -86,7 +87,7 @@ const SOCIAL_SIGNALS = new Set<string>(["competitor_engagement", "influencer_eng
 
 export interface RunStats { candidates: number; ingested: number; filtered: number; duplicates: number }
 
-export function buildContext(db: Database.Database, agent: Agent, source: AgentSource, detectorRunId: string, stats: RunStats, deps: { voyager?: VoyagerLike; browser?: BrowserContext; maxNew?: number }): SourceRunContext {
+export function buildContext(db: Database.Database, agent: Agent, source: AgentSource, detectorRunId: string, stats: RunStats, deps: { voyager?: VoyagerLike; browser?: BrowserContext; maxNew?: number; lean?: boolean }): SourceRunContext {
   const icpRecord = agent.icp_id ? getIcp(agent.icp_id, agent.workspace_id) : getLatestIcp(agent.workspace_id);
   const icp = icpRecord?.data ?? null;
   const cap = discoveryCap(agent);
@@ -102,7 +103,7 @@ export function buildContext(db: Database.Database, agent: Agent, source: AgentS
   };
 
   return {
-    db, workspaceId: agent.workspace_id, agent, source, config: parseSourceConfig(source.config_json), icp, detectorRunId, cursor, voyager: deps.voyager, browser: deps.browser,
+    db, workspaceId: agent.workspace_id, agent, source, config: parseSourceConfig(source.config_json), icp, detectorRunId, cursor, voyager: deps.voyager, browser: deps.browser, lean: deps.lean,
     isFull: () => deps.maxNew !== undefined && stats.ingested >= deps.maxNew,
     emitLead(candidate, signal, opts): EmitResult {
       stats.candidates++;
@@ -149,7 +150,7 @@ export function buildContext(db: Database.Database, agent: Agent, source: AgentS
  * passes the source scoped to one item) the scheduler sets the next run; otherwise the source is
  * rescheduled by its interval.
  */
-export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLike & { requests?: number }; browser?: BrowserContext; maxNew?: number; itemKey?: string } = {}): Promise<RunStats & { error: string | null }> {
+export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLike & { requests?: number }; browser?: BrowserContext; maxNew?: number; itemKey?: string; lean?: boolean } = {}): Promise<RunStats & { error: string | null; runId?: string }> {
   const db = getDb();
   const agent = db.prepare("SELECT * FROM agents WHERE id = ?").get(source.agent_id) as Agent | undefined;
   const stats: RunStats = { candidates: 0, ingested: 0, filtered: 0, duplicates: 0 };
@@ -160,7 +161,8 @@ export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLi
   const ctx = buildContext(db, agent, source, runId, stats, deps);
   let error: string | null = null;
   try {
-    await RUNNERS[source.source_type](ctx);
+    await withCostTag({ agentId: agent.id, sourceId: source.id, sourceType: source.source_type, itemKey: deps.itemKey && deps.itemKey !== "*" ? deps.itemKey : null, runId },
+      () => RUNNERS[source.source_type](ctx));
   } catch (err) {
     error = err instanceof Error ? err.message : String(err);
     // Budget/blocks are handled by the caller; they still end this run cleanly.
@@ -170,7 +172,7 @@ export async function runSource(source: AgentSource, deps: { voyager?: VoyagerLi
     }
   }
   finish();
-  return { ...stats, error };
+  return { ...stats, error, runId };
 
   function finish() {
     const requests = (deps.voyager?.requests ?? 0) - requestsBefore;

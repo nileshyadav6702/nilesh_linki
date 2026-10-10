@@ -55,16 +55,42 @@ export function nextYield(prev: number | null, qualified: number): number {
   return prev === null ? qualified : prev + EWMA_ALPHA * (qualified - prev);
 }
 
+/** Data cost per new lead (micro-USD) an item may run at before it stops speeding up ($0.02). */
+export const TARGET_COST_PER_LEAD_MICRO = 20_000;
+
 /**
  * Effective interval: productive items run more often (down to 0.5× base), items that keep
- * finding nobody slow down (×1.5 per empty run after the second, up to 3× base).
+ * finding nobody slow down (×1.5 per empty run after the second, up to 3× base). With data
+ * cost known: an item only speeds up while a new lead costs under the target, and one costing
+ * more than twice the target slows down in proportion (up to 3×).
  */
-export function adaptiveInterval(type: string, yieldAvg: number | null, emptyRuns: number): number {
+export function adaptiveInterval(type: string, yieldAvg: number | null, emptyRuns: number, costAvgMicro: number | null = null): number {
   const base = baseCadence(type);
   let factor = 1;
   if (emptyRuns >= 3) factor = Math.min(MAX_FACTOR, 1.5 ** (emptyRuns - 2));
   else if (yieldAvg !== null && yieldAvg > 0) factor = Math.max(MIN_FACTOR, 1 - 0.5 * Math.min(1, yieldAvg / PRODUCTIVE_YIELD));
+  if (costAvgMicro !== null && costAvgMicro > 0 && yieldAvg !== null && yieldAvg > 0 && emptyRuns < 3) {
+    const perLead = costAvgMicro / yieldAvg;
+    if (perLead > TARGET_COST_PER_LEAD_MICRO) factor = Math.max(factor, 1);
+    if (perLead > 2 * TARGET_COST_PER_LEAD_MICRO) factor = Math.min(MAX_FACTOR, factor * Math.min(2, perLead / (2 * TARGET_COST_PER_LEAD_MICRO)));
+  }
   return Math.round(base * factor * 100) / 100;
+}
+
+/** Running average of a unit's data cost per run (micro-USD). */
+export function nextCost(prev: number | null, costMicro: number): number {
+  return prev === null ? costMicro : prev + EWMA_ALPHA * (costMicro - prev);
+}
+
+/** Default daily data budget per agent (USD); agents.daily_data_budget_usd overrides it. */
+export const DEFAULT_AGENT_DATA_BUDGET_USD = 0.5;
+/** Share of the budget filler signals may use, so stronger signals always have room. */
+export const FILLER_BUDGET_SHARE = 0.7;
+
+export function agentBudgetUsd(override: number | null | undefined, env = process.env.AGENT_DATA_BUDGET_USD): number {
+  if (typeof override === "number" && override >= 0) return override;
+  const fromEnv = Number(env);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_AGENT_DATA_BUDGET_USD;
 }
 
 /** ±15% so cadences drift apart instead of firing together. `rand` in [0,1). */

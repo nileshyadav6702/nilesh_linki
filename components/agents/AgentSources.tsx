@@ -15,7 +15,19 @@ import type { Icp } from "@/lib/icp/schema";
 import { roleTitles, sizeLabel } from "@/lib/icp/targeting";
 
 export interface SourceItemRow { key: string; label: string; sub: string; leads: number; volume: "high" | "low" }
-export interface UnitView { item_key: string; state: "active" | "attention" | "waiting"; next_run_at: string; cadence_hours: number; note: string | null }
+export interface UnitView { item_key: string; state: "active" | "attention" | "waiting"; next_run_at: string; cadence_hours: number; note: string | null; cost_month_micro?: number; leads_month?: number }
+export interface DataCost { month_micro: number; today_micro: number; enrichment_month_micro: number; budget_usd: number }
+
+/** "$0.21", "<$0.01" from micro-USD. */
+export const money = (micro: number) => (micro > 0 && micro < 10_000 ? "<$0.01" : `$${(micro / 1e6).toFixed(2)}`);
+
+/** "$0.21 this month · $0.02 per lead" for a set of units (empty when nothing was spent). */
+export function costLine(units: UnitView[]): string | null {
+  const cost = units.reduce((n, u) => n + (u.cost_month_micro ?? 0), 0);
+  if (!cost) return null;
+  const leads = units.reduce((n, u) => n + (u.leads_month ?? 0), 0);
+  return `${money(cost)} this month${leads ? ` · ${money(cost / leads)} per lead` : " · no new leads"}`;
+}
 export interface AgentSourceRow {
   id: string; source_type: string; config_json: string; enabled: number; last_run_at: string | null; next_run_at: string | null; last_error: string | null; leads: number;
   items?: SourceItemRow[];
@@ -108,8 +120,10 @@ function Initial({ label }: { label: string }) {
 const COLS = "grid grid-cols-[minmax(0,1fr)_150px_150px_160px_64px] items-center gap-4";
 
 /** "Who this agent targets" + "How this agent finds leads": every signal with its leads, next run, Launch now and toggles. */
-export default function AgentSources({ agentId, agentName, ownListId, autoEnrichEmails, icp, rows, hasLinkedIn, sourcing, onToggleSourcing, onChanged, onEditTargeting, openImport = false }: {
+export default function AgentSources({ agentId, agentName, ownListId, autoEnrichEmails, icp, rows, hasLinkedIn, sourcing, onToggleSourcing, onChanged, onEditTargeting, openImport = false, dataCost = null }: {
   agentId: string; agentName: string; ownListId: string | null; autoEnrichEmails: boolean; icp: Icp; rows: AgentSourceRow[]; hasLinkedIn: boolean;
+  /** Data-provider spend for this agent (month, today vs its daily budget). */
+  dataCost?: DataCost | null;
   /** Whether the agent is finding leads (the "Active" switch). */
   sourcing: boolean; onToggleSourcing: () => void;
   onChanged: () => void; onEditTargeting?: () => void;
@@ -173,6 +187,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
         <div className="min-w-0">
           <div className="truncate text-[18px] text-base-content">{label}</div>
           {sub && <div className="truncate text-[15.5px] text-base-content/55">{sub}</div>}
+          {(() => { const c = costLine((s.schedule ?? []).filter((u) => u.item_key === (item?.key ?? "*"))); return c && <div className="truncate text-[14px] text-base-content/45">{c}</div>; })()}
         </div>
       </div>
       <button type="button" disabled={!s.enabled} onClick={() => setAskLaunch({ source: s, item })}
@@ -189,7 +204,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
     </div>
   );
 
-  const groupRow = (key: string, title: string, sub: string, leads: number, next: ReactNode, on: boolean, onToggle: () => void, look: { icon: ReactNode; cls: string }, children: ReactNode, error?: string | null) => {
+  const groupRow = (key: string, title: string, sub: string, leads: number, next: ReactNode, on: boolean, onToggle: () => void, look: { icon: ReactNode; cls: string }, children: ReactNode, error?: string | null, costText?: string | null) => {
     const expanded = !!open[key];
     return (
       <div key={key} className="border-t border-[var(--border-subtle)]">
@@ -203,6 +218,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
             <div className="min-w-0">
               <div className="truncate text-[19px] font-medium text-base-content">{title}</div>
               <div className="truncate text-[16px] text-base-content/55">{sub}</div>
+              {costText && <div className="truncate text-[14px] text-base-content/45">{costText}</div>}
               {error && <div className="mt-0.5 truncate text-[14px] text-error" title={error}>{error}</div>}
             </div>
           </div>
@@ -249,7 +265,13 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-[24px] font-semibold text-base-content">How this agent finds leads</h2>
-            <p className="text-[16.5px] text-base-content/60">{signalRows} source{signalRows === 1 ? "" : "s"} · {agentName}</p>
+            <p className="text-[16.5px] text-base-content/60">{signalRows} source{signalRows === 1 ? "" : "s"} · {agentName}
+              {dataCost && (
+                <span title={`Data provider cost: ${money(dataCost.month_micro - dataCost.enrichment_month_micro)} finding leads and ${money(dataCost.enrichment_month_micro)} reading their profiles this month`}>
+                  {" · "}Data cost {money(dataCost.month_micro)} this month · today {money(dataCost.today_micro)} of ${dataCost.budget_usd.toFixed(2)}
+                </span>
+              )}
+            </p>
           </div>
           <div className="flex items-center gap-5">
             <span className="flex items-center gap-3 text-[17px] text-base-content/70">Active <Toggle on={sourcing} onChange={onToggleSourcing} label={sourcing ? "Pause lead sourcing" : "Resume lead sourcing"} /></span>
@@ -284,7 +306,7 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
             return groupRow(s.id, GROUP_TITLE[s.source_type], `${items.length} ${items.length === 1 ? one : many} tracked`, s.leads, <NextCell s={s} units={s.schedule ?? []} />, !!s.enabled, () => void toggle(s),
               LOOK[s.source_type] ?? LOOK.events,
               items.length ? items.map((it) => childRow(s, it, it.label, it.sub, it.leads)) : childRow(s, null, GROUP_TITLE[s.source_type], "Nothing tracked yet", s.leads),
-              s.last_error);
+              s.last_error, costLine(s.schedule ?? []));
           })}
 
           {events.length > 0 && (() => {
@@ -292,7 +314,8 @@ export default function AgentSources({ agentId, agentName, ownListId, autoEnrich
             const live = events.filter((e) => e.enabled);
             return groupRow("events", "Buying events", `${events.length} event${events.length === 1 ? "" : "s"} tracked`, events.reduce((n, e) => n + e.leads, 0),
               <NextCell s={live[0] ?? events[0]} units={live.flatMap((e) => e.schedule ?? [])} />, on, () => void toggleEvents(), LOOK.events,
-              events.map((e) => childRow(e, null, EVENT_TITLE[e.source_type] ?? SIGNAL_LABEL[e.source_type] ?? e.source_type, e.last_error ?? null, e.leads, EVENT_ICON[e.source_type] ?? <RiRadarLine size={18} />)));
+              events.map((e) => childRow(e, null, EVENT_TITLE[e.source_type] ?? SIGNAL_LABEL[e.source_type] ?? e.source_type, e.last_error ?? null, e.leads, EVENT_ICON[e.source_type] ?? <RiRadarLine size={18} />)),
+              null, costLine(events.flatMap((e) => e.schedule ?? [])));
           })()}
 
           <div className="flex items-start gap-5 border-t border-[var(--border-subtle)] px-8 py-6">

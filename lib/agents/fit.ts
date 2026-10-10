@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { withCostTag } from "@/lib/treg/cost-context";
 import type Database from "better-sqlite3";
 import { aiJson, isAiConfigured, isAiBlockingError } from "@/lib/ai/client";
 import { icpTitleTerms, type Icp, type MatchMode } from "@/lib/icp/schema";
@@ -147,16 +148,30 @@ export async function scoreNewLeads(db: Database.Database, agent: Agent, icp: Ic
     return all.length;
   }
   let loaded = loadUnscored(db, agent, icpId, limit);
-  // Read profile + company (page, funding) first, so fit is judged on facts, not "company unknown".
-  if (tregEnabled() && icp && loaded.length && (await enrichForScoring(db, agent.workspace_id, loaded.map((l) => l.id)))) loaded = reloadRows(db, loaded);
   const requireText = opts.requireProfileText ?? true;
   let screenedOut = 0;
+  const reject = (id: string, reason: string) => {
+    applyFit(db, agent, id, icpId, { fit_score: 0, verdict: "poor", reason }, "high", mode);
+    clearFailure("score", id);
+    screenedOut++;
+  };
+  if (tregEnabled() && icp && loaded.length) {
+    // Free rules first, on what the signal already told us (headline, title, company): a lead
+    // they reject (agency, excluded company, competitor…) is never paid for. Keyword checks wait
+    // for the profile's about text.
+    loaded = loaded.filter((l) => { const pre = screenLead(l, icp, false); if (pre.ok) return true; reject(l.id, pre.reason); return false; });
+    // Then read profile + company first, so fit is judged on facts, not "company unknown". The
+    // funding lookup (the priciest call) only runs when the agent tracks the funding signal.
+    const funding = !!db.prepare("SELECT 1 FROM agent_sources WHERE agent_id = ? AND source_type = 'funding' AND enabled = 1").get(agent.id);
+    const enriched = loaded.length
+      ? await withCostTag({ agentId: agent.id, sourceType: "enrichment" }, () => enrichForScoring(db, agent.workspace_id, loaded.map((l) => l.id), { funding }))
+      : 0;
+    if (enriched) loaded = reloadRows(db, loaded);
+  }
   const screened = icp ? loaded.filter((l) => {
     const r = screenLead(l, icp, !requireText || hasProfileText(l));
     if (r.ok) return true;
-    applyFit(db, agent, l.id, icpId, { fit_score: 0, verdict: "poor", reason: r.reason }, "high", mode);
-    clearFailure("score", l.id);
-    screenedOut++;
+    reject(l.id, r.reason);
     return false;
   }) : loaded;
   const leads = requireText ? screened.filter((l) => hasProfileText(l)) : screened;

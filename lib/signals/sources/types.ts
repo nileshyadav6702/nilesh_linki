@@ -40,6 +40,8 @@ export interface SourceRunContext {
   isFull(): boolean;
   /** Persisted per-source state between runs. */
   cursor: Record<string, unknown>;
+  /** The scheduler's hint for low-yield items: read less (fewer posts, engagers, search rows). */
+  lean?: boolean;
 }
 
 export type SourceRunner = (ctx: SourceRunContext) => Promise<void>;

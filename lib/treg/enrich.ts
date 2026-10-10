@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { withCostTag } from "@/lib/treg/cost-context";
 import { getDb } from "@/lib/db";
 import { TregError, tregEnabled } from "@/lib/treg/client";
 import { tregCompany, tregProfile } from "@/lib/treg/linkedin";
@@ -19,9 +20,11 @@ const CONCURRENCY = 5;
  * about, photo, current job) and its company (page firmographics and latest funding round)
  * read first, so the model judges the company instead of saying "company unknown", and a
  * recent round shows up as a signal. Profile ~$0.0012 once per lead (enriched_profile_at);
- * company page $0.001 and funding $0.01 once per company, shared by every lead there.
+ * company page $0.001 once per company, shared by every lead there; funding $0.01 once per
+ * company, only when `funding` (the agent tracks "Companies that have recently raised funds").
  */
-export async function enrichForScoring(db: DB, workspaceId: string, targetIds: string[]): Promise<number> {
+export async function enrichForScoring(db: DB, workspaceId: string, targetIds: string[], opts: { funding?: boolean } = {}): Promise<number> {
+  const withFunding = opts.funding ?? true;
   if (!tregEnabled() || !targetIds.length) return 0;
   const rows = db.prepare(`SELECT t.id, t.linkedin_url, t.enriched_profile_at, t.company_id, c.linkedin_url company_url, c.profile_fetched_at, c.funding_checked_at
     FROM targets t LEFT JOIN companies c ON c.id = t.company_id WHERE t.id IN (${targetIds.map(() => "?").join(",")})`).all(...targetIds) as Array<{
@@ -52,7 +55,7 @@ export async function enrichForScoring(db: DB, workspaceId: string, targetIds: s
           const id = await companyId(coUrl);
           if (id) { db.prepare("UPDATE targets SET company_id = COALESCE(company_id, ?) WHERE id = ?").run(id, r.id); cid = cid ?? id; }
         }
-        if (cid) {
+        if (cid && withFunding) {
           // One at a time per company: the first lookup caches the round for the leads after it.
           const target = r.id;
           const next = (funding.get(cid) ?? Promise.resolve(false)).catch(() => false).then(() => applyFunding(db, workspaceId, cid!, target));
@@ -71,10 +74,10 @@ export async function enrichForScoring(db: DB, workspaceId: string, targetIds: s
 }
 
 type DB = Database.Database;
-interface Candidate { id: string; workspace_id: string; linkedin_url: string }
+interface Candidate { id: string; workspace_id: string; linkedin_url: string; agent_id: string | null }
 
 export function tregEnrichCandidates(db: DB, limit: number, workspaceId?: string): Candidate[] {
-  return db.prepare(`SELECT t.id, t.workspace_id, t.linkedin_url FROM targets t
+  return db.prepare(`SELECT t.id, t.workspace_id, t.linkedin_url, t.agent_id FROM targets t
     WHERE t.agent_status = 'needs_data' AND t.linkedin_url LIKE '%linkedin.com/in/%' AND t.enriched_profile_at IS NULL
       AND TRIM(COALESCE(t.headline, '')) = '' AND TRIM(COALESCE(t.summary, '')) = ''
       AND t.profile_enrich_attempts < ? AND (t.profile_enrich_attempted_at IS NULL OR t.profile_enrich_attempted_at < datetime('now', ?))
@@ -97,7 +100,7 @@ export async function enrichNeedsDataViaTreg(db: DB = getDb(), limit = TREG_ENRI
       db.prepare("UPDATE targets SET profile_enrich_attempts = profile_enrich_attempts + 1, profile_enrich_attempted_at = datetime('now') WHERE id = ?").run(c.id);
       result.attempted++;
       try {
-        const p = await tregProfile(c.workspace_id, c.linkedin_url);
+        const p = await withCostTag({ agentId: c.agent_id, sourceType: "enrichment" }, () => tregProfile(c.workspace_id, c.linkedin_url));
         if (!p) continue;
         const filled = !!(p.headline || p.about);
         db.prepare(`UPDATE targets SET headline = COALESCE(?, headline), summary = COALESCE(?, summary), location = COALESCE(location, ?),

@@ -231,6 +231,18 @@ const STATEMENTS: string[] = [
   // Reads shared across agents for a few hours (two agents tracking the same competitor).
   "CREATE TABLE IF NOT EXISTS signal_read_cache (key TEXT PRIMARY KEY, json TEXT NOT NULL, fetched_at TEXT NOT NULL)",
   "ALTER TABLE detector_runs ADD COLUMN item_key TEXT",
+  // Data-provider cost per agent / signal / item / run (lib/treg/cost-context.ts).
+  "ALTER TABLE treg_calls ADD COLUMN agent_id TEXT",
+  "ALTER TABLE treg_calls ADD COLUMN source_id TEXT",
+  "ALTER TABLE treg_calls ADD COLUMN source_type TEXT",
+  "ALTER TABLE treg_calls ADD COLUMN item_key TEXT",
+  "ALTER TABLE treg_calls ADD COLUMN run_id TEXT",
+  "CREATE INDEX IF NOT EXISTS idx_treg_calls_agent_day ON treg_calls(agent_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_treg_calls_run ON treg_calls(run_id)",
+  // Average data cost per run (micro-USD), for cost-aware cadence.
+  "ALTER TABLE source_units ADD COLUMN cost_avg_micro REAL",
+  // Per-agent daily data budget (USD); null = the default (AGENT_DATA_BUDGET_USD, $0.50).
+  "ALTER TABLE agents ADD COLUMN daily_data_budget_usd REAL",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

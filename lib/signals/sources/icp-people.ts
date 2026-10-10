@@ -40,9 +40,9 @@ function needTreg(ctx: SourceRunContext) {
 
 /** The next page of ICP people that pass the cheap filters, without the ones seen before. */
 async function nextPeople(ctx: SourceRunContext, key: string, keep: (p: LeadCandidate) => boolean): Promise<LeadCandidate[]> {
-  const r = await tregPeopleSearch(ctx.workspaceId, ctx.icp!, 50, (ctx.cursor[`${key}_token`] as string | undefined) ?? null);
+  const r = await tregPeopleSearch(ctx.workspaceId, ctx.icp!, ctx.lean ? 20 : 50, (ctx.cursor[`${key}_token`] as string | undefined) ?? null);
   ctx.cursor[`${key}_token`] = r.token;
-  return r.leads.filter((p) => p.profileUrl && keep(p) && prefilterLead(p, { icp: ctx.icp }).ok).slice(0, CHECKS_PER_RUN);
+  return r.leads.filter((p) => p.profileUrl && keep(p) && prefilterLead(p, { icp: ctx.icp }).ok).slice(0, ctx.lean ? 5 : CHECKS_PER_RUN);
 }
 
 export const topActiveRunner: SourceRunner = async (ctx) => {

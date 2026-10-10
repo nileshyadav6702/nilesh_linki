@@ -75,11 +75,26 @@ function dateOfPost(o: Obj, urn: string): string | null {
   return timeFromActivityUrn(urn);
 }
 
+const REACTION_KEYS = ["num_reactions", "numReactions", "reactions_count", "reactionsCount", "reaction_count", "reactionCount", "total_reactions", "totalReactions",
+  "totalReactionCount", "num_likes", "numLikes", "likes_count", "likesCount", "like_count", "likeCount"];
+
+/** The post's total reactions, from the first count-looking field (top level or one object down). */
+export function reactionCount(o: Obj, depth = 0): number | null {
+  for (const k of REACTION_KEYS) {
+    const v = o[k];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) return v;
+    if (typeof v === "string" && /^\d+$/.test(v)) return Number(v);
+  }
+  if (depth >= 1) return null;
+  for (const v of Object.values(o)) if (isObj(v)) { const n = reactionCount(v, depth + 1); if (n !== null) return n; }
+  return null;
+}
+
 export function toPostRef(o: Obj): PostRef | null {
   const urn = activityUrnOf(o);
   if (!urn) return null;
   const url = pick(o, ["url", "post_url", "postUrl", "share_url", "shareUrl", "link"]) ?? `https://www.linkedin.com/feed/update/${urn}/`;
-  return { activityUrn: urn, text: textOfPost(o), postedAt: dateOfPost(o, urn), url };
+  return { activityUrn: urn, text: textOfPost(o), postedAt: dateOfPost(o, urn), url, reactions: reactionCount(o) };
 }
 
 const posts = (data: unknown, limit: number) => postRows(data).map(toPostRef).filter((p): p is PostRef => !!p).slice(0, limit);

@@ -8,7 +8,7 @@ import ActivityFeed from "@/components/agents/activity/ActivityFeed";
 import AgentHeader from "@/components/agents/AgentHeader";
 import AgentOverview, { type ActivityItem, type Budget, type DayPoint, type Performance } from "@/components/agents/AgentOverview";
 import AgentSettings, { type AgentForm } from "@/components/agents/AgentSettings";
-import AgentSources, { type AgentSourceRow } from "@/components/agents/AgentSources";
+import AgentSources, { type AgentSourceRow, type DataCost } from "@/components/agents/AgentSources";
 import { EMPTY_ICP } from "@/components/agents/IcpEditor";
 import TargetingDrawer from "@/components/agents/targeting/TargetingDrawer";
 import AgentCampaign from "@/components/agents/AgentCampaign";
@@ -26,7 +26,7 @@ export const getServerSideProps = requireSignedIn;
 interface StepRow { id: string; track: string; step_type: string; step_order: number; delay_seconds: number; contacts: number; invited?: number; accepted?: number }
 interface Detail {
   agent: AgentForm & { id: string; status: string; outreach_enabled: number; icp_id: string | null; last_run_at: string | null; last_error: string | null; list_id: string | null; channel: string };
-  sources: AgentSourceRow[]; linkedin_budget: Budget | null;
+  sources: AgentSourceRow[]; linkedin_budget: Budget | null; data_cost?: DataCost | null;
   counts: { by_status: Record<string, number>; today: Record<string, number>; ai_cost_30d_usd: number };
   sequence: Array<Omit<Step, "draft">>; workflow: { id: string; name: string } | null;
   performance: Performance; series: DayPoint[]; activity: ActivityItem[]; next_run_at: string | null; due_today: number; next_outreach_at?: string | null; steps: StepRow[];
@@ -159,7 +159,7 @@ export default function AgentDetail() {
         {tab === "Sources" && (
           <div className="space-y-4">
             {editingIcp && <TargetingDrawer icp={icp} websiteUrl={icpWebsite} onClose={() => setEditingIcp(false)} onSave={saveIcp} />}
-            <AgentSources openImport={router.query.add === "1"} agentId={a.id} agentName={a.name} ownListId={a.list_id} autoEnrichEmails={!!a.enrich_emails && a.channel !== "linkedin"} icp={icp} rows={d.sources}
+            <AgentSources openImport={router.query.add === "1"} agentId={a.id} agentName={a.name} ownListId={a.list_id} autoEnrichEmails={!!a.enrich_emails && a.channel !== "linkedin"} icp={icp} rows={d.sources} dataCost={d.data_cost ?? null}
               hasLinkedIn={!!a.linkedin_account_id} onChanged={load} onEditTargeting={() => setEditingIcp(true)}
               sourcing={finding} onToggleSourcing={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")} />
           </div>

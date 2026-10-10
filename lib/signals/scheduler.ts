@@ -23,9 +23,9 @@ export interface SourceUnit {
   id: string; source_id: string; agent_id: string; workspace_id: string; source_type: string; item_key: string;
   state: "active" | "attention" | "waiting"; next_run_at: string; last_run_at: string | null; interval_hours: number;
   yield_avg: number | null; empty_runs: number; fail_count: number; last_error: string | null; note: string | null;
-  last_result_json: string | null; config_hash: string | null; icp_ref: string | null;
+  last_result_json: string | null; config_hash: string | null; icp_ref: string | null; cost_avg_micro?: number | null;
 }
-interface DueUnit extends SourceUnit { linkedin_account_id: string | null; daily_lead_cap: number }
+interface DueUnit extends SourceUnit { linkedin_account_id: string | null; daily_lead_cap: number; daily_data_budget_usd?: number | null }
 
 /** Sources that read the agent's ICP: a new ICP restarts their paging. */
 const ICP_TYPES = new Set(["top_active", "new_decision_maker", "lookalike", "tech_stack"]);
@@ -141,7 +141,7 @@ export function respreadOverdue(db: DB = getDb(), now = Date.now()): number {
 
 /** Due units of one kind, best first. */
 export function dueUnits(db: DB, kind: "linkedin" | "http", now = Date.now(), accountId?: string): DueUnit[] {
-  const rows = db.prepare(`SELECT u.*, a.linkedin_account_id, a.daily_lead_cap FROM source_units u
+  const rows = db.prepare(`SELECT u.*, a.linkedin_account_id, a.daily_lead_cap, a.daily_data_budget_usd FROM source_units u
       JOIN agent_sources s ON s.id = u.source_id JOIN agents a ON a.id = u.agent_id
      WHERE s.enabled = 1 AND a.status = 'active' AND u.next_run_at <= ?`).all(iso(now)) as DueUnit[];
   return rows
@@ -160,6 +160,11 @@ export function accountWindow(a: AccountRow): R.ActiveWindow {
 
 type Gate = { ok: true } | { ok: false; until: number; state: SourceUnit["state"]; note: string | null };
 
+/** Data-provider spend attributed to the agent today (signals and enrichment), micro-USD. */
+export function agentSpentTodayMicro(db: DB, agentId: string): number {
+  return (db.prepare("SELECT COALESCE(SUM(cost_micro), 0) s FROM treg_calls WHERE agent_id = ? AND created_at >= date('now')").get(agentId) as { s: number }).s;
+}
+
 function newLeadsToday(db: DB, agentId: string): number {
   return (db.prepare("SELECT COUNT(*) n FROM targets WHERE agent_id = ? AND created_at >= date('now')").get(agentId) as { n: number }).n;
 }
@@ -174,7 +179,16 @@ export function gate(db: DB, u: DueUnit, now = Date.now(), rand = Math.random): 
     const full = newLeadsToday(db, u.agent_id) >= Math.max(1, u.daily_lead_cap) || reviewBacklog(db, u.agent_id) >= R.REVIEW_BACKLOG;
     if (full) return { ok: false, until: nextUtcMidnight(now) + rand() * 2 * HOUR, state: "waiting", note: "Paused for today: the agent already has enough leads to work on" };
   }
-  if (!isSourceType(u.source_type) || !sourceNeedsLinkedIn(u.source_type)) return { ok: true };
+  if (!isSourceType(u.source_type) || !sourceNeedsLinkedIn(u.source_type)) {
+    // Data-provider units share the agent's daily data budget; filler signals leave room for stronger ones.
+    const budget = R.agentBudgetUsd(u.daily_data_budget_usd) * 1_000_000;
+    const spent = agentSpentTodayMicro(db, u.agent_id);
+    const limit = R.FILLER_TYPES.has(u.source_type) ? budget * R.FILLER_BUDGET_SHARE : budget;
+    if (spent >= limit) {
+      return { ok: false, until: nextUtcMidnight(now) + rand() * HOUR, state: "waiting", note: `Today's data budget ($${(budget / 1e6).toFixed(2)}) is used; resumes tomorrow` };
+    }
+    return { ok: true };
+  }
   if (!u.linkedin_account_id) return { ok: false, until: now + R.ATTENTION_RECHECK_HOURS * HOUR, state: "attention", note: "No LinkedIn account selected on this agent" };
   const acc = db.prepare("SELECT id, is_authenticated, active_hours_start, active_hours_end, timezone, working_days FROM accounts WHERE id = ?").get(u.linkedin_account_id) as AccountRow | undefined;
   if (!acc?.is_authenticated) return { ok: false, until: now + HOUR, state: "waiting", note: "Waiting for the LinkedIn account to be reconnected" };
@@ -211,14 +225,15 @@ function syncSourceNext(db: DB, sourceId: string) {
   db.prepare("UPDATE agent_sources SET next_run_at = (SELECT MIN(replace(substr(next_run_at, 1, 19), 'T', ' ')) FROM source_units WHERE source_id = ?) WHERE id = ?").run(sourceId, sourceId);
 }
 
-export interface UnitResult { candidates: number; ingested: number; error: string | null; errorName?: string }
+export interface UnitResult { candidates: number; ingested: number; error: string | null; errorName?: string; costMicro?: number }
 
 /** Set the unit's next run from what the run did. */
 export function recordResult(db: DB, u: SourceUnit & { linkedin_account_id?: string | null }, r: UnitResult, now = Date.now(), rand = Math.random): void {
   const yieldAvg = r.ingested > 0 || !r.error ? R.nextYield(u.yield_avg, r.ingested) : u.yield_avg;
   const empty = r.error ? u.empty_runs : r.ingested > 0 ? 0 : u.empty_runs + 1;
-  const interval = R.adaptiveInterval(u.source_type, yieldAvg, empty);
-  const result = JSON.stringify({ candidates: r.candidates, ingested: r.ingested, at: iso(now) });
+  const costAvg = r.costMicro !== undefined ? R.nextCost(u.cost_avg_micro ?? null, r.costMicro) : u.cost_avg_micro ?? null;
+  const interval = R.adaptiveInterval(u.source_type, yieldAvg, empty, costAvg);
+  const result = JSON.stringify({ candidates: r.candidates, ingested: r.ingested, cost_micro: r.costMicro ?? null, at: iso(now) });
   let next = now + R.jittered(interval, rand()) * HOUR;
   let state: SourceUnit["state"] = "active";
   let fail = 0;
@@ -238,8 +253,8 @@ export function recordResult(db: DB, u: SourceUnit & { linkedin_account_id?: str
     }
   }
   db.prepare(`UPDATE source_units SET last_run_at = ?, next_run_at = ?, interval_hours = ?, yield_avg = ?, empty_runs = ?, fail_count = ?,
-      state = ?, last_error = ?, note = ?, last_result_json = ? WHERE id = ?`)
-    .run(iso(now), iso(next), interval, yieldAvg, empty, fail, state, r.error, note, result, u.id);
+      state = ?, last_error = ?, note = ?, last_result_json = ?, cost_avg_micro = ? WHERE id = ?`)
+    .run(iso(now), iso(next), interval, yieldAvg, empty, fail, state, r.error, note, result, costAvg, u.id);
   syncSourceNext(db, u.source_id);
 }
 
@@ -252,8 +267,10 @@ export async function runUnit(u: DueUnit | SourceUnit, deps: Parameters<typeof i
   const scoped = u.item_key === "*" ? source : { ...source, config_json: JSON.stringify(configWithItems(source, (k) => k === u.item_key)) };
   let r: UnitResult;
   try {
-    const out = await runSource(scoped, { ...deps, itemKey: u.item_key });
-    r = { candidates: out.candidates, ingested: out.ingested, error: out.error };
+    // Items that keep finding nobody read less (fewer posts, engagers, search rows).
+    const out = await runSource(scoped, { ...deps, itemKey: u.item_key, lean: u.empty_runs >= 2 });
+    const cost = out.runId ? (db.prepare("SELECT COALESCE(SUM(cost_micro), 0) s FROM treg_calls WHERE run_id = ?").get(out.runId) as { s: number }).s : 0;
+    r = { candidates: out.candidates, ingested: out.ingested, error: out.error, costMicro: cost };
   } catch (err) {
     // Budget / LinkedIn pushback end the account's pass: record, then let the caller react.
     recordResult(db, u, { candidates: 0, ingested: 0, error: err instanceof Error ? err.message : String(err), errorName: err instanceof Error ? err.name : "" });
@@ -322,7 +339,11 @@ export function unitsForAgent(db: DB, agentId: string): SourceUnit[] {
   return db.prepare("SELECT * FROM source_units WHERE agent_id = ?").all(agentId) as SourceUnit[];
 }
 
-export interface UnitView { item_key: string; state: SourceUnit["state"]; next_run_at: string; cadence_hours: number; note: string | null }
+export interface UnitView {
+  item_key: string; state: SourceUnit["state"]; next_run_at: string; cadence_hours: number; note: string | null;
+  /** Data-provider cost and new leads this calendar month (UTC). */
+  cost_month_micro: number; leads_month: number;
+}
 
 /** Days of open-role history hiring surge has (it needs two weeks before it can compare). */
 function surgeHistoryDays(cursorJson: string | null): number {
@@ -337,13 +358,33 @@ function surgeHistoryDays(cursorJson: string | null): number {
 export function unitViews(db: DB, agentId: string): Map<string, UnitView[]> {
   const out = new Map<string, UnitView[]>();
   const cursors = new Map((db.prepare("SELECT id, cursor_json FROM agent_sources WHERE agent_id = ?").all(agentId) as Array<{ id: string; cursor_json: string | null }>).map((r) => [r.id, r.cursor_json]));
+  const month = new Date().toISOString().slice(0, 7);
+  const costs = new Map((db.prepare(`SELECT source_id || '|' || COALESCE(item_key, '*') k, SUM(cost_micro) c FROM treg_calls
+    WHERE agent_id = ? AND source_id IS NOT NULL AND substr(created_at, 1, 7) = ? GROUP BY 1`).all(agentId, month) as Array<{ k: string; c: number }>).map((r) => [r.k, r.c]));
+  const leads = new Map((db.prepare(`SELECT dr.agent_source_id || '|' || COALESCE(dr.item_key, '*') k, SUM(dr.ingested) n FROM detector_runs dr
+    JOIN agent_sources s ON s.id = dr.agent_source_id WHERE s.agent_id = ? AND substr(dr.started_at, 1, 7) = ? GROUP BY 1`).all(agentId, month) as Array<{ k: string; n: number }>).map((r) => [r.k, r.n]));
   for (const u of unitsForAgent(db, agentId)) {
     let note = u.state === "attention" ? u.last_error ?? u.note : u.note;
     if (!note && u.source_type === "hiring_surge" && u.state === "active") {
       const days = surgeHistoryDays(cursors.get(u.source_id) ?? null);
       if (days < 14) note = `Building history (day ${days + 1} of 14)`;
     }
-    out.set(u.source_id, [...(out.get(u.source_id) ?? []), { item_key: u.item_key, state: u.state, next_run_at: u.next_run_at, cadence_hours: u.interval_hours, note }]);
+    const key = `${u.source_id}|${u.item_key}`;
+    out.set(u.source_id, [...(out.get(u.source_id) ?? []), {
+      item_key: u.item_key, state: u.state, next_run_at: u.next_run_at, cadence_hours: u.interval_hours, note,
+      cost_month_micro: costs.get(key) ?? 0, leads_month: leads.get(key) ?? 0,
+    }]);
   }
   return out;
+}
+
+export interface DataCost { month_micro: number; today_micro: number; enrichment_month_micro: number; budget_usd: number }
+
+/** The agent's data-provider spend: this month, today (against its daily budget), and the enrichment part. */
+export function agentDataCost(db: DB, agentId: string): DataCost {
+  const month = new Date().toISOString().slice(0, 7);
+  const r = db.prepare(`SELECT COALESCE(SUM(cost_micro), 0) month, COALESCE(SUM(CASE WHEN source_type = 'enrichment' THEN cost_micro END), 0) enrich
+    FROM treg_calls WHERE agent_id = ? AND substr(created_at, 1, 7) = ?`).get(agentId, month) as { month: number; enrich: number };
+  const budget = (db.prepare("SELECT daily_data_budget_usd b FROM agents WHERE id = ?").get(agentId) as { b: number | null } | undefined)?.b ?? null;
+  return { month_micro: r.month, today_micro: agentSpentTodayMicro(db, agentId), enrichment_month_micro: r.enrich, budget_usd: R.agentBudgetUsd(budget) };
 }

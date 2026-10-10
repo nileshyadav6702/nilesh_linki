@@ -10,7 +10,12 @@ const TREG_PAGE = 50;
 /** With treg: ICP people search on a leads database, paged with a stored token. */
 async function tregLookalike(ctx: SourceRunContext) {
   if (!ctx.icp) throw new Error("Set up the agent's targeting first: lookalike search uses its job titles, industries and sizes");
-  const r = await tregPeopleSearch(ctx.workspaceId, ctx.icp, TREG_PAGE, (ctx.cursor.treg_token as string | undefined) ?? null);
+  // Rows are paid: ask for about what the agent can still take today (twice that, as some get filtered).
+  const today = (ctx.db.prepare("SELECT COUNT(*) n FROM targets WHERE agent_id = ? AND created_at >= date('now')").get(ctx.agent.id) as { n: number }).n;
+  const room = Math.max(0, ctx.agent.daily_lead_cap - today);
+  if (!room) return;
+  const size = Math.min(TREG_PAGE, Math.max(10, room * 2));
+  const r = await tregPeopleSearch(ctx.workspaceId, ctx.icp, size, (ctx.cursor.treg_token as string | undefined) ?? null);
   for (const p of r.leads) {
     if (ctx.isFull()) break;
     ctx.emitLead(p, { type: "lookalike", title: "Looks like your best customer", sourceUrl: p.profileUrl, dedupeKey: `lookalike:${ctx.agent.id}:${p.profileUrl}` });
