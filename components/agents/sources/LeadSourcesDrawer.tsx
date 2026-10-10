@@ -20,7 +20,6 @@ function problems(d: Drafts, icpQuery: string): string[] {
   if (d.own_content_engagement.enabled && !d.own_content_engagement.config.urls?.length) out.push("People engaging with you: add your LinkedIn profile or company page.");
   const q = (d.lookalike.config.keywords?.[0] ?? "").trim();
   if (d.lookalike.enabled && (q ? q.length < 2 : !icpQuery)) out.push("Lookalike: add a Sales Navigator keyword query.");
-  if (d.hiring_surge.enabled && !d.hiring.enabled && !d.hiring.config.boards?.length) out.push("Hiring surge: turn on Job openings too (it watches the same job boards).");
   if (d.company_followers.enabled && !d.company_followers.config.urls?.length) out.push("Company page followers: add your company page.");
   return out;
 }

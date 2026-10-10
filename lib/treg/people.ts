@@ -124,14 +124,25 @@ async function searchOnce(workspaceId: string, query: Obj, size: number, token?:
  * industry filter matches nobody (an empty search costs nothing), searches again without it
  * and lets scoring judge the industry instead.
  */
-export async function tregPeopleSearch(workspaceId: string, icp: Icp, size: number, token?: string | null): Promise<{ leads: LeadCandidate[]; token: string | null; total: number | null }> {
-  const query = icypeasQuery(icp);
-  if (!query) throw new Error("Add persona job titles to the agent's targeting to search for lookalike leads");
+export async function tregPeopleSearch(workspaceId: string, icp: Icp, size: number, token?: string | null, extra: Obj = {}): Promise<{ leads: LeadCandidate[]; token: string | null; total: number | null }> {
+  const base = icypeasQuery(icp);
+  if (!base) throw new Error("Add persona job titles to the agent's targeting to search for lookalike leads");
+  // Extra filters (time in role, headcount growth…) narrow the search itself: no paid row is
+  // returned for people a later check would drop.
+  const query = { ...base, ...extra };
   const first = await searchOnce(workspaceId, query, size, token);
   const industryFilter = query["currentCompany.industry"] as { include?: string[] } | undefined;
   if (first.leads.length || token || !industryFilter?.include) return first;
-  return searchOnce(workspaceId, icypeasQuery(icp, { industries: false })!, size);
+  return searchOnce(workspaceId, { ...icypeasQuery(icp, { industries: false })!, ...extra }, size);
 }
+
+/** Months in the current company (Icypeas' timeInCurrentCompany unit) that count as "new in role". */
+export const NEW_IN_ROLE_MONTHS = 3;
+/** Headcount growth (%) over six months that counts as a hiring surge. */
+export const SURGE_GROWTH_PCT = 20;
+
+export const newInRoleFilter = (): Obj => ({ timeInCurrentCompany: { "<=": NEW_IN_ROLE_MONTHS } });
+export const headcountGrowthFilter = (minPct = SURGE_GROWTH_PCT): Obj => ({ "currentCompany.headcountGrowth": { min: minPct, timespan: "6months" } });
 
 /**
  * The ICP's persona titles at one company (a funded company, a hiring one…), found by its website

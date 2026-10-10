@@ -5,6 +5,7 @@ import { sourceNeedsLinkedIn, type AgentSource } from "@/lib/agents/store";
 import { configWithItems, itemKeys } from "@/lib/agents/source-items";
 import { DISCOVERY_DAILY_LIMITS, discoveryPausedUntil, usedToday } from "@/lib/linkedin/budget";
 import { isSourceType } from "@/lib/signals/types";
+import { tregEnabled } from "@/lib/treg/client";
 import * as R from "@/lib/signals/schedule-rules";
 
 /**
@@ -365,7 +366,8 @@ export function unitViews(db: DB, agentId: string): Map<string, UnitView[]> {
     JOIN agent_sources s ON s.id = dr.agent_source_id WHERE s.agent_id = ? AND substr(dr.started_at, 1, 7) = ? GROUP BY 1`).all(agentId, month) as Array<{ k: string; n: number }>).map((r) => [r.k, r.n]));
   for (const u of unitsForAgent(db, agentId)) {
     let note = u.state === "attention" ? u.last_error ?? u.note : u.note;
-    if (!note && u.source_type === "hiring_surge" && u.state === "active") {
+    // Board-based surge needs two weeks of counts; with the people database it works from day one.
+    if (!note && u.source_type === "hiring_surge" && u.state === "active" && !tregEnabled()) {
       const days = surgeHistoryDays(cursors.get(u.source_id) ?? null);
       if (days < 14) note = `Building history (day ${days + 1} of 14)`;
     }

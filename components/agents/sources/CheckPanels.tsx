@@ -84,7 +84,7 @@ export function BuyingEventsPanel({ drafts, set, budgetLeft, hasLinkedIn }: Prop
         <CheckRow label="Hiring surge" pill={<NewPill />} hint="Companies whose hiring activity has increased significantly." checked={drafts.hiring_surge.enabled} onChange={(v) => toggle("hiring_surge", v)} />
         {needBoards && (
           <div className="space-y-1 border-t border-[var(--border-subtle)] pt-3">
-            <p className={`pb-1 pl-12 pr-3 ${note} text-base-content/60`}>Optional: job boards to watch (Greenhouse, Lever or Ashby). Leave empty and Kairo finds the boards on your leads&apos; company careers pages.{drafts.hiring_surge.enabled ? " Hiring surge compares each board's open roles with a few weeks earlier, so it starts flagging after two weeks." : ""}</p>
+            <p className={`pb-1 pl-12 pr-3 ${note} text-base-content/60`}>Optional: job boards to watch (Greenhouse, Lever or Ashby). Leave empty and Kairo finds the boards on your leads&apos; company careers pages.{drafts.hiring_surge.enabled ? " Hiring surge finds companies whose headcount grew 20%+ in 6 months, and on these boards also flags open roles jumping against a few weeks earlier." : ""}</p>
             <MiniList values={boards} placeholder="Job board, e.g. greenhouse:acme or lever:globex"
               validate={(v) => /^(greenhouse|lever|ashby):[\w.-]+$/i.test(v) ? null : "Use ats:slug, e.g. greenhouse:acme"}
               onAdd={(v) => {

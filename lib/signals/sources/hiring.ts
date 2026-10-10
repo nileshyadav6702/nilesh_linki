@@ -1,5 +1,9 @@
 import type { SourceRunner } from "@/lib/signals/sources/types";
 import { discoverBoards } from "@/lib/signals/sources/careers";
+import type { SourceRunContext } from "@/lib/signals/sources/types";
+import { prefilterLead } from "@/lib/signals/leads";
+import { tregEnabled } from "@/lib/treg/client";
+import { headcountGrowthFilter, SURGE_GROWTH_PCT, tregPeopleSearch } from "@/lib/treg/people";
 
 export interface JobPosting { title: string; url: string; location: string | null; postedAt: string | null }
 
@@ -100,12 +104,32 @@ export function isSurge(now: number, base: number | null): boolean {
   return base !== null && now >= base * SURGE_RATIO && now - base >= SURGE_MIN_ROLES;
 }
 
+/** People found per run at fast-growing companies (paid rows, ~$0.0004 each). */
+const GROWTH_PEOPLE_PER_RUN = 15;
+
+/** The ICP's roles at companies whose headcount grew 20%+ in six months (the search filters on growth). */
+async function growthSurge(ctx: SourceRunContext): Promise<void> {
+  const r = await tregPeopleSearch(ctx.workspaceId, ctx.icp!, ctx.lean ? 5 : GROWTH_PEOPLE_PER_RUN, (ctx.cursor.growth_token as string | undefined) ?? null, headcountGrowthFilter());
+  ctx.cursor.growth_token = r.token;
+  const month = new Date().toISOString().slice(0, 7);
+  for (const p of r.leads) {
+    if (ctx.isFull()) break;
+    if (!p.profileUrl || !prefilterLead(p, { icp: ctx.icp }).ok) continue;
+    ctx.emitLead(p, {
+      type: "hiring_surge", title: `${p.company ?? "Their company"} is growing fast: headcount up ${SURGE_GROWTH_PCT}%+ in 6 months`,
+      sourceUrl: p.profileUrl, dedupeKey: `hiring_surge:growth:${p.profileUrl}:${month}`, metadata: { company: p.company, min_growth_pct: SURGE_GROWTH_PCT, timespan: "6months" },
+    });
+  }
+}
+
 /**
- * Hiring surge: counts open roles on the boards listed under Job openings every run, and flags
- * a company once its count jumps against the count from a few weeks before. The first weeks
- * only build that history.
+ * Hiring surge, two ways: with the people database, the ICP's roles at companies whose headcount
+ * grew 20%+ in six months (no history needed); and on the boards of Job openings, a company whose
+ * open roles jump against the count from a few weeks before (the first weeks build that history).
  */
 export const hiringSurgeRunner: SourceRunner = async (ctx) => {
+  const growth = tregEnabled() && !!ctx.icp;
+  if (growth) await growthSurge(ctx);
   // The boards Job openings watches: typed in, or found on the lead companies' careers pages.
   const row = ctx.db.prepare("SELECT config_json, cursor_json FROM agent_sources WHERE agent_id = ? AND source_type = 'hiring' ORDER BY created_at LIMIT 1").get(ctx.agent.id) as { config_json: string; cursor_json: string | null } | undefined;
   let boards: Array<{ ats: Ats; slug: string; company?: string }> = [];
@@ -116,7 +140,10 @@ export const hiringSurgeRunner: SourceRunner = async (ctx) => {
       boards = found.filter((d) => d.board).map((d) => ({ ...d.board!, company: d.company }));
     } catch { /* nothing found yet */ }
   }
-  if (!boards.length) throw new Error("Hiring surge watches the job boards under Job openings: turn on Job openings (or add a board) first");
+  if (!boards.length) {
+    if (growth) return;
+    throw new Error("Hiring surge watches the job boards under Job openings: turn on Job openings (or add a board) first");
+  }
   const all = (ctx.cursor.counts as Record<string, CountHistory> | undefined) ?? {};
   const nowIso = new Date().toISOString();
   for (const board of boards) {

@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import { z } from "zod";
 import { addSource, listSources, parseSourceConfig, sourceConfigSchema, updateSource, type AgentSource } from "@/lib/agents/store";
 import { launchNow } from "@/lib/signals/scheduler";
+import { tregEnabled } from "@/lib/treg/client";
 import {
   countSignals, DRAWER_SIGNAL_TYPES, MAX_TOPIC_WORDS, normalizeCompanyUrl, normalizePageUrl, normalizeProfileUrlStrict, SIGNAL_BUDGET,
   type DrawerSignalType, type SignalDraft,
@@ -108,7 +109,7 @@ export function saveLeadSources(db: DB, agentId: string, workspaceId: string, in
   const now = countSignals(next);
   if (now > SIGNAL_BUDGET && now > was) throw new LeadSourceError(`An agent can track up to ${SIGNAL_BUDGET} signals (this would be ${now})`);
   // Hiring surge watches the boards of Job openings (typed in, or found on lead companies' careers pages).
-  if (next.hiring_surge?.enabled && !next.hiring?.config.boards?.length && !next.hiring?.enabled) throw new LeadSourceError("Hiring surge watches the job boards of Job openings: turn on Job openings too");
+  if (next.hiring_surge?.enabled && !next.hiring?.config.boards?.length && !next.hiring?.enabled && !tregEnabled()) throw new LeadSourceError("Hiring surge watches the job boards of Job openings: turn on Job openings too");
 
   for (const id of input.attach_list_ids) {
     if (!db.prepare("SELECT 1 FROM lists WHERE id = ? AND workspace_id = ?").get(id, workspaceId)) throw new LeadSourceError("List not found", 404);

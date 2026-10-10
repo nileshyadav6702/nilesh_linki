@@ -3,13 +3,14 @@ import type { LeadCandidate } from "@/lib/signals/leads";
 import { prefilterLead } from "@/lib/signals/leads";
 import { tregEnabled } from "@/lib/treg/client";
 import { parseEntityUrl } from "@/lib/linkedin/engagers";
-import { tregProfile, tregRecentPosts } from "@/lib/treg/linkedin";
-import { tregPeopleSearch } from "@/lib/treg/people";
+import { tregRecentPosts } from "@/lib/treg/linkedin";
+import { NEW_IN_ROLE_MONTHS, newInRoleFilter, tregPeopleSearch } from "@/lib/treg/people";
 
 /**
  * People signals read from the people database for the agent's ICP:
  *  - top_active: people who post on LinkedIn at least weekly (the top few percent of members)
- *  - new_decision_maker: decision-makers who started their current role in the last 90 days
+ *  - new_decision_maker: decision-makers who joined their company in the last 3 months (the search
+ *    itself filters on time in company, so no profile has to be read to check)
  * Each run checks a small page of ICP matches (paid lookups), paging on with a stored token.
  */
 
@@ -62,20 +63,30 @@ export const topActiveRunner: SourceRunner = async (ctx) => {
   }
 };
 
+/** The ICP's senior titles (VP, Head of, Director, C-level, founder); all its titles when none are senior. */
+export function decisionMakerTitles(icp: NonNullable<SourceRunContext["icp"]>): string[] {
+  const all = [...new Set(icp.personas.flatMap((p) => p.titles).map((t) => t.trim()).filter(Boolean))];
+  const senior = all.filter((t) => DECISION_MAKER_RE.test(t));
+  return senior.length ? senior : all;
+}
+
 export const newDecisionMakerRunner: SourceRunner = async (ctx) => {
   needTreg(ctx);
-  for (const p of await nextPeople(ctx, "dm", (c) => DECISION_MAKER_RE.test(`${c.title ?? ""} ${c.headline ?? ""}`))) {
+  const titles = decisionMakerTitles(ctx.icp!);
+  if (!titles.length) throw new Error("Add persona job titles to the agent's targeting to find new decision-makers");
+  // Joined in the last 3 months, senior roles only: the search does the filtering, rows are the leads.
+  const r = await tregPeopleSearch(ctx.workspaceId, ctx.icp!, ctx.lean ? 5 : CHECKS_PER_RUN, (ctx.cursor.dm_token as string | undefined) ?? null,
+    { ...newInRoleFilter(), currentJobTitle: { include: titles } });
+  ctx.cursor.dm_token = r.token;
+  const month = new Date().toISOString().slice(0, 7);
+  for (const p of r.leads) {
     if (ctx.isFull()) break;
-    const profile = await tregProfile(ctx.workspaceId, p.profileUrl!).catch(() => null);
-    const started = profile?.current?.started;
-    if (!startedWithin(started, NEW_ROLE_DAYS)) continue;
-    const role = profile?.current?.title ?? p.title ?? "a new role";
-    const at = profile?.current?.company ?? p.company;
-    const when = new Date(Date.parse(started!.length === 7 ? `${started}-01` : started!)).toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    ctx.emitLead({ ...p, title: profile?.current?.title ?? p.title, company: at ?? p.company }, {
-      type: "new_decision_maker", title: `New decision-maker: ${role}${at ? ` at ${at}` : ""}`, snippet: `Started in ${when}`, sourceUrl: p.profileUrl,
-      dedupeKey: `new_dm:${p.profileUrl}:${(at ?? "").toLowerCase()}`, occurredAt: new Date(Date.parse(started!.length === 7 ? `${started}-01` : started!)).toISOString(),
-      metadata: { started, role, company: at },
+    if (!p.profileUrl || !prefilterLead(p, { icp: ctx.icp }).ok) continue;
+    const role = p.title ?? "a new role";
+    ctx.emitLead(p, {
+      type: "new_decision_maker", title: `New decision-maker: ${role}${p.company ? ` at ${p.company}` : ""}`,
+      snippet: `Joined in the last ${NEW_IN_ROLE_MONTHS} months`, sourceUrl: p.profileUrl,
+      dedupeKey: `new_dm:${p.profileUrl}:${(p.company ?? "").toLowerCase()}`, metadata: { role, company: p.company, found: month },
     });
   }
 };
