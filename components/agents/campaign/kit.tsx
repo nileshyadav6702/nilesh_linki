@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { RiCloseLine } from "react-icons/ri";
+import { RiArrowDownSLine, RiCloseLine } from "react-icons/ri";
 
 /** Shared pieces of the agent Campaign tab: the step shape, delays, variables, drawer and tooltip. */
 
@@ -54,11 +54,14 @@ export const voiceUrl = (workflowId: string, stepId: string) => `/api/workflows/
 export function WaitSelect({ value, onChange }: { value: number; onChange: (sec: number) => void }) {
   const opts = Array.from(new Set([...DELAY_OPTIONS, value])).sort((a, b) => a - b);
   return (
-    <div className="flex flex-wrap items-center gap-2 text-[15px] text-base-content/70">
+    <div className="flex flex-wrap items-center gap-4 text-[16.5px] text-base-content/55">
       <span>Wait at least</span>
-      <select className="h-10 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 text-[15px] text-base-content outline-none focus:border-[var(--border-focus)]" value={value} onChange={(e) => onChange(Number(e.target.value))}>
-        {opts.map((sec) => <option key={sec} value={sec}>{delayLabel(sec)}</option>)}
-      </select>
+      <span className="relative inline-flex">
+        <select className="h-12 min-w-[164px] appearance-none rounded-[6px] border border-[var(--border-subtle)] bg-base-100 pl-4 pr-11 text-[15.5px] text-base-content outline-none hover:border-[var(--border-strong)] focus:border-[var(--border-focus)]" value={value} onChange={(e) => onChange(Number(e.target.value))}>
+          {opts.map((sec) => <option key={sec} value={sec}>{delayLabel(sec)}</option>)}
+        </select>
+        <RiArrowDownSLine size={22} aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-base-content/55" />
+      </span>
       <span>after previous step</span>
     </div>
   );

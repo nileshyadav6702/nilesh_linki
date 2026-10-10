@@ -80,6 +80,8 @@ export default function StepCard({ item, n, stat, editing, busy, aiLabel, workfl
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {s.step_type === "connect" && !isNew && <SkipPill days={s.skip_after_days ?? 7} disabled={editing || busy} onSave={onSaveSkip} />}
+          {/* Like Posts has only local settings, so it can be set up before the sequence is saved. */}
+          {editing && s.step_type === "like_posts" && <button type="button" className="flex h-10 w-10 items-center justify-center rounded-[8px] text-base-content/45 hover:bg-base-200 hover:text-base-content" aria-label="Edit step" onClick={onEdit}><RiEditBoxLine size={21} /></button>}
           {editing && <button type="button" className="flex h-10 w-10 items-center justify-center rounded-[8px] text-base-content/35 hover:bg-error/10 hover:text-error" aria-label="Remove step" onClick={onRemove}><RiDeleteBinLine size={21} /></button>}
         </div>
       </div>
