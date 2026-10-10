@@ -23,9 +23,11 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if(ownedCount!==target_ids.length) return res.status(400).json({error:"One or more contacts are outside this workspace"});
 
   const run = db
-    .prepare("SELECT id, workflow_id FROM runs WHERE id = ?")
-    .get(runId) as { id: string; workflow_id: string } | undefined;
+    .prepare("SELECT id, workflow_id, status, workspace_id FROM runs WHERE id = ?")
+    .get(runId) as { id: string; workflow_id: string; status: string; workspace_id: string } | undefined;
   if (!run) return res.status(404).json({ error: "run_not_found" });
+  // A finished run is no longer worked: adding leads reopens it, so they actually go out.
+  if (run.status === "failed") return res.status(409).json({ error: "This run failed — start a new run for these contacts" });
 
   // Tracks defined on this workflow
   const workflowTracks = [...new Set(
@@ -58,13 +60,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       .prepare(
         `SELECT DISTINCT rp.target_id FROM run_profiles rp
          JOIN runs r ON r.id = rp.run_id
-         WHERE r.status IN ('running', 'paused')
+         WHERE r.status IN ('pending', 'running', 'paused') AND r.workspace_id = ? AND r.id != ?
          AND EXISTS (
            SELECT 1 FROM run_profile_tracks rt
            WHERE rt.run_profile_id = rp.id AND rt.state NOT IN ('completed', 'failed', 'skipped')
          )`
       )
-      .all() as { target_id: string }[]).map((r) => r.target_id)
+      .all(run.workspace_id, runId) as { target_id: string }[]).map((r) => r.target_id)
   );
 
   let skipped_already_enrolled = 0;
@@ -109,20 +111,25 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const insertTrack = db.prepare(
     "INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step) VALUES (?, ?, ?, 'pending', 0)"
   );
+  // Only the channels a contact can be reached on (a LinkedIn URL, an email address).
+  const reach = db.prepare("SELECT linkedin_url, sales_nav_url, email FROM targets WHERE id = ?");
+  let skipped_unreachable = 0;
   const insertMany = db.transaction((ids: string[]) => {
     for (const tid of ids) {
       const assignedEmailAccountId = emailAssignment.get(tid) ?? null;
+      const t = reach.get(tid) as { linkedin_url: string | null; sales_nav_url: string | null; email: string | null } | undefined;
+      const tracks = workflowTracks.filter((track) => (track === "email" ? !!assignedEmailAccountId && !!t?.email : !!(t?.linkedin_url || t?.sales_nav_url)));
+      if (!tracks.length) { skipped_unreachable++; continue; }
       const rpId = randomUUID();
       insertProfile.run(rpId, runId, tid, assignedEmailAccountId);
-      for (const track of workflowTracks) {
-        if (track === "email" && !assignedEmailAccountId) continue;
-        insertTrack.run(randomUUID(), rpId, track);
-      }
+      for (const track of tracks) insertTrack.run(randomUUID(), rpId, track);
     }
+    if (run.status === "completed") db.prepare("UPDATE runs SET status = 'running', completed_at = NULL WHERE id = ?").run(runId);
   });
   insertMany(eligible);
 
   return res.json({
+    skipped_unreachable,
     enrolled: eligible.length,
     skipped_already_enrolled,
     skipped_active_elsewhere,

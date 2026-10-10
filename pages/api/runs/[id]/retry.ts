@@ -22,11 +22,13 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   let retried = 0;
   for (const rp of rpRows) {
     const r = db.prepare(
-      `UPDATE run_profile_tracks SET state = 'in_progress', error_message = NULL, next_step_at = NULL
+      `UPDATE run_profile_tracks SET state = 'in_progress', error_message = NULL, next_step_at = NULL, retry_count = 0
        WHERE run_profile_id = ? AND state = 'failed'`
     ).run(rp.id);
     retried += r.changes;
   }
 
+  // Retried leads only move in a run that is being worked.
+  if (retried) db.prepare("UPDATE runs SET status = 'running', completed_at = NULL WHERE id = ? AND status = 'completed'").run(runId);
   return res.json({ ok: true, retried });
 }
