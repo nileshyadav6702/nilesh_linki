@@ -56,3 +56,15 @@ export function classifyDsn(subject: string, body: string): DsnKind {
   if (/mailbox (is )?full|over quota|quota exceeded|temporar(y|ily)/i.test(body.slice(0, 1500))) return "soft";
   return "hard";
 }
+
+/**
+ * A spam-complaint feedback report (ARF, RFC 5965) from a mailbox provider's feedback loop: the
+ * complaining recipient and, when present, the Message-ID of our original email.
+ */
+export function parseFeedbackReport(body: string): { recipient: string | null; messageId: string | null } | null {
+  if (!/Feedback-Type:\s*(abuse|fraud)/i.test(body)) return null;
+  const field = (name: string) => body.match(new RegExp(String.raw`^\s*${name}:\s*(?:rfc822;\s*)?<?([^\s<>]+@[^\s<>]+)>?`, "im"))?.[1]?.toLowerCase() ?? null;
+  const recipient = field("Original-Rcpt-To") ?? field("Removal-Recipient") ?? field("To");
+  const messageId = body.match(/^\s*Message-ID:\s*(<[^>\s]+>)/im)?.[1] ?? null;
+  return { recipient, messageId };
+}

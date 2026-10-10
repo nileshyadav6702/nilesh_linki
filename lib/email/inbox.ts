@@ -1,5 +1,5 @@
 import Imap from "imap";
-import { classifyDsn } from "@/lib/email/send-errors";
+import { classifyDsn, parseFeedbackReport } from "@/lib/email/send-errors";
 import { getDb } from "@/lib/db";
 import { premium } from "@/lib/premium";
 import { decryptSecret } from "@/lib/crypto";
@@ -27,6 +27,7 @@ import {
 } from "@/lib/email/reply-attribution";
 import { captureReplyBody } from "@/lib/email/reply-capture";
 import { applyBounceCandidates } from "@/lib/email/bounces";
+import { recordProviderEvent } from "@/lib/email/infrastructure";
 
 export { attributeReplies, parseScannedHeader, REPLY_SCAN_FIELDS, captureReplyBody, applyBounceCandidates };
 export type { PendingTarget, ScannedHeader };
@@ -355,6 +356,15 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
 
                 const emailMatch = fromRaw.match(/<([^>]+)>/) ?? fromRaw.match(/([^\s]+@[^\s]+)/);
                 const fromEmail = emailMatch?.[1]?.toLowerCase().trim();
+                // A spam complaint from the provider's feedback loop (ARF): record it, which suppresses
+                // the address and counts toward the mailbox's complaint rate (auto-pause).
+                const report = msg.body ? parseFeedbackReport(msg.body) : null;
+                if (report?.recipient) {
+                  recordProviderEvent({ workspaceId: account.workspace_id, provider: "arf",
+                    providerEventId: parseHeaderValue(msg.header, "Message-ID") || `arf:${report.recipient}:${report.messageId ?? ""}`,
+                    eventType: "complained", recipient: report.recipient, messageId: report.messageId ?? undefined });
+                  continue;
+                }
                 if (!fromEmail || !isBounce(fromEmail)) continue;
                 // Only a permanent failure is a bounce: delay notices and soft bounces (4.x.x, mailbox
                 // full) must not suppress the address or count against the mailbox.
