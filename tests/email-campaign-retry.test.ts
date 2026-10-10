@@ -180,3 +180,14 @@ describe("campaign headers", () => {
     expect(t.error_message).toContain("{{frist_name}}");
   });
 });
+
+describe("outbound headers", () => {
+  it("carry nothing that identifies the sending tool", async () => {
+    seed("noheaders");
+    SEND_EMAIL.mockImplementation(accepted);
+    await emailCampaignTick(getDb());
+    const call = SEND_EMAIL.mock.calls.find((c) => c[1] === "noheaders@prospect.test");
+    expect(call).toBeDefined();
+    expect(Object.keys(call![4].headers).filter((h) => /^x-linki/i.test(h))).toEqual([]);
+  });
+});
