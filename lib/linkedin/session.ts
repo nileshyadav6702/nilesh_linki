@@ -17,6 +17,11 @@ const contexts: Map<string, BrowserContext> = new Map();
 const contextCreations: Map<string, Promise<BrowserContext>> = new Map();
 // Last time each account's context was handed out — drives closeIdleSessions().
 const lastUsedAt: Map<string, number> = new Map();
+/** How many times each account's browser was handed out: lets the runner tell a step that used
+ *  LinkedIn (and should be followed by a human-like pause) from one that only read the database. */
+const browserUses: Map<string, number> = new Map();
+export function browserUseCount(accountId: string): number { return browserUses.get(accountId) ?? 0; }
+const countUse = (accountId: string) => browserUses.set(accountId, browserUseCount(accountId) + 1);
 // The stored session (accounts.cookies_json, as stored) each open context was created from or
 // last saved as. The web and worker processes share the DB but not their contexts: when the
 // stored value no longer matches, another process (a login, a cookie paste, a disconnect, the
@@ -131,6 +136,7 @@ async function createContext(accountId: string): Promise<BrowserContext> {
 
 /** Returns the BrowserContext for an account (for API calls via ctx.request) */
 export async function getSessionContext(accountId: string): Promise<BrowserContext> {
+  countUse(accountId);
   try {
     return await getOrCreateContext(accountId);
   } catch {
@@ -142,6 +148,7 @@ export async function getSessionContext(accountId: string): Promise<BrowserConte
 
 /** Returns a new Page from the account's browser context */
 export async function getSessionPage(accountId: string): Promise<Page> {
+  countUse(accountId);
   const ctx = await getOrCreateContext(accountId);
   try {
     return await ctx.newPage();

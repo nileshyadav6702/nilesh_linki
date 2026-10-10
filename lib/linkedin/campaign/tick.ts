@@ -13,6 +13,7 @@ import { rescheduleToTomorrow } from "./schedule";
 import { log, randomDelay } from "./track-state";
 import { completeFinishedRuns, dueTracks, heartbeat, linkedInCampaignRuns, spreadEnrollBatch } from "./runs";
 import { executeStep } from "./steps";
+import { browserUseCount } from "@/lib/linkedin/session";
 import type { AccountLimits, ScheduleConfig, Target, TrackRun, WorkflowStep } from "./types";
 
 /**
@@ -237,6 +238,8 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
   const inmailsPlanned = new Map<string, number>(Array.from(accountLimitsMap.keys()).map(id => [id, 0]));
   const visitsPlanned = new Map<string, number>(Array.from(accountLimitsMap.keys()).map(id => [id, 0]));
 
+  const degreeStmt = db.prepare("SELECT degree FROM targets WHERE id = ?");
+  const isFirstDegree = (targetId: string) => (degreeStmt.get(targetId) as { degree: number | null } | undefined)?.degree === 1;
   for (const tr of dueTrackRuns) {
     const steps = getSteps(tr.workflow_id, tr.track);
     const stepIndex = tr.current_step;
@@ -262,6 +265,10 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
         connectsPlanned.set(tr.account_id, planned + 1);
         toExecute.push(tr);
       }
+    } else if ((step.step_type === "message" || step.step_type === "voice") && !isFirstDegree(tr.target_id)) {
+      // Not connected yet: the step only rechecks (a database read) and waits, so it must not take
+      // a message slot from a lead who can actually be messaged today.
+      toExecute.push(tr);
     } else if (step.step_type === "message" || step.step_type === "voice") {
       const sentToday = messagesSentToday.get(tr.account_id) ?? 0;
       const planned = messagesPlanned.get(tr.account_id) ?? 0;
@@ -339,6 +346,7 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
     // Atomic claim: never two workers (or a still-running orphaned step) on one track.
     if (!claimTrack(db, tr.id, WORKER_ID, tr.current_step)) continue;
     let wedged: string | null = null;
+    const usesBefore = browserUseCount(tr.account_id);
     // Bounded so one wedged profile cannot stop every profile behind it in the queue. On a
     // timeout the abandoned step keeps its track claim until it really ends, and whatever it
     // was sending is marked uncertain, so the next tick moves the track on WITHOUT resending.
@@ -369,7 +377,9 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
     // runner that is working hard through a backlog.
     executed += 1;
     heartbeat(db, stillActive);
-    await randomDelay(PROFILE_DELAY_MIN, PROFILE_DELAY_MAX);
+    // The human-like pause is between LinkedIn actions; a step that only read the database
+    // (a delay, a "not connected yet" recheck) doesn't need one.
+    if (browserUseCount(tr.account_id) !== usesBefore) await randomDelay(PROFILE_DELAY_MIN, PROFILE_DELAY_MAX);
   }
 }
 
