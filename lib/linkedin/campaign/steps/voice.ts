@@ -5,7 +5,7 @@ import { getSessionPage } from "@/lib/linkedin/session";
 import { sendMessage } from "@/lib/linkedin/message";
 import { settledPriorAction } from "@/lib/linkedin/actions";
 import { CONNECTION_RECHECK_HOURS } from "../constants";
-import { invitationExpired, skipToEmail } from "../invitation-fallback";
+import { invitationExpired, skipNotConnected, skipToEmail } from "../invitation-fallback";
 import { actionInput, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction } from "../step-helpers";
 import { ensureSalesNavEnriched } from "../pre-enrich";
 import { enforceSchedule, log, nowIso, trAdvance, trWait } from "../track-state";
@@ -27,6 +27,7 @@ export async function runVoiceStep(ctx: StepContext): Promise<void> {
   const freshTarget = db.prepare("SELECT * FROM targets WHERE id = ?").get(target.id) as Target;
   if (freshTarget.degree !== 1) {
     if (invitationExpired(steps, freshTarget.connection_requested_at)) { skipToEmail(db, runId, tr, target.id, name, steps); return; }
+    if (!freshTarget.connection_requested_at) { skipNotConnected(db, runId, tr, target.id, name); return; }
     log(db, runId, target.id, "info", `${name} not yet connected — rescheduling voice message in ${CONNECTION_RECHECK_HOURS}h`);
     trWait(db, tr, CONNECTION_RECHECK_HOURS);
     return;

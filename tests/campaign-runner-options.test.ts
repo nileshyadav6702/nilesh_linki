@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import { describe, it, expect } from "vitest";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
-import { invitationExpired, skipAfterDays, skipToEmail } from "@/lib/linkedin/campaign/invitation-fallback";
+import { invitationExpired, skipAfterDays, skipNotConnected, skipToEmail } from "@/lib/linkedin/campaign/invitation-fallback";
 import { staleInvitations } from "@/lib/linkedin/campaign/withdraw-stale";
 import stepsHandler from "@/pages/api/workflows/[id]/steps";
 import stepHandler from "@/pages/api/workflows/[id]/steps/[stepId]";
@@ -42,13 +42,29 @@ function workflow(steps: Array<[string, Record<string, unknown>?]>): { id: strin
 const step = (o: Partial<WorkflowStep>) => ({ step_type: "connect", ...o }) as WorkflowStep;
 
 describe("skip after N days", () => {
-  it("reads the invitation step's setting; 0 means wait indefinitely", () => {
+  it("reads the invitation step's setting; 0 means the 60-day ceiling", () => {
     expect(skipAfterDays([step({})])).toBe(7);
     expect(skipAfterDays([step({ skip_after_days: 3 })])).toBe(3);
-    expect(skipAfterDays([step({ skip_after_days: 0 })])).toBeNull();
+    expect(skipAfterDays([step({ skip_after_days: 0 })])).toBe(60); // "never" still ends at 60 days
     expect(invitationExpired([step({ skip_after_days: 3 })], daysAgo(4))).toBe(true);
     expect(invitationExpired([step({ skip_after_days: 3 })], daysAgo(2))).toBe(false);
-    expect(invitationExpired([step({ skip_after_days: 0 })], daysAgo(400))).toBe(false);
+    expect(invitationExpired([step({ skip_after_days: 0 })], daysAgo(400))).toBe(true);
+    expect(invitationExpired([step({ skip_after_days: 0 })], daysAgo(30))).toBe(false);
+  });
+
+  it("a message for someone never invited skips LinkedIn and brings email forward (no endless rechecks)", () => {
+    const db = getDb();
+    const { id: wf } = workflow([["message"]]);
+    const runId = randomUUID(); const targetId = randomUUID(); const rp = randomUUID();
+    db.prepare("INSERT INTO runs (id, workspace_id, workflow_id, status) VALUES (?, ?, ?, 'running')").run(runId, WS, wf);
+    db.prepare("INSERT INTO targets (id, workspace_id, full_name, linkedin_url) VALUES (?, ?, 'Lou', ?)").run(targetId, WS, `https://www.linkedin.com/in/lou-${targetId}`);
+    db.prepare("INSERT INTO run_profiles (id, run_id, target_id) VALUES (?, ?, ?)").run(rp, runId, targetId);
+    db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step) VALUES (?, ?, 'linkedin', 'in_progress', 0)").run(`li-${rp}`, rp);
+    db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step, next_step_at) VALUES (?, ?, 'email', 'in_progress', 1, datetime('now', '+5 days'))").run(`em-${rp}`, rp);
+    skipNotConnected(db, runId, { id: `li-${rp}`, run_profile_id: rp } as TrackRun, targetId, "Lou");
+    expect((db.prepare("SELECT state FROM run_profile_tracks WHERE id = ?").get(`li-${rp}`) as { state: string }).state).toBe("skipped");
+    const email = db.prepare("SELECT next_step_at FROM run_profile_tracks WHERE id = ?").get(`em-${rp}`) as { next_step_at: string };
+    expect(Date.parse(email.next_step_at.replace(" ", "T") + (email.next_step_at.includes("Z") ? "" : "Z"))).toBeLessThanOrEqual(Date.now() + 1000);
   });
 
   it("skips the LinkedIn track and brings the lead's next email forward", () => {

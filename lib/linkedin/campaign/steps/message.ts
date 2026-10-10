@@ -9,7 +9,7 @@ import { emitDomainEvent } from "@/lib/platform/events";
 import { renderOutreachTemplate } from "@/lib/outreach/render";
 import { loadTargetCustomValues } from "@/lib/outreach/custom-values";
 import { CONNECTION_RECHECK_HOURS } from "../constants";
-import { invitationExpired, skipToEmail } from "../invitation-fallback";
+import { invitationExpired, skipNotConnected, skipToEmail } from "../invitation-fallback";
 import { actionInput, holdForAi, saveSessionAfterSend, sendLinkedinAction, settlePriorLinkedinAction, stepTemplateBody } from "../step-helpers";
 import { ensureSalesNavEnriched } from "../pre-enrich";
 import { enforceSchedule, log, nowIso, trAdvance, trFail, trRecordContext, trWait } from "../track-state";
@@ -26,6 +26,10 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
     const requested = freshTarget.connection_requested_at;
     if (invitationExpired(steps, requested)) {
       skipToEmail(db, runId, tr, target.id, name, steps);
+      return;
+    }
+    if (!requested) {
+      skipNotConnected(db, runId, tr, target.id, name);
       return;
     }
     log(db, runId, target.id, "info", `${name} not yet connected — rescheduling message in ${CONNECTION_RECHECK_HOURS}h`);
