@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { findTargetSuppression } from "@/lib/platform/suppression";
 import type Database from "better-sqlite3";
 import type { Agent } from "@/lib/agents/store";
 
@@ -26,6 +27,17 @@ export function enrollLead(db: Database.Database, agent: Agent, targetId: string
   if (!agent.linkedin_account_id && !agent.email_account_id) return { enrolled: false, reason: "Agent has no sender account" };
   const listId = agent.list_id;
   if (listId) db.prepare("INSERT OR IGNORE INTO list_targets (list_id, target_id) VALUES (?, ?)").run(listId, targetId);
+
+  // Leads that must not (or not yet) be contacted are skipped with the reason, so it shows and
+  // the agent doesn't retry them every pass.
+  const refusal = enrollmentRefusal(db, agent, targetId);
+  if (refusal) {
+    // (A lead busy in another campaign keeps its status there.)
+    if (!refusal.startsWith("Already in another")) {
+      db.prepare("UPDATE targets SET agent_status = 'skipped', agent_status_at = datetime('now'), skip_reason = ? WHERE id = ?").run(refusal, targetId);
+    }
+    return { enrolled: false, reason: refusal };
+  }
 
   return db.transaction(() => {
     // This agent's open run for its CURRENT campaign and senders: after a sender or campaign change
@@ -56,6 +68,25 @@ export function enrollLead(db: Database.Database, agent: Agent, targetId: string
     db.prepare("UPDATE targets SET agent_status = 'enrolled', agent_status_at = datetime('now') WHERE id = ?").run(targetId);
     return { enrolled: true };
   })();
+}
+
+/** Contacts who replied this recently are not put in a new sequence. */
+export const RECENT_REPLY_DAYS = 30;
+
+/** Why this lead must not be enrolled now, or null. */
+export function enrollmentRefusal(db: Database.Database, agent: Agent, targetId: string): string | null {
+  const suppression = findTargetSuppression(agent.workspace_id, targetId);
+  if (suppression) return `On the do-not-contact list (${suppression.reason})`;
+  const active = db.prepare(`SELECT w.name FROM run_profiles rp JOIN runs r ON r.id = rp.run_id JOIN run_profile_tracks rt ON rt.run_profile_id = rp.id
+      LEFT JOIN workflows w ON w.id = r.workflow_id
+     WHERE rp.target_id = ? AND r.workspace_id = ? AND r.status IN ('pending','running','paused') AND rt.state IN ('pending','in_progress')
+       AND NOT (r.workflow_id IS ? AND (r.agent_id = ? OR r.agent_id IS NULL))
+     LIMIT 1`).get(targetId, agent.workspace_id, agent.workflow_id, agent.id) as { name: string | null } | undefined;
+  if (active) return `Already in another active campaign${active.name ? ` ("${active.name}")` : ""}`;
+  const replied = db.prepare("SELECT MAX(COALESCE(last_replied_at, ''), COALESCE(email_replied_at, '')) at FROM targets WHERE id = ?").get(targetId) as { at: string };
+  const at = replied?.at ? Date.parse(/[TZ]/.test(replied.at) ? replied.at : `${replied.at.replace(" ", "T")}Z`) : NaN;
+  if (!Number.isNaN(at) && Date.now() - at < RECENT_REPLY_DAYS * 86_400_000) return `Replied in the last ${RECENT_REPLY_DAYS} days — follow up personally`;
+  return null;
 }
 
 /** The agent's runs: recorded on the run, or (older runs) its campaign + list. */

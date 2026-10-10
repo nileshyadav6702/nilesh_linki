@@ -54,10 +54,15 @@ export async function executeStep(
     return;
   }
 
-  // Auto-unenroll if lead has replied on either channel — mark ALL track-runs for this profile skipped
-  const replyCheck = db.prepare("SELECT last_replied_at, email_replied_at FROM targets WHERE id = ?").get(target.id) as { last_replied_at: string | null; email_replied_at: string | null };
-  if (replyCheck?.last_replied_at || replyCheck?.email_replied_at) {
-    const channel = replyCheck.email_replied_at ? "email" : "LinkedIn";
+  // Auto-unenroll if the lead replied on either channel SINCE this enrollment — mark ALL its
+  // track-runs skipped. A reply from before (an earlier campaign) doesn't end this sequence.
+  const replyCheck = db.prepare(`SELECT t.last_replied_at, t.email_replied_at, rp.created_at enrolled_at FROM targets t
+    JOIN run_profiles rp ON rp.id = ? WHERE t.id = ?`).get(tr.run_profile_id, target.id) as { last_replied_at: string | null; email_replied_at: string | null; enrolled_at: string | null } | undefined;
+  const ms = (s: string | null | undefined) => (s ? Date.parse(/[TZ]/.test(s) ? s : `${s.replace(" ", "T")}Z`) : NaN);
+  const since = ms(replyCheck?.enrolled_at);
+  const repliedSince = (at: string | null | undefined) => !!at && (Number.isNaN(since) || ms(at) >= since);
+  if (replyCheck && (repliedSince(replyCheck.last_replied_at) || repliedSince(replyCheck.email_replied_at))) {
+    const channel = repliedSince(replyCheck.email_replied_at) ? "email" : "LinkedIn";
     log(db, runId, target.id, "info", `${target.full_name ?? target.linkedin_url} replied via ${channel} — unenrolling from workflow`);
     db.prepare(
       "UPDATE run_profile_tracks SET state = 'skipped', error_message = 'Lead replied' WHERE run_profile_id = ? AND state NOT IN ('completed', 'failed', 'skipped')"
