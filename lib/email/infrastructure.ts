@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { classifySendError } from "@/lib/email/send-errors";
 import { hostname } from "os";
 import { getDb } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
@@ -66,8 +67,16 @@ export async function dispatchEmailJob(jobId:string,owner=WORKER_ID){
       db.prepare("UPDATE email_jobs SET status='sent',lease_owner=NULL,lease_expires_at=NULL,last_error=NULL,updated_at=datetime('now') WHERE id=?").run(job.id);
     })();
     emitDomainEvent({workspaceId:job.workspace_id,type:"email.sent",entityType:"sent_message",entityId:job.id,payload:{job_id:job.id,to:job.recipient,subject:job.subject,email_account_id:job.email_account_id,message_id:receipt.messageId||messageId,provider:account.provider}});
-  }catch(error){
-    const msg=message(error);const ambiguous=!(error instanceof SafeSendError)&&isAmbiguous(error);const current=db.prepare("SELECT attempt,max_attempts FROM email_jobs WHERE id=?").get(job.id) as {attempt:number;max_attempts:number};
+  }catch(caught){
+    let error:unknown=caught;
+    // Mailbox-level problems belong to the MAILBOX, and a rejected recipient is a hard bounce.
+    if(!(caught instanceof SafeSendError)&&account){
+      const failure=classifySendError(caught);
+      if(failure.kind==="mailbox_auth"){db.prepare("UPDATE email_accounts SET paused_at=COALESCE(paused_at,datetime('now')),paused_reason=? WHERE id=?").run(`${failure.reason}. Reconnect the mailbox to resume.`,account.id);emitDomainEvent({workspaceId:job.workspace_id,type:"sender.auto_paused",entityType:"email_account",entityId:account.id,payload:{reason:failure.reason}});error=new SenderPausedError(failure.reason);}
+      else if(failure.kind==="mailbox_throttled"){db.prepare("UPDATE email_accounts SET cooldown_until=? WHERE id=?").run(new Date(Date.now()+60*60_000).toISOString(),account.id);error=new SenderPausedError(failure.reason);}
+      else if(failure.kind==="recipient_rejected"){recordInboundBounce({workspaceId:job.workspace_id,emailAccountId:account.id,recipient:job.recipient,targetId:job.target_id,detail:failure.reason,dedupeKey:`rcpt:${job.id}`});error=new RecipientRejectedError(`The recipient's server rejected the address: ${failure.reason}`);}
+    }
+    const msg=message(error);const ambiguous=!(error instanceof SafeSendError)&&isAmbiguous(caught);const current=db.prepare("SELECT attempt,max_attempts FROM email_jobs WHERE id=?").get(job.id) as {attempt:number;max_attempts:number};
     // A paused mailbox is a state of OURS, not a verdict on this message. Failing the job
     // here consumed the contact permanently for a condition that clears the moment the
     // mailbox resumes, so the job goes back on the queue instead. `attempt` is untouched:
@@ -230,17 +239,20 @@ export function recordInboundBounce(input:{workspaceId:string;emailAccountId:str
   return{recorded:true,duplicate:false,health};
 }
 
+/** Hard bounces in 24h that pause a mailbox even before it has the 30-day sample the rate needs. */
+const HARD_BOUNCES_PER_DAY=5;
 export function evaluateSenderHealth(emailAccountId:string){const db=getDb();const policy=db.prepare("SELECT workspace_id,bounce_threshold,complaint_threshold,min_health_sample,paused_at,paused_reason FROM email_accounts WHERE id=?").get(emailAccountId) as {workspace_id:string;bounce_threshold:number;complaint_threshold:number;min_health_sample:number;paused_at:string|null;paused_reason:string|null}|undefined;if(!policy)return null;
-  const sent=(db.prepare("SELECT COUNT(*) c FROM sent_messages WHERE email_account_id=? AND accepted_at>=datetime('now','-30 days')").get(emailAccountId) as {c:number}).c;const counts=db.prepare(`SELECT COUNT(CASE WHEN event_type='bounced' THEN 1 END) bounces,COUNT(CASE WHEN event_type='complained' THEN 1 END) complaints FROM sender_events WHERE email_account_id=? AND occurred_at>=datetime('now','-30 days')`).get(emailAccountId) as {bounces:number;complaints:number};const bounceRate=sent?counts.bounces/sent:0;const complaintRate=sent?counts.complaints/sent:0;let reason:string|null=null;if(sent>=policy.min_health_sample&&bounceRate>=policy.bounce_threshold)reason=`Auto-paused: 30-day bounce rate ${(bounceRate*100).toFixed(2)}% exceeds ${(policy.bounce_threshold*100).toFixed(2)}%`;if(sent>=policy.min_health_sample&&complaintRate>=policy.complaint_threshold)reason=`Auto-paused: 30-day complaint rate ${(complaintRate*100).toFixed(3)}% exceeds ${(policy.complaint_threshold*100).toFixed(3)}%`;if(reason&&!policy.paused_at){db.prepare("UPDATE email_accounts SET paused_at=datetime('now'),paused_reason=? WHERE id=?").run(reason,emailAccountId);emitDomainEvent({workspaceId:policy.workspace_id,type:"sender.auto_paused",entityType:"email_account",entityId:emailAccountId,payload:{reason,sent,bounce_rate:bounceRate,complaint_rate:complaintRate}});}return{sent,bounces:counts.bounces,complaints:counts.complaints,bounce_rate:bounceRate,complaint_rate:complaintRate,paused:Boolean(reason||policy.paused_at),reason:reason??policy.paused_reason};}
+  const sent=(db.prepare("SELECT COUNT(*) c FROM sent_messages WHERE email_account_id=? AND accepted_at>=datetime('now','-30 days')").get(emailAccountId) as {c:number}).c;const counts=db.prepare(`SELECT COUNT(CASE WHEN event_type='bounced' THEN 1 END) bounces,COUNT(CASE WHEN event_type='complained' THEN 1 END) complaints FROM sender_events WHERE email_account_id=? AND occurred_at>=datetime('now','-30 days')`).get(emailAccountId) as {bounces:number;complaints:number};const bounceRate=sent?counts.bounces/sent:0;const complaintRate=sent?counts.complaints/sent:0;let reason:string|null=null;if(sent>=policy.min_health_sample&&bounceRate>=policy.bounce_threshold)reason=`Auto-paused: 30-day bounce rate ${(bounceRate*100).toFixed(2)}% exceeds ${(policy.bounce_threshold*100).toFixed(2)}%`;const recentBounces=(db.prepare("SELECT COUNT(*) c FROM sender_events WHERE email_account_id=? AND event_type='bounced' AND occurred_at>=datetime('now','-1 day')").get(emailAccountId) as {c:number}).c;if(!reason&&recentBounces>=HARD_BOUNCES_PER_DAY)reason=`Auto-paused: ${recentBounces} hard bounces in the last 24 hours (check the lead list before resuming)`;if(sent>=policy.min_health_sample&&complaintRate>=policy.complaint_threshold)reason=`Auto-paused: 30-day complaint rate ${(complaintRate*100).toFixed(3)}% exceeds ${(policy.complaint_threshold*100).toFixed(3)}%`;if(reason&&!policy.paused_at){db.prepare("UPDATE email_accounts SET paused_at=datetime('now'),paused_reason=? WHERE id=?").run(reason,emailAccountId);emitDomainEvent({workspaceId:policy.workspace_id,type:"sender.auto_paused",entityType:"email_account",entityId:emailAccountId,payload:{reason,sent,bounce_rate:bounceRate,complaint_rate:complaintRate}});}return{sent,bounces:counts.bounces,complaints:counts.complaints,bounce_rate:bounceRate,complaint_rate:complaintRate,paused:Boolean(reason||policy.paused_at),reason:reason??policy.paused_reason};}
 
-function assertSenderHealthy(account:Account){if(account.paused_at)throw new SenderPausedError(account.paused_reason??"Sender is paused by the health policy");}
+function assertSenderHealthy(account:Account){if(account.paused_at)throw new SenderPausedError(account.paused_reason??"Sender is paused by the health policy");const cool=(account as {cooldown_until?:string|null}).cooldown_until;if(cool&&Date.parse(cool)>Date.now())throw new SenderPausedError(`Mailbox cooling down until ${cool}: the provider is limiting it`);}
 function receiptForJob(id:string):SendReceipt|null{const row=getDb().prepare("SELECT message_id,provider_message_id,smtp_response FROM sent_messages WHERE job_id=?").get(id) as {message_id:string;provider_message_id:string|null;smtp_response:string|null}|undefined;return row?{messageId:row.message_id,providerMessageId:row.provider_message_id??undefined,response:row.smtp_response??undefined}:null;}
 function jobHeaders(input:QueueEmailInput):string|null{const refs=(input.references??[]).filter(Boolean).map(asMessageId);const headers={...(input.headers??{}),...(refs.length?{References:refs.join(" ")}:{})};return Object.keys(headers).length?JSON.stringify(headers):null;}
 /** RFC 5322 msg-id form: angle brackets, no whitespace. */
 export function asMessageId(value:string):string{const v=value.trim().replace(/\s+/g,"");return v.startsWith("<")?v:`<${v}>`;}
 function sqliteToIso(value:string):string{return /[TZ]/.test(value)?value:`${value.replace(" ","T")}Z`;}
 function parseHeaders(value:string|null):Record<string,string>{if(!value)return{};try{return JSON.parse(value);}catch{return{};}}
-function isAmbiguous(error:unknown){const code=String((error as {code?:string})?.code??"");return ["ETIMEDOUT","ECONNRESET","EPIPE","ESOCKET"].includes(code)||/timeout|connection.*closed|socket/i.test(message(error));}
+/** Only a failure at or after handing over the message (DATA) may have delivered it. */
+function isAmbiguous(error:unknown){return classifySendError(error).kind==="uncertain";}
 function message(error:unknown){return error instanceof Error?error.message:String(error);}
 /**
  * A send that was refused on purpose, not one that failed. Never retried: retrying cannot
@@ -252,5 +264,7 @@ export class SafeSendError extends Error{}
 export class SenderPausedError extends SafeSendError{}
 /** The recipient is on the do-not-send list. This contact is permanently out of this channel. */
 export class RecipientSuppressedError extends SafeSendError{}
+/** The recipient's server rejected the address (hard bounce at RCPT TO): recorded as a bounce, never retried. */
+export class RecipientRejectedError extends RecipientSuppressedError{}
 /** A transient provider error: the job is queued again and may be retried from `retryAt` (ISO). */
 export class EmailRetryScheduledError extends Error{constructor(reason:string,public readonly retryAt:string){super(`Send will be retried: ${reason}`);}}

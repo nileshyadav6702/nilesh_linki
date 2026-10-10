@@ -246,6 +246,8 @@ const STATEMENTS: string[] = [
   // What the company's own homepage says it does (read once, free fetch), for scoring.
   "ALTER TABLE companies ADD COLUMN website_text TEXT",
   "ALTER TABLE companies ADD COLUMN website_fetched_at TEXT",
+  // A mailbox the provider is throttling rests until this time (ISO) instead of failing contacts.
+  "ALTER TABLE email_accounts ADD COLUMN cooldown_until TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

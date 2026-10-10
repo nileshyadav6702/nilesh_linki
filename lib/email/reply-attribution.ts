@@ -8,6 +8,7 @@ export const BOUNCE_SENDER_PATTERNS = [
   /mail-delivery-subsystem@/i,
   /delivery-status@/i,
   /amazonses\.com$/i,
+  /^microsoftexchange[0-9a-f]*@/i,
 ];
 
 export function extractEmails(text: string): string[] {

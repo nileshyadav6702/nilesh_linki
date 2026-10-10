@@ -1,4 +1,5 @@
 import Imap from "imap";
+import { classifyDsn } from "@/lib/email/send-errors";
 import { getDb } from "@/lib/db";
 import { premium } from "@/lib/premium";
 import { decryptSecret } from "@/lib/crypto";
@@ -325,7 +326,7 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
               // MESSAGE-ID identifies the DSN itself, which is what makes recording it
               // idempotent. Sequence numbers cannot serve that purpose — they shift as mail
               // arrives, and this range is re-read on every poll.
-              bodies: ["HEADER.FIELDS (FROM TO MESSAGE-ID DATE)", "TEXT"],
+              bodies: ["HEADER.FIELDS (FROM TO MESSAGE-ID DATE SUBJECT)", "TEXT"],
               struct: false,
             });
 
@@ -355,6 +356,9 @@ export async function syncEmailInbox(emailAccountId: string): Promise<{ replies:
                 const emailMatch = fromRaw.match(/<([^>]+)>/) ?? fromRaw.match(/([^\s]+@[^\s]+)/);
                 const fromEmail = emailMatch?.[1]?.toLowerCase().trim();
                 if (!fromEmail || !isBounce(fromEmail)) continue;
+                // Only a permanent failure is a bounce: delay notices and soft bounces (4.x.x, mailbox
+                // full) must not suppress the address or count against the mailbox.
+                if (classifyDsn(parseHeaderValue(msg.header, "Subject"), msg.body) !== "hard") continue;
 
                 const dsnMessageId = parseHeaderValue(msg.header, "Message-ID") || `seq-fallback:${hashStr(msg.header + msg.body)}`;
 
