@@ -2,7 +2,8 @@ import type { Locator, Page } from "playwright";
 
 export class WeeklyLimitError extends Error {}
 export class AlreadyConnectedError extends Error {}
-export class PendingInviteError extends Error {}
+/** LinkedIn already shows this invitation as pending: it went out (now or on an earlier attempt). */
+export class PendingInviteError extends Error { override name = "PendingInviteError"; }
 /** LinkedIn wants the person's email before it lets you invite them: not something a retry fixes. */
 export class InviteNeedsEmailError extends Error {}
 /** The invitation could not be confirmed as sent. Safe to retry: a retry that finds it pending counts it as sent. */

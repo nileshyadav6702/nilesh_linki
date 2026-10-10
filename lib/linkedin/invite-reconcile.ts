@@ -13,9 +13,12 @@ import { getDb } from "@/lib/db";
 
 type DB = Database.Database;
 
-/** Too fresh to judge (LinkedIn's list can lag a few minutes) or too old to matter. */
+/**
+ * Too fresh to judge (LinkedIn's list can lag a few minutes), or too old to judge safely: the
+ * Sent list is read newest-first by scrolling, so only recent invitations are surely on it.
+ */
 const MIN_AGE = "-30 minutes";
-const MAX_AGE = "-30 days";
+const MAX_AGE = "-3 days";
 
 export interface ReconcileResult { checked: number; requeued: string[]; skipped: number }
 
@@ -27,18 +30,20 @@ const vanityOf = (url: string | null): string | null => {
 
 /** Decide and apply, given the vanity names LinkedIn lists as pending. Pure DB; testable. */
 export function requeueMissingInvites(db: DB, accountId: string, pending: Set<string>): ReconcileResult {
-  const rows = db.prepare(`SELECT la.id action_id, la.track_id, la.step_id, t.id target_id, t.full_name, t.linkedin_url, r.id run_id
+  const rows = db.prepare(`SELECT la.id action_id, la.status, la.track_id, la.step_id, t.id target_id, t.full_name, t.linkedin_url, r.id run_id
       FROM linkedin_actions la JOIN targets t ON t.id = la.target_id
       LEFT JOIN run_profile_tracks rt ON rt.id = la.track_id LEFT JOIN run_profiles rp ON rp.id = rt.run_profile_id LEFT JOIN runs r ON r.id = rp.run_id
-     WHERE la.account_id = ? AND la.type = 'connect' AND la.status = 'sent'
+     WHERE la.account_id = ? AND la.type = 'connect' AND la.status IN ('sent', 'uncertain')
        AND la.updated_at < datetime('now', ?) AND la.updated_at > datetime('now', ?)
        AND t.connected_at IS NULL AND COALESCE(t.degree, 0) != 1
        AND NOT EXISTS (SELECT 1 FROM linkedin_actions w WHERE w.target_id = t.id AND w.type = 'withdraw')`)
-    .all(accountId, MIN_AGE, MAX_AGE) as Array<{ action_id: string; track_id: string | null; step_id: string | null; target_id: string; full_name: string | null; linkedin_url: string | null; run_id: string | null }>;
+    .all(accountId, MIN_AGE, MAX_AGE) as Array<{ action_id: string; status: string; track_id: string | null; step_id: string | null; target_id: string; full_name: string | null; linkedin_url: string | null; run_id: string | null }>;
   const result: ReconcileResult = { checked: 0, requeued: [], skipped: 0 };
   // An empty or failed scrape can't tell "nothing pending" from "couldn't read": do nothing.
   if (!pending.size) return { ...result, skipped: rows.length };
-  const fail = db.prepare("UPDATE linkedin_actions SET status = 'failed', last_error = ?, updated_at = datetime('now') WHERE id = ? AND status = 'sent'");
+  const fail = db.prepare("UPDATE linkedin_actions SET status = 'failed', last_error = ?, updated_at = datetime('now') WHERE id = ? AND status IN ('sent', 'uncertain')");
+  // An 'uncertain' send (a timeout or crash mid-send) that LinkedIn lists as pending did go out.
+  const settle = db.prepare("UPDATE linkedin_actions SET status = 'sent', last_error = NULL, updated_at = datetime('now') WHERE id = ? AND status = 'uncertain'");
   const clear = db.prepare("UPDATE targets SET connection_requested_at = NULL WHERE id = ?");
   const rerun = db.prepare("UPDATE run_profile_tracks SET next_step_at = datetime('now') WHERE id = ? AND state = 'in_progress'");
   const log = db.prepare("INSERT INTO logs (id, run_id, target_id, level, message) VALUES (lower(hex(randomblob(16))), ?, ?, 'warn', ?)");
@@ -47,7 +52,7 @@ export function requeueMissingInvites(db: DB, accountId: string, pending: Set<st
       const v = vanityOf(r.linkedin_url);
       if (!v) { result.skipped++; continue; }
       result.checked++;
-      if (pending.has(v)) continue;
+      if (pending.has(v)) { if (r.status === "uncertain") settle.run(r.action_id); continue; }
       fail.run("Not in LinkedIn's sent invitations — will send again", r.action_id);
       clear.run(r.target_id);
       if (r.track_id) rerun.run(r.track_id);

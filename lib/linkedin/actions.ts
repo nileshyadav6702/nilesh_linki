@@ -97,6 +97,8 @@ export function isAmbiguousSendError(error: unknown): boolean {
 
 /** Record the outcome of a send that threw: 'failed' (retry allowed) or, when ambiguous, 'uncertain'. */
 export function markLinkedinActionAfterError(db: DB, id: string, error: unknown): void {
+  // "Already pending" means the invitation exists: it counts as sent (cap, withdraw-stale, reconcile).
+  if (error instanceof Error && error.name === "PendingInviteError") return markLinkedinActionSent(db, id);
   if (!isAmbiguousSendError(error)) return markLinkedinActionFailed(db, id, error);
   const msg = error instanceof Error ? error.message : String(error);
   db.prepare("UPDATE linkedin_actions SET status = 'uncertain', last_error = ?, updated_at = datetime('now') WHERE id = ? AND status = 'sending'").run(msg.slice(0, 500), id);

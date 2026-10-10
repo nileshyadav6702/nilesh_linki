@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser } from "playwright";
 import { getDb } from "@/lib/db";
-import { InviteNeedsEmailError, InviteNotConfirmedError, sendConnectionRequest } from "@/lib/linkedin/connect";
+import { InviteNeedsEmailError, InviteNotConfirmedError, PendingInviteError, sendConnectionRequest } from "@/lib/linkedin/connect";
+import { markLinkedinActionAfterError } from "@/lib/linkedin/actions";
 import { requeueMissingInvites } from "@/lib/linkedin/invite-reconcile";
 
 /**
@@ -77,5 +78,41 @@ describe("sent-invitations check", () => {
     expect(db.prepare("SELECT status FROM linkedin_actions WHERE id = 'a-t-missing'").get()).toEqual({ status: "failed" });
     expect(db.prepare("SELECT connection_requested_at FROM targets WHERE id = 't-missing'").get()).toEqual({ connection_requested_at: null });
     expect(db.prepare("SELECT status FROM linkedin_actions WHERE id = 'a-t-there'").get()).toEqual({ status: "sent" });
+  });
+});
+
+describe("uncertain invitations and already-pending", () => {
+  it("settles an uncertain invite LinkedIn lists, re-sends one it doesn't, and leaves invites older than 3 days alone", () => {
+    const db = getDb();
+    db.prepare("INSERT INTO workspaces (id, name, slug) VALUES ('ws-inv2', 'W', 'ws-inv2')").run();
+    db.prepare("INSERT INTO accounts (id, workspace_id, name, email, is_authenticated) VALUES ('acc-inv2', 'ws-inv2', 'Me', 'm2@x.io', 1)").run();
+    const lead = db.prepare("INSERT INTO targets (id, workspace_id, full_name, linkedin_url, connection_requested_at) VALUES (?, 'ws-inv2', ?, ?, datetime('now','-2 hours'))");
+    lead.run("u-there", "There", "https://www.linkedin.com/in/u-there/");
+    lead.run("u-missing", "Missing", "https://www.linkedin.com/in/u-missing/");
+    lead.run("u-old", "Old", "https://www.linkedin.com/in/u-old/");
+    db.pragma("foreign_keys = OFF");
+    const act = db.prepare("INSERT INTO linkedin_actions (id, idempotency_key, account_id, run_id, track_id, step_id, target_id, type, status, updated_at) VALUES (?, ?, 'acc-inv2', 'r', 'tr', 's', ?, 'connect', ?, ?)");
+    act.run("a-u-there", "k-u-there", "u-there", "uncertain", "2026-01-01 00:00:00");
+    act.run("a-u-missing", "k-u-missing", "u-missing", "uncertain", "2026-01-01 00:00:00");
+    act.run("a-u-old", "k-u-old", "u-old", "sent", "2026-01-01 00:00:00");
+    db.prepare("UPDATE linkedin_actions SET updated_at = datetime('now','-2 hours') WHERE id IN ('a-u-there','a-u-missing')").run();
+    db.prepare("UPDATE linkedin_actions SET updated_at = datetime('now','-4 days') WHERE id = 'a-u-old'").run();
+    db.pragma("foreign_keys = ON");
+
+    const r = requeueMissingInvites(db, "acc-inv2", new Set(["u-there", "someone-else"]));
+    expect(r.requeued).toEqual(["u-missing"]);
+    const status = (id: string) => (db.prepare("SELECT status FROM linkedin_actions WHERE id = ?").get(id) as { status: string }).status;
+    expect(status("a-u-there")).toBe("sent");
+    expect(status("a-u-missing")).toBe("failed");
+    expect(status("a-u-old")).toBe("sent");
+  });
+
+  it("an invitation LinkedIn already shows as pending counts as sent", () => {
+    const db = getDb();
+    db.pragma("foreign_keys = OFF");
+    db.prepare("INSERT INTO linkedin_actions (id, idempotency_key, account_id, run_id, track_id, step_id, target_id, type, status) VALUES ('a-pend', 'k-pend', 'acc-inv2', 'r', 'tr', 's', 'u-there', 'connect', 'sending')").run();
+    db.pragma("foreign_keys = ON");
+    markLinkedinActionAfterError(db, "a-pend", new PendingInviteError("Invitation already pending"));
+    expect((db.prepare("SELECT status FROM linkedin_actions WHERE id = 'a-pend'").get() as { status: string }).status).toBe("sent");
   });
 });

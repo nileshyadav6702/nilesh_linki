@@ -52,7 +52,7 @@ export async function scrapePendingInvitationVanityNames(page: Page): Promise<Se
     for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href*='/in/']")) {
       const href = link.getAttribute("href") ?? "";
       const match = href.match(/\/in\/([^/?#]+)/);
-      if (match) seen.add(match[1].toLowerCase());
+      if (match) { try { seen.add(decodeURIComponent(match[1]).toLowerCase()); } catch { seen.add(match[1].toLowerCase()); } }
     }
     return [...seen];
   });
