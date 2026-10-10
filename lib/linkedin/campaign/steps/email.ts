@@ -204,6 +204,9 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
     return;
   }
 
+  // A subject the AI wrote (here or in an approved agent draft) for a follow-up would start a new
+  // thread in Gmail; only a subject the user typed on the step is kept for a follow-up.
+  const aiSubject = !queuedJob && (!!approvedEmail || !!step.ai_enabled);
   let finalEmailBody = emailBody;
   let threading: { replyToMessageId?: string; references?: string[] } = {};
   let headers: Record<string, string> | undefined;
@@ -228,15 +231,15 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
       trFail(db, tr, `Unresolved template variables: ${unresolved.join(", ")}`);
       return;
     }
-    // Follow-ups thread onto the earlier emails of this sequence. A blank subject means "reply
-    // in the same thread" and reuses "Re: <first subject>" (Gmail only threads on a matching
-    // subject); an explicit follow-up subject is kept, with the threading headers still set.
+    // Follow-ups thread onto the earlier emails of this sequence. A blank or AI-written subject
+    // reuses "Re: <first subject>" (Gmail only threads on a matching subject); a follow-up
+    // subject the user typed is kept, with the threading headers still set.
     const prior = db.prepare(`SELECT sm.message_id, sm.subject FROM sent_messages sm JOIN email_jobs ej ON ej.id = sm.job_id
       WHERE ej.source = 'campaign' AND ej.run_id = ? AND ej.target_id = ? AND sm.email_account_id = ? AND ej.idempotency_key <> ?
       ORDER BY sm.accepted_at, sm.rowid`).all(runId, target.id, emailAccountId, idempotencyKey) as Array<{ message_id: string; subject: string }>;
     if (prior.length > 0) {
       threading = { replyToMessageId: prior[prior.length - 1].message_id, references: prior.map((p) => p.message_id) };
-      if (!emailSubject.trim()) {
+      if (!emailSubject.trim() || aiSubject) {
         const first = prior[0].subject.trim();
         emailSubject = /^re:/i.test(first) ? first : `Re: ${first}`;
       }

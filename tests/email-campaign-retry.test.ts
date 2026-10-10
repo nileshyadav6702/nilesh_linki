@@ -136,6 +136,21 @@ describe("campaign headers", () => {
     expect(opts2.headers.References).toBe(opts1.messageId);
   });
 
+  it("threads an AI-written follow-up (approved agent draft) under the first subject", async () => {
+    const s = seed("aidraft");
+    getDb().pragma("foreign_keys = OFF");
+    getDb().prepare("INSERT INTO approval_queue (id, workspace_id, agent_id, target_id, channel, subject, body, step_id, status, decided_at) VALUES ('aq-aidraft', ?, 'ag-x', 'tgt-aidraft', 'email', 'A brand new subject', 'Following up, Ada.', 's2-aidraft', 'approved', datetime('now'))").run(WS);
+    getDb().pragma("foreign_keys = ON");
+    SEND_EMAIL.mockImplementation(accepted);
+    await emailCampaignTick(getDb());
+    getDb().prepare("UPDATE sent_messages SET accepted_at = datetime('now', '-2 hours') WHERE email_account_id = ?").run(s.mail);
+    makeDue(s.track);
+    await emailCampaignTick(getDb());
+    const [, , subject2, body2] = SEND_EMAIL.mock.calls[1];
+    expect(body2).toContain("Following up, Ada.");
+    expect(subject2).toBe("Re: Hello Ada");
+  });
+
   it("keeps an explicit follow-up subject but still sets the threading headers", async () => {
     const s = seed("explicit", { followupSubject: "One more idea" });
     SEND_EMAIL.mockImplementation(accepted);
