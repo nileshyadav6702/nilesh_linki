@@ -45,7 +45,9 @@ export function enrollLead(db: Database.Database, agent: Agent, targetId: string
     if (!usable.length) return { enrolled: false, reason: "Lead is not reachable on any channel of this campaign" };
 
     const profileId = randomUUID();
-    db.prepare("INSERT INTO run_profiles (id, run_id, target_id) VALUES (?, ?, ?)").run(profileId, run.id, targetId);
+    // The email loop only works leads with a mailbox: record the agent's now (it used to be filled in only at boot).
+    const mailbox = usable.includes("email") ? agent.email_account_id : null;
+    db.prepare("INSERT INTO run_profiles (id, run_id, target_id, email_account_id) VALUES (?, ?, ?, ?)").run(profileId, run.id, targetId, mailbox);
     const insert = db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step) VALUES (?, ?, ?, 'pending', 0)");
     for (const track of usable) insert.run(randomUUID(), profileId, track);
     db.prepare("UPDATE targets SET agent_status = 'enrolled', agent_status_at = datetime('now') WHERE id = ?").run(targetId);

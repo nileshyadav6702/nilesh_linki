@@ -18,7 +18,14 @@ import type { ScheduleConfig, Target, TrackRun, WorkflowStep } from "./types";
  * path inside executeStep; this loop only decides which email step is due. It does not
  * open a browser and does not wait the 8–20s gap the LinkedIn loop leaves between profiles.
  */
+/** Leads enrolled without a mailbox take their run's (older enrollment paths left it empty until a restart). */
+export function assignRunMailboxes(db: ReturnType<typeof getDb>): number {
+  return db.prepare(`UPDATE run_profiles SET email_account_id = (SELECT r.email_account_id FROM runs r WHERE r.id = run_profiles.run_id)
+    WHERE email_account_id IS NULL AND run_id IN (SELECT id FROM runs WHERE status IN ('pending','running','paused') AND email_account_id IS NOT NULL)`).run().changes;
+}
+
 export async function emailCampaignTick(db: ReturnType<typeof getDb>): Promise<void> {
+  assignRunMailboxes(db);
   completeFinishedRuns(db, strandedRunningRunIds(db));
   const activeRuns = emailCampaignRuns(db);
   if (activeRuns.length === 0) return;
