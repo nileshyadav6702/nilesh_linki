@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 import { assertSignedIn } from "@/lib/linkedin/session-guard";
+import { profileDegree } from "@/lib/linkedin/profile-degree";
 
 export type WithdrawOutcome = "withdrawn" | "connected" | "not_pending";
 
@@ -13,8 +14,7 @@ export async function withdrawInvitation(page: Page, linkedinUrl: string): Promi
   await page.waitForTimeout(2000 + Math.random() * 1500);
   if (/\/(login|checkpoint|authwall)/.test(page.url())) throw new Error("LinkedIn session is not signed in");
 
-  const card = await page.locator(".pv-top-card, .scaffold-layout__main").first().innerText().catch(() => "");
-  if (/\b1st\b/.test(card)) return "connected";
+  if ((await profileDegree(page)) === 1) return "connected";
 
   let pending = page.locator('button[aria-label*="Pending"]:visible').first();
   if (await pending.count() === 0) {

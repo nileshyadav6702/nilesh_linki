@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chromium, type Browser } from "playwright";
 import { getDb } from "@/lib/db";
-import { InviteNeedsEmailError, InviteNotConfirmedError, PendingInviteError, sendConnectionRequest } from "@/lib/linkedin/connect";
+import { AlreadyConnectedError, InviteNeedsEmailError, InviteNotConfirmedError, PendingInviteError, sendConnectionRequest } from "@/lib/linkedin/connect";
 import { markLinkedinActionAfterError } from "@/lib/linkedin/actions";
 import { requeueMissingInvites } from "@/lib/linkedin/invite-reconcile";
 
@@ -9,9 +9,9 @@ import { requeueMissingInvites } from "@/lib/linkedin/invite-reconcile";
  * A stand-in LinkedIn profile: Follow as the main button, Connect inside "More", an invitation
  * dialog that opens after `dialogDelay` ms, and (when `sends`) a Pending state after Send.
  */
-function profile({ dialogDelay = 0, sends = true, needsEmail = false } = {}) {
+function profile({ dialogDelay = 0, sends = true, needsEmail = false, card = "Jane Doe · 2nd" } = {}) {
   return `<!doctype html><html><body><nav><button aria-label="More">nav</button></nav>
-<main><section class="pv-top-card">Jane Doe · 2nd</section>
+<main><section class="pv-top-card">${card}</section>
 <button aria-label="Follow Jane">Follow</button><button aria-label="More" id="more">More</button>
 <div id="menu" hidden><div role="menuitem" id="connect">Connect</div><div role="menuitem">Report</div></div></main>
 <script>
@@ -51,6 +51,11 @@ describe("sending an invitation", () => {
 
   it("never reports a send LinkedIn didn't take", async () => {
     await expect(run(profile({ sends: false }))).rejects.toBeInstanceOf(InviteNotConfirmedError);
+  }, 60_000);
+
+  it("a 1st in the headline is not a connection; the 1st badge is", async () => {
+    await expect(run(profile({ card: "Jane Doe · 2nd<br>Partner at 1st Round Capital" }))).resolves.toMatchObject({ noteSent: false });
+    await expect(run(profile({ card: "Jane Doe · 1st<br>Partner at Acme" }))).rejects.toBeInstanceOf(AlreadyConnectedError);
   }, 60_000);
 
   it("recognises LinkedIn asking for an email", async () => {

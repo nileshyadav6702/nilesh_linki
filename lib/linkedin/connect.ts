@@ -1,5 +1,6 @@
 import type { Locator, Page } from "playwright";
 import { assertSignedIn } from "@/lib/linkedin/session-guard";
+import { profileDegree } from "@/lib/linkedin/profile-degree";
 
 export class WeeklyLimitError extends Error {}
 export class AlreadyConnectedError extends Error {}
@@ -62,8 +63,7 @@ export async function sendConnectionRequest(page: Page, linkedinUrl: string, not
   const publicUrl = publicUrlOf(page);
 
   // Already connected / already invited?
-  const topCard = await page.locator(".pv-top-card, .scaffold-layout__main").first().innerText().catch(() => "");
-  if (/\b1st\b/.test(topCard)) throw new AlreadyConnectedError("Already connected");
+  if ((await profileDegree(page)) === 1) throw new AlreadyConnectedError("Already connected");
   if (await page.locator(PENDING_BUTTON).count()) throw new PendingInviteError("Invitation already pending");
 
   // Open the invitation: a direct Connect button/link on the card, else Connect in the "More" menu.
