@@ -105,7 +105,7 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
     const page = await getSessionPage(accountId);
     // Campaign settings → "Split messages into a conversation".
     const split = !!(db.prepare("SELECT a.split_messages FROM targets t JOIN agents a ON a.id = t.agent_id WHERE t.id = ?").get(target.id) as { split_messages: number } | undefined)?.split_messages;
-    try { await sendMessage(page, fullName, messageText, { parts: split ? splitMessage(messageText) : undefined }); } finally { await page.close(); }
+    try { await sendMessage(page, { fullName, profileUrl: freshTarget.linkedin_url }, messageText, { parts: split ? splitMessage(messageText) : undefined }); } finally { await page.close(); }
   });
   if (!sent.claimed) { settlePriorLinkedinAction(db, runId, tr, steps, target.id, name, "message", sent.status); return; }
   await saveSessionAfterSend(accountId);

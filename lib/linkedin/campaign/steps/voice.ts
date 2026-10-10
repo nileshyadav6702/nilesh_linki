@@ -51,7 +51,7 @@ export async function runVoiceStep(ctx: StepContext): Promise<void> {
   try {
     const sent = await sendLinkedinAction(db, voice, async () => {
       const page = await getSessionPage(accountId);
-      try { await sendMessage(page, fullName, "", { attachmentPath: file }); } finally { await page.close(); }
+      try { await sendMessage(page, { fullName, profileUrl: target.linkedin_url }, "", { attachmentPath: file }); } finally { await page.close(); }
     });
     if (!sent.claimed) { settlePriorLinkedinAction(db, runId, tr, steps, target.id, name, "voice", sent.status); return; }
   } finally {

@@ -13,7 +13,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const accountId = b.account_id;
   const db = getDb();
   const acc = db.prepare("SELECT id FROM accounts WHERE id = ? AND workspace_id = ? AND is_authenticated = 1").get(accountId, ctx.workspaceId);
-  const target = db.prepare("SELECT id, full_name FROM targets WHERE id = ? AND workspace_id = ?").get(b.target_id, ctx.workspaceId) as { id: string; full_name: string | null } | undefined;
+  const target = db.prepare("SELECT id, full_name, linkedin_url FROM targets WHERE id = ? AND workspace_id = ?").get(b.target_id, ctx.workspaceId) as { id: string; full_name: string | null; linkedin_url: string | null } | undefined;
   if (!acc) return res.status(400).json({ error: "Pick a connected LinkedIn account" });
   if (!target?.full_name) return res.status(400).json({ error: "This contact has no name to search on LinkedIn" });
   const name = target.full_name;
@@ -23,7 +23,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { sendMessage } = await import("@/lib/linkedin/message");
     await withAccountSession(accountId, async () => {
       const page = await getSessionPage(accountId);
-      try { await sendMessage(page, name, body); } finally { await page.close().catch(() => {}); await saveSessionState(accountId).catch(() => {}); }
+      try { await sendMessage(page, { fullName: name, profileUrl: target.linkedin_url }, body); } finally { await page.close().catch(() => {}); await saveSessionState(accountId).catch(() => {}); }
     });
     recordAudit(ctx, "inbox.message_sent", "contact", target.id);
     // The new conversation shows up with the next sync of this account.

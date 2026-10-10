@@ -89,6 +89,8 @@ export function markLinkedinActionSent(db: DB, id: string): void {
  * so the action may have gone out: not a known failure.
  */
 export function isAmbiguousSendError(error: unknown): boolean {
+  // A message that may have gone out (sent but unconfirmed, or a split message cut short).
+  if (error instanceof Error && error.name === "MessageMaybeSentError") return true;
   const msg = error instanceof Error ? error.message : String(error);
   return /has been closed|target closed|target page|browser.*(closed|disconnected)|crash/i.test(msg);
 }
