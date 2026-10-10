@@ -10,6 +10,7 @@ import {
   RiUserSearchLine, RiInformationLine, RiFireLine, RiCalendarLine, RiChat1Line, RiCloseLine, RiCopperCoinLine,
 } from "react-icons/ri";
 import TrendChart from "@/components/ui/TrendChart";
+import LeadDrawer from "@/components/agents/LeadDrawer";
 import { Avatar, IconTile, Panel, timeAgo, type Tone } from "@/components/agents/ui";
 
 export interface FunnelRow { signal_type: string; label: string; detected: number; qualified: number; contacted: number; accepted: number; replied: number; positive: number; meetings: number }
@@ -17,7 +18,11 @@ export interface DetectorRun { id: string; source_type: string; started_at: stri
 export interface Budget { paused: { until: string; reason: string } | null; usage: Record<string, { used: number; limit: number }> }
 export interface Performance { found: number; contacted: number; accepted: number; replied: number; interested: number }
 export interface DayPoint { day: string; found: number; invitations: number; messages: number; emails: number }
-export interface ActivityItem { id: string; kind: "discovery" | "campaign" | "setup"; title: string; detail: string | null; at: string }
+export type ActivityEvent = "invite_sent" | "invite_accepted" | "message_sent" | "voice_sent" | "inmail_sent" | "email_sent" | "replied" | "problem";
+export interface ActivityItem {
+  id: string; kind: "discovery" | "campaign" | "setup"; title: string; detail: string | null; at: string;
+  event?: ActivityEvent; person?: { id: string; name: string; avatar: string | null };
+}
 
 const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "—");
 
@@ -49,6 +54,9 @@ export default function AgentOverview({ agentId, performance, series, activity, 
   const [custom, setCustom] = useState<{ from: string; to: string; points: DayPoint[] } | null>(null);
   const [picking, setPicking] = useState(false);
   const [dueHidden, setDueHidden] = useState(() => typeof window !== "undefined" && readDismissed(agentId));
+  const [openLead, setOpenLead] = useState<string | null>(null);
+  const feed = activity.slice(0, 30);
+  const feedLeads = [...new Set(feed.flatMap((i) => (i.person ? [i.person.id] : [])))];
   const days = range === "custom" && custom ? custom.points : series.slice(-Number(range === "custom" ? 7 : range));
   const lowCredits = !!credits && credits.balance < Math.max(20, credits.next_refill * LOW_CREDITS_SHARE);
   const title = range === "custom" && custom ? `${format(parseISO(custom.from), "MMM d")} – ${format(parseISO(custom.to), "MMM d")}` : `Last ${range === "30" ? 30 : 7} days`;
@@ -133,13 +141,20 @@ export default function AgentOverview({ agentId, performance, series, activity, 
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           {activity.length === 0 && <p className="px-3 py-8 text-center text-[15px] text-base-content/45">Nothing yet. Sources and sends show up here.</p>}
-          {activity.slice(0, 14).map((item) => {
+          {feed.map((item) => {
             const m = describe(item);
+            const person = item.person;
             return (
               <div key={item.id} className="flex items-center gap-4 rounded-[10px] px-3 py-3 hover:bg-base-200/60">
-                {m.avatar ? <Avatar name={item.title} size={38} /> : <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-[#f0785a]/12 text-[#f0785a]">{m.icon}</span>}
+                {person
+                  ? <button type="button" aria-label={`Open ${person.name}`} onClick={() => setOpenLead(person.id)} className="shrink-0 rounded-full"><Avatar name={person.name} src={person.avatar} size={38} /></button>
+                  : <span className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-[#f0785a]/12 text-[#f0785a]">{m.icon}</span>}
                 <div className="min-w-0 flex-1 text-[16px]">
-                  <div className="truncate"><span className="text-base-content">{m.event}</span>{m.who && <span className="text-base-content/50"> · {m.who}</span>}</div>
+                  <div className="truncate"><span className="text-base-content">{m.event}</span>
+                    {person
+                      ? <> <span className="text-base-content/50">·</span> <button type="button" onClick={() => setOpenLead(person.id)} className="text-base-content/50 hover:text-base-content hover:underline">{person.name}</button></>
+                      : m.who && <span className="text-base-content/50"> · {m.who}</span>}
+                  </div>
                   {m.sub && <div className="truncate text-[15px] text-base-content/55">{m.sub}</div>}
                 </div>
                 <span className="shrink-0 text-[15px] text-base-content/45">{agoLong(item.at)}</span>
@@ -148,6 +163,7 @@ export default function AgentOverview({ agentId, performance, series, activity, 
           })}
         </div>
       </section>
+      <LeadDrawer targetId={openLead} onClose={() => setOpenLead(null)} onChanged={() => {}} siblings={feedLeads} onOpen={setOpenLead} />
     </div>
   );
 }
@@ -190,7 +206,24 @@ function Chart({ days }: { days: DayPoint[] }) {
 interface Described { event: string; who?: string; sub?: string; avatar: boolean; icon: ReactNode; tone: Tone; label: string; labelIcon: ReactNode; labelTone: "ok" | "muted" | "error" | "plain" }
 
 /** Turns a raw activity item (source run, new lead, campaign log) into a display row. */
+const EVENT: Record<ActivityEvent, { event: string; icon: ReactNode; tone: Tone; labelTone: Described["labelTone"] }> = {
+  invite_sent: { event: "Invitation sent", icon: <RiUserAddLine size={16} />, tone: "linkedin", labelTone: "plain" },
+  invite_accepted: { event: "Invitation accepted", icon: <RiUserFollowLine size={16} />, tone: "success", labelTone: "ok" },
+  message_sent: { event: "Message sent", icon: <RiLinkedinBoxFill size={16} />, tone: "linkedin", labelTone: "plain" },
+  voice_sent: { event: "Voice message sent", icon: <RiLinkedinBoxFill size={16} />, tone: "linkedin", labelTone: "plain" },
+  inmail_sent: { event: "InMail sent", icon: <RiLinkedinBoxFill size={16} />, tone: "linkedin", labelTone: "plain" },
+  email_sent: { event: "Email sent", icon: <RiMailSendLine size={16} />, tone: "coral", labelTone: "plain" },
+  replied: { event: "Replied", icon: <RiMailLine size={16} />, tone: "success", labelTone: "ok" },
+  problem: { event: "Problem", icon: <RiErrorWarningLine size={16} />, tone: "error", labelTone: "error" },
+};
+
 function describe(item: ActivityItem): Described {
+  if (item.event) {
+    const e = EVENT[item.event];
+    return item.event === "problem"
+      ? { event: item.title, avatar: false, icon: e.icon, tone: e.tone, label: e.event, labelIcon: e.icon, labelTone: e.labelTone }
+      : { event: e.event, who: item.person?.name ?? item.title, avatar: true, icon: e.icon, tone: e.tone, label: e.event, labelIcon: e.icon, labelTone: e.labelTone };
+  }
   if (item.id.startsWith("lead:")) {
     return { event: "New lead found", who: item.title, sub: item.detail ?? undefined, avatar: true, icon: null, tone: "teal", label: "Lead found", labelIcon: <RiUserSearchLine size={15} />, labelTone: "plain" };
   }
@@ -198,8 +231,8 @@ function describe(item: ActivityItem): Described {
     const failed = !!item.detail && !/^\d+ new, \d+ filtered$/.test(item.detail);
     const n = Number(item.detail?.match(/^(\d+) new/)?.[1] ?? 0);
     return {
-      event: failed ? `${item.title} failed` : `${n} new lead${n === 1 ? "" : "s"} found`, who: failed ? undefined : item.title, sub: item.detail ?? undefined,
-      avatar: false, icon: failed ? <RiErrorWarningLine size={16} /> : <RiRadarLine size={16} />, tone: failed ? "error" : "teal",
+      event: failed ? `${item.title} failed` : `${n} New lead${n === 1 ? "" : "s"} found`, sub: failed ? item.detail ?? undefined : item.title,
+      avatar: false, icon: failed ? <RiErrorWarningLine size={16} /> : <RiFocus3Line size={17} />, tone: failed ? "error" : "teal",
       label: failed ? "Run failed" : `${n} new`, labelIcon: failed ? <RiErrorWarningLine size={15} /> : <RiSearchEyeLine size={15} />, labelTone: failed ? "error" : n > 0 ? "ok" : "muted",
     };
   }

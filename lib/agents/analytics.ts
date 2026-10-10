@@ -102,13 +102,14 @@ export function agentSeries(db: Database.Database, agentId: string, days = 7): D
 
 /** One point per day from `from` to `to` (YYYY-MM-DD, inclusive, UTC days). */
 export function agentSeriesRange(db: Database.Database, agentId: string, from: string, to: string): DayPoint[] {
-  const end = `${to} 23:59:59`;
-  const bucket = (sql: string) => db.prepare(sql).all(agentId, from, end) as Array<{ d: string; n: number }>;
-  const found = bucket(`SELECT date(created_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(created_at) >= ? AND created_at <= ? GROUP BY 1`);
-  const invitations = bucket(`SELECT date(connection_requested_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(connection_requested_at) >= ? AND connection_requested_at <= ? GROUP BY 1`);
-  const messages = bucket(`SELECT date(message_sent_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(message_sent_at) >= ? AND message_sent_at <= ? GROUP BY 1`);
-  const emails = bucket(`SELECT date(ej.created_at) d, COUNT(*) n FROM email_jobs ej JOIN targets t ON t.id = ej.target_id
-    WHERE t.agent_id = ? AND ej.status = 'sent' AND date(ej.created_at) >= ? AND ej.created_at <= ? GROUP BY 1`);
+  // Compare on date(): timestamps are stored both as "YYYY-MM-DD HH:MM:SS" and ISO "…T…Z", and as
+  // text an ISO time on the last day sorts after "YYYY-MM-DD 23:59:59" and would be dropped.
+  const bucket = (sql: string) => db.prepare(sql).all(agentId, from, to) as Array<{ d: string; n: number }>;
+  const found = bucket(`SELECT date(created_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(created_at) BETWEEN ? AND ? GROUP BY 1`);
+  const invitations = bucket(`SELECT date(connection_requested_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(connection_requested_at) BETWEEN ? AND ? GROUP BY 1`);
+  const messages = bucket(`SELECT date(message_sent_at) d, COUNT(*) n FROM targets WHERE agent_id = ? AND date(message_sent_at) BETWEEN ? AND ? GROUP BY 1`);
+  const emails = bucket(`SELECT date(ej.updated_at) d, COUNT(*) n FROM email_jobs ej JOIN targets t ON t.id = ej.target_id
+    WHERE t.agent_id = ? AND ej.status = 'sent' AND date(ej.updated_at) BETWEEN ? AND ? GROUP BY 1`);
   const pick = (rows: Array<{ d: string; n: number }>, day: string) => rows.find((r) => r.d === day)?.n ?? 0;
   const points: DayPoint[] = [];
   for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000) {
@@ -118,22 +119,59 @@ export function agentSeriesRange(db: Database.Database, agentId: string, from: s
   return points;
 }
 
-export interface ActivityItem { id: string; kind: "discovery" | "campaign" | "setup"; title: string; detail: string | null; at: string }
+/** What happened to one person (`person` set) or a source run; `event` names outcome events. */
+export type ActivityEvent = "invite_sent" | "invite_accepted" | "message_sent" | "voice_sent" | "inmail_sent" | "email_sent" | "replied" | "problem";
+export interface ActivityItem {
+  id: string; kind: "discovery" | "campaign" | "setup"; title: string; detail: string | null; at: string;
+  event?: ActivityEvent; person?: { id: string; name: string; avatar: string | null };
+}
 
+const ACTION_EVENT: Record<string, ActivityEvent> = { connect: "invite_sent", message: "message_sent", voice: "voice_sent", sales_inmail: "inmail_sent", inmail: "inmail_sent" };
+
+/**
+ * The agent's feed: one row per real outcome (an invitation sent, accepted, a message or email
+ * sent, a reply) with the person it concerns, plus source runs that found leads or failed and
+ * campaign errors. Built from the outcome tables, not the step logs, so an action shows once.
+ */
 export function agentActivity(db: Database.Database, agentId: string, workflowId: string | null, limit = 40): ActivityItem[] {
   const items: ActivityItem[] = [];
   const runs = db.prepare(`SELECT dr.id, s.source_type, dr.ingested, dr.filtered, dr.error, COALESCE(dr.finished_at, dr.started_at) at
     FROM detector_runs dr JOIN agent_sources s ON s.id = dr.agent_source_id
-    WHERE s.agent_id = ? ORDER BY dr.started_at DESC LIMIT 20`).all(agentId) as Array<{ id: string; source_type: string; ingested: number; filtered: number; error: string | null; at: string }>;
+    WHERE s.agent_id = ? AND (dr.ingested > 0 OR dr.error IS NOT NULL) ORDER BY dr.started_at DESC LIMIT 20`).all(agentId) as Array<{ id: string; source_type: string; ingested: number; filtered: number; error: string | null; at: string }>;
   for (const r of runs) items.push({ id: `run:${r.id}`, kind: "discovery", title: signalLabel(r.source_type), detail: r.error ?? `${r.ingested} new, ${r.filtered} filtered`, at: r.at });
-  const leads = db.prepare(`SELECT id, full_name, company, lead_source, created_at FROM targets WHERE agent_id = ? ORDER BY created_at DESC LIMIT 15`).all(agentId) as Array<{ id: string; full_name: string | null; company: string | null; lead_source: string | null; created_at: string }>;
-  for (const l of leads) items.push({ id: `lead:${l.id}`, kind: "discovery", title: l.full_name ?? "New lead", detail: [l.lead_source, l.company].filter(Boolean).join(" · ") || null, at: l.created_at });
   if (workflowId) {
-    const logs = db.prepare(`SELECT l.id, l.message, l.created_at FROM logs l JOIN runs r ON r.id = l.run_id
-      WHERE r.workflow_id = ? AND l.level IN ('info','warn') ORDER BY l.created_at DESC LIMIT 20`).all(workflowId) as Array<{ id: string; message: string; created_at: string }>;
-    for (const l of logs) items.push({ id: `log:${l.id}`, kind: "campaign", title: l.message, detail: null, at: l.created_at });
+    type Row = { id: string; ev: string; at: string; target_id: string; full_name: string | null; profile_image_url: string | null };
+    const rows = db.prepare(`
+      SELECT 'la:' || la.id id, la.type ev, la.updated_at at, t.id target_id, t.full_name, t.profile_image_url
+        FROM linkedin_actions la JOIN runs r ON r.id = la.run_id JOIN targets t ON t.id = la.target_id
+       WHERE r.workflow_id = @wf AND la.status = 'sent' AND la.type IN ('connect','message','voice','sales_inmail','inmail')
+      UNION ALL
+      SELECT 'em:' || sm.id, 'email', COALESCE(sm.accepted_at, sm.delivered_at), t.id, t.full_name, t.profile_image_url
+        FROM sent_messages sm JOIN runs r ON r.id = sm.run_id JOIN targets t ON t.id = sm.target_id
+       WHERE r.workflow_id = @wf AND sm.bounced_at IS NULL AND COALESCE(sm.accepted_at, sm.delivered_at) IS NOT NULL
+      UNION ALL
+      SELECT 'acc:' || t.id, 'accepted', t.connected_at, t.id, t.full_name, t.profile_image_url
+        FROM targets t WHERE t.connected_at IS NOT NULL AND EXISTS (SELECT 1 FROM linkedin_actions la JOIN runs r ON r.id = la.run_id
+         WHERE la.target_id = t.id AND r.workflow_id = @wf AND la.type = 'connect' AND la.status = 'sent')
+      UNION ALL
+      SELECT 'rep:' || t.id, 'replied', MAX(COALESCE(t.last_replied_at, ''), COALESCE(t.email_replied_at, '')), t.id, t.full_name, t.profile_image_url
+        FROM targets t WHERE (t.last_replied_at IS NOT NULL OR t.email_replied_at IS NOT NULL)
+         AND EXISTS (SELECT 1 FROM run_profiles rp JOIN runs r ON r.id = rp.run_id WHERE rp.target_id = t.id AND r.workflow_id = @wf)
+      ORDER BY at DESC LIMIT 40`).all({ wf: workflowId }) as Row[];
+    for (const r of rows) {
+      const event: ActivityEvent = r.ev === "email" ? "email_sent" : r.ev === "accepted" ? "invite_accepted" : r.ev === "replied" ? "replied" : ACTION_EVENT[r.ev];
+      if (!event || !r.at) continue;
+      const name = r.full_name ?? "Contact";
+      items.push({ id: r.id, kind: "campaign", title: name, detail: null, at: r.at, event, person: { id: r.target_id, name, avatar: r.profile_image_url } });
+    }
+    // Campaign-level problems (limits reached, failures) — not the per-send progress lines.
+    const errors = db.prepare(`SELECT l.id, l.message, l.created_at FROM logs l JOIN runs r ON r.id = l.run_id
+      WHERE r.workflow_id = ? AND l.level = 'error' ORDER BY l.created_at DESC LIMIT 10`).all(workflowId) as Array<{ id: string; message: string; created_at: string }>;
+    for (const l of errors) items.push({ id: `log:${l.id}`, kind: "campaign", title: l.message, detail: null, at: l.created_at, event: "problem" });
   }
-  items.sort((a, b) => (a.at < b.at ? 1 : -1));
+  // Tables store "YYYY-MM-DD HH:MM:SS" (UTC) or ISO strings: compare as times.
+  const ms = (s: string) => Date.parse(/[TZ]/.test(s) ? s : `${s.replace(" ", "T")}Z`) || 0;
+  items.sort((a, b) => ms(b.at) - ms(a.at));
   return items.slice(0, limit);
 }
 

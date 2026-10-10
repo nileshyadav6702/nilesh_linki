@@ -35,9 +35,10 @@ export function setDealSize(db: Database.Database, ws: string, value: number | n
 }
 
 export function dashboardSummary(db: Database.Database, ws: string, p: Period): DashboardSummary {
-  const from = p.from, toEnd = `${p.to} 23:59:59`;
-  const inP = (col: string) => `${col} >= ? AND ${col} <= ?`;
-  // ISO ("2026-10-08T…") and SQLite ("2026-10-08 …") timestamps both compare correctly on the date prefix.
+  const from = p.from, toEnd = p.to;
+  // Compare on date(): ISO ("2026-10-08T…Z") and SQLite ("2026-10-08 …") timestamps are both stored, and as
+  // text an ISO time on the last day sorts after "2026-10-08 23:59:59", so a time bound would drop it.
+  const inP = (col: string) => `date(${col}) BETWEEN ? AND ?`;
   const count = (sql: string) => (db.prepare(sql).get(ws, from, toEnd) as { n: number }).n;
 
   const activeSignals = (db.prepare(`SELECT COUNT(*) n FROM agent_sources s JOIN agents a ON a.id = s.agent_id
