@@ -278,6 +278,14 @@ const STATEMENTS: string[] = [
   // The browser fingerprint an account's LinkedIn session was born under (viewport, clock),
   // chosen at its login and reused for every later use. NULL = the original shared one.
   "ALTER TABLE accounts ADD COLUMN browser_profile TEXT",
+  // When each member last marked their notifications read (the bell's "N new" and unread dots).
+  `CREATE TABLE IF NOT EXISTS notification_reads (
+    workspace_id TEXT NOT NULL, user_id TEXT NOT NULL, read_at TEXT NOT NULL,
+    PRIMARY KEY (workspace_id, user_id)
+  )`,
+  // When a LinkedIn account was signed out / hit LinkedIn's weekly invitation limit (notifications).
+  "ALTER TABLE accounts ADD COLUMN disconnected_at TEXT",
+  "ALTER TABLE accounts ADD COLUMN connects_blocked_at TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

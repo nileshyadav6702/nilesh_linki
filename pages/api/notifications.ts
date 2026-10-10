@@ -1,24 +1,37 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getDb } from "@/lib/db";
 import { requireWorkspace } from "@/lib/workspace";
+import { alertItems } from "@/lib/notifications/alerts";
+import { activityItems } from "@/lib/notifications/activity";
+import type { FeedItem } from "@/lib/notifications/types";
 
-export interface NotificationItem { id: string; kind: "reply" | "approval"; title: string; text: string | null; href: string; at: string | null; photo?: string | null }
+export type NotificationItem = FeedItem & { unread: boolean };
 
-// GET /api/notifications → unread replies (inbox) and messages waiting for approval (Copilot), newest first.
+// GET  /api/notifications → { alerts, items, unread }: what needs the user (kept until resolved),
+//                            then what happened (daily outreach, replies, acceptances, new leads,
+//                            meetings, finished campaigns, failures, bounces, unsubscribes).
+// POST /api/notifications  { action: "read_all" } → mark everything read for this member.
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "GET") { res.setHeader("Allow", ["GET"]); return res.status(405).end(); }
+  if (req.method !== "GET" && req.method !== "POST") { res.setHeader("Allow", ["GET", "POST"]); return res.status(405).end(); }
   const ctx = requireWorkspace(req, res, "viewer");
   if (!ctx) return;
   const db = getDb();
-  const replies = db.prepare(`SELECT id, participant_name name, participant_photo photo, snippet, last_message_at at FROM inbox_threads
-    WHERE workspace_id = ? AND unread = 1 AND has_inbound = 1 AND deleted = 0 AND archived = 0 ORDER BY last_message_at DESC LIMIT 8`)
-    .all(ctx.workspaceId) as Array<{ id: string; name: string | null; photo: string | null; snippet: string | null; at: string | null }>;
-  const pending = db.prepare(`SELECT COUNT(DISTINCT target_id) n, MAX(created_at) at FROM approval_queue WHERE workspace_id = ? AND status = 'pending'`)
-    .get(ctx.workspaceId) as { n: number; at: string | null };
-  const items: NotificationItem[] = replies.map((r) => ({
-    id: `reply:${r.id}`, kind: "reply", title: `${r.name ?? "Someone"} replied`, text: r.snippet, href: "/inbox", at: r.at, photo: r.photo,
-  }));
-  if (pending.n) items.push({ id: "approval", kind: "approval", title: `${pending.n} lead${pending.n === 1 ? "" : "s"} waiting for your review`, text: "Approve or reject their messages in Copilot.", href: "/copilot", at: pending.at });
-  items.sort((a, b) => ((a.at ?? "").replace(" ", "T") < (b.at ?? "").replace(" ", "T") ? 1 : -1));
-  return res.json({ items, unread: replies.length + (pending.n ? 1 : 0) });
+  const user = ctx.userId ?? "workspace";
+
+  if (req.method === "POST") {
+    if ((req.body ?? {}).action !== "read_all") return res.status(400).json({ error: "action must be read_all" });
+    db.prepare(`INSERT INTO notification_reads (workspace_id, user_id, read_at) VALUES (?, ?, ?)
+      ON CONFLICT(workspace_id, user_id) DO UPDATE SET read_at = excluded.read_at`).run(ctx.workspaceId, user, new Date().toISOString());
+    return res.json({ ok: true });
+  }
+
+  const readAt = (db.prepare("SELECT read_at FROM notification_reads WHERE workspace_id = ? AND user_id = ?").get(ctx.workspaceId, user) as { read_at: string } | undefined)?.read_at ?? null;
+  // An alert with no known start counts as new until it is marked read once.
+  const unread = (at: string | null) => (at ? !readAt || Date.parse(at) > Date.parse(readAt) : !readAt);
+  const mark = (i: FeedItem): NotificationItem => ({ ...i, unread: unread(i.at) });
+  const newest = (a: FeedItem, b: FeedItem) => (Date.parse(b.at ?? "") || 0) - (Date.parse(a.at ?? "") || 0);
+
+  const alerts = alertItems(db, ctx.workspaceId).sort(newest).map(mark);
+  const items = activityItems(db, ctx.workspaceId).sort(newest).slice(0, 60).map(mark);
+  return res.json({ alerts, items, unread: [...alerts, ...items].filter((i) => i.unread).length });
 }

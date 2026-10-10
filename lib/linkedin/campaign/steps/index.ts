@@ -190,6 +190,6 @@ export function handleStepError(
 export function blockConnectsForWeek(db: ReturnType<typeof getDb>, accountId: string | null): string {
   const tz = accountId ? (db.prepare("SELECT timezone FROM accounts WHERE id = ?").get(accountId) as { timezone: string | null } | undefined)?.timezone ?? "UTC" : "UTC";
   const until = new Date(Date.parse(localWeekStartUtc(tz)) + 7 * 86_400_000).toISOString();
-  if (accountId) db.prepare("UPDATE accounts SET connects_blocked_until = ? WHERE id = ?").run(until, accountId);
+  if (accountId) db.prepare("UPDATE accounts SET connects_blocked_until = ?, connects_blocked_at = datetime('now') WHERE id = ?").run(until, accountId);
   return until;
 }

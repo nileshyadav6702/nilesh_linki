@@ -66,7 +66,7 @@ async function persistLogin(accountId: string, ctx: BrowserContext, page?: Page)
   }
   const db = getDb();
   const state = await ctx.storageState();
-  db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1, browser_profile = COALESCE(?, browser_profile) WHERE id = ?").run(
+  db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1, disconnected_at = NULL, browser_profile = COALESCE(?, browser_profile) WHERE id = ?").run(
     encryptSecret(JSON.stringify(state)),
     loginProfileJson(ctx),
     accountId

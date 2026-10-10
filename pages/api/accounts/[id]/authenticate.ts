@@ -40,7 +40,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     origins: [],
   };
 
-  db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1 WHERE id = ?").run(
+  db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1, disconnected_at = NULL WHERE id = ?").run(
     encryptSecret(JSON.stringify(storageState)),
     id
   );

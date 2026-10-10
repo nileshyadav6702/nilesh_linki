@@ -343,7 +343,7 @@ export async function closeIdleSessions(
  */
 export async function markNeedsReauth(accountId: string): Promise<void> {
   const db = getDb();
-  db.prepare("UPDATE accounts SET is_authenticated = 0 WHERE id = ?").run(accountId);
+  db.prepare("UPDATE accounts SET is_authenticated = 0, disconnected_at = COALESCE(disconnected_at, datetime('now')) WHERE id = ?").run(accountId);
   try { await closeSession(accountId); } catch { /* ignore */ }
   console.warn(`[session] account ${accountId} flagged needs-reauth (session logged out)`);
 }
@@ -395,7 +395,7 @@ export async function authenticateAccount(accountId: string): Promise<void> {
 
     // Save full storage state (cookies + localStorage) to DB
     const state = await ctx.storageState();
-    db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1, browser_profile = COALESCE(?, browser_profile) WHERE id = ?").run(
+    db.prepare("UPDATE accounts SET cookies_json = ?, is_authenticated = 1, disconnected_at = NULL, browser_profile = COALESCE(?, browser_profile) WHERE id = ?").run(
       encryptSecret(JSON.stringify(state)),
       loginProfileJson(ctx),
       accountId
