@@ -37,3 +37,18 @@ describe("sender variables", () => {
       .toBe("Hi Ada, Nilesh from Kairo here. your team");
   });
 });
+
+describe("add-step rules", () => {
+  it("allows one invitation, needs one before messages, and caps the length", async () => {
+    const { addRules, MAX_ACTIONS } = await import("@/components/agents/campaign/sequence");
+    const empty = addRules([], { includesConnections: false });
+    expect(empty.connect.disabled).toBe(false);
+    expect(empty.message).toMatchObject({ disabled: true, reason: expect.stringContaining("Connection Request first") });
+    expect(addRules([], { includesConnections: true }).message.disabled).toBe(false);
+    const withInvite = addRules([step("c", "connect")], { includesConnections: false });
+    expect(withInvite.connect).toMatchObject({ disabled: true, reason: expect.stringContaining("only be invited once") });
+    expect(withInvite.message.disabled).toBe(false);
+    const full = addRules(Array.from({ length: MAX_ACTIONS }, (_, i) => step(`v${i}`, "visit")), { includesConnections: true });
+    expect(full.email.disabled).toBe(true);
+  });
+});

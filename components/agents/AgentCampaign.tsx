@@ -1,30 +1,21 @@
-import { useCallback, useRef, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useRef, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
-  RiAddLine, RiArrowDownLine, RiCheckLine, RiCheckboxCircleLine, RiCloseLine, RiEyeLine, RiFilter3Line, RiFocus3Line,
-  RiLinkedinBoxFill, RiMailLine, RiMailSendLine, RiMicLine, RiEditBoxLine, RiSettings3Line, RiThumbUpLine, RiTimeLine, RiUserAddLine,
+  RiAddLine, RiArrowDownLine, RiCheckLine, RiCheckboxCircleLine, RiCloseLine, RiFilter3Line, RiFocus3Line, RiEditBoxLine, RiSettings3Line, RiTimeLine,
 } from "react-icons/ri";
-import { IconTile, Panel, primaryBtn, type Tone } from "@/components/agents/ui";
+import { IconTile, Panel, primaryBtn } from "@/components/agents/ui";
 import { aiName, DELAY_OPTIONS, delayLabel, STEP_TITLE, type CampaignStep } from "@/components/agents/campaign/kit";
-import { blankStep, restructure, timeline, withPositions } from "@/components/agents/campaign/sequence";
+import { addRules, blankStep, restructure, timeline, withPositions } from "@/components/agents/campaign/sequence";
 import StepDrawer, { type StepSave } from "@/components/agents/campaign/StepDrawer";
 import StepContactsModal from "@/components/agents/campaign/StepContactsModal";
 import CampaignSettings, { type CampaignSettingsInitial } from "@/components/agents/campaign/CampaignSettings";
+import AddStepMenu from "@/components/agents/campaign/AddStepMenu";
 import StepCard, { type StepStat } from "@/components/agents/campaign/StepCard";
 import LikePostsDrawer from "@/components/agents/campaign/LikePostsDrawer";
 import VoiceDrawer from "@/components/agents/campaign/VoiceDrawer";
 
 export type { StepStat };
 
-const ADDABLE: Array<{ type: string; title: string; sub: string; icon: ReactNode; tone: Tone; group?: string }> = [
-  { type: "connect", title: "Send Connection Request", sub: "Connection request", icon: <RiUserAddLine size={18} />, tone: "linkedin" },
-  { type: "message", title: "Send Message", sub: "Text message", icon: <RiLinkedinBoxFill size={18} />, tone: "linkedin" },
-  { type: "voice", title: "Voice Message", sub: "Record a voice note", icon: <RiMicLine size={18} />, tone: "success" },
-  { type: "visit", title: "Visit Profile", sub: "View their LinkedIn page", icon: <RiEyeLine size={18} />, tone: "amber" },
-  { type: "like_posts", title: "Like Posts", sub: "Like recent LinkedIn posts", icon: <RiThumbUpLine size={18} />, tone: "coral" },
-  { type: "sales_inmail", title: "Send Sales InMail", sub: "Sales Navigator InMail", icon: <RiMailSendLine size={18} />, tone: "linkedin" },
-  { type: "email", title: "Send Email", sub: "Personalized email to your leads", icon: <RiMailLine size={18} />, tone: "coral", group: "Email" },
-];
 /** Hairline-colored dot grid behind the timeline. */
 const DOTS = { backgroundImage: "radial-gradient(var(--border-subtle) 1px, transparent 1px)", backgroundSize: "16px 16px" };
 
@@ -219,20 +210,7 @@ export default function AgentCampaign({ agentId, workflowId, stats, leadCount, s
                   <span className="flex h-12 w-12 items-center justify-center rounded-[10px] bg-base-200 text-base-content/55"><RiAddLine size={26} /></span>
                   <span><span className="block text-[19px] text-base-content/75">Add a step</span><span className="text-[16px] text-base-content/45">Message, invitation, profile visit…</span></span>
                 </button>
-                {adding && (
-                  <div className="absolute bottom-full left-14 z-40 mb-2 w-80 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-2 shadow-[var(--shadow-overlay)]">
-                    <div className="px-3 pb-2 pt-1"><div className="font-medium text-base-content">Add a step</div><div className="text-[14.5px] text-base-content/50">What should happen next in your sequence?</div></div>
-                    {ADDABLE.map((o) => (
-                      <div key={o.type}>
-                        {o.group === "Email" && <div className="px-3 pb-1 pt-2 text-center text-[12.5px] font-semibold uppercase tracking-[1.2px] text-base-content/40">Email</div>}
-                        <button type="button" onClick={() => addStep(o.type)} className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left hover:bg-base-200">
-                          <IconTile icon={o.icon} tone={o.tone} size={36} />
-                          <span className="min-w-0"><span className="block text-[15px] font-medium text-base-content">{o.title}</span><span className="block text-[13.5px] text-base-content/50">{o.sub}</span></span>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {adding && <AddStepMenu rules={addRules(shown, { includesConnections: !settings.exclude_first_degree })} onPick={addStep} onClose={() => setAdding(false)} />}
               </li>
             )}
 

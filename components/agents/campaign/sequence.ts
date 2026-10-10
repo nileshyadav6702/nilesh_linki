@@ -77,3 +77,29 @@ export function withPositions(steps: CampaignStep[]): CampaignStep[] {
     return s;
   });
 }
+
+/** Most action steps a sequence can hold. */
+export const MAX_ACTIONS = 15;
+
+export interface AddRule { disabled: boolean; reason?: string }
+
+/**
+ * Which steps can be added next, and why not. One invitation per person; LinkedIn messages and
+ * voice notes only reach connections, so they need an invitation earlier in the sequence (unless
+ * the campaign also targets existing connections); and a sequence has a length limit.
+ */
+export function addRules(steps: CampaignStep[], opts: { includesConnections: boolean }): Record<string, AddRule> {
+  const actions = steps.filter((s) => s.step_type !== "delay");
+  const has = (t: string) => actions.some((s) => s.step_type === t);
+  const full = actions.length >= MAX_ACTIONS;
+  const rule = (blocked: false | string): AddRule => (full ? { disabled: true, reason: `A sequence can have at most ${MAX_ACTIONS} steps` } : blocked ? { disabled: true, reason: blocked } : { disabled: false });
+  const needsInvite = !has("connect") && !opts.includesConnections ? "Add a Send Connection Request first: LinkedIn messages only reach your connections" : false;
+  return {
+    connect: rule(has("connect") ? "Already in your sequence: a person can only be invited once" : false),
+    message: rule(needsInvite),
+    voice: rule(needsInvite),
+    visit: rule(false),
+    like_posts: rule(false),
+    email: rule(false),
+  };
+}
