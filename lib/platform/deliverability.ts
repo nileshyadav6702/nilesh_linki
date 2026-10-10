@@ -15,15 +15,16 @@ export async function checkDomainDeliverability(input: { workspaceId: string; do
     findDkim(domain, input.selector),
   ]);
   const account = input.emailAccountId ? getDb().prepare("SELECT is_verified FROM email_accounts WHERE id = ? AND workspace_id = ?").get(input.emailAccountId, input.workspaceId) as { is_verified: number } | undefined : undefined;
-  const bounce = input.emailAccountId ? (getDb().prepare(`SELECT
-      COUNT(CASE WHEN l.message LIKE 'Email sent%' THEN 1 END) sent,
-      COUNT(CASE WHEN l.message LIKE '%bounce%' THEN 1 END) bounced
-    FROM logs l JOIN runs r ON r.id = l.run_id JOIN run_profiles rp ON rp.run_id = r.id
-    WHERE rp.email_account_id = ? AND l.created_at >= datetime('now','-30 days')`).get(input.emailAccountId) as { sent: number; bounced: number }) : { sent: 0, bounced: 0 };
-  const bounceRate = bounce.sent ? bounce.bounced / bounce.sent : 0;
-  const score = Math.max(0, Math.round((spf.ok ? 25 : 0) + (dkim.ok ? 25 : 0) + (dmarc.ok ? 30 : 0) + (mx.ok ? 10 : 0) + (account?.is_verified ? 10 : 0) - Math.min(30, bounceRate * 200)));
+  // The mailbox's last 30 days, from the same records sender health uses (accepted sends, and
+  // bounces / complaints from DSNs, feedback reports and webhooks), not log text.
+  const usage = input.emailAccountId ? mailboxUsage(input.emailAccountId) : { sent: 0, bounced: 0, complained: 0 };
+  const bounceRate = usage.sent ? usage.bounced / usage.sent : 0;
+  const complaintRate = usage.sent ? usage.complained / usage.sent : 0;
+  const score = Math.max(0, Math.round((spf.ok ? 25 : 0) + (dkim.ok ? 25 : 0) + (dmarc.ok ? 30 : 0) + (mx.ok ? 10 : 0) + (account?.is_verified ? 10 : 0)
+    - Math.min(30, bounceRate * 200) - Math.min(30, complaintRate * 3000)));
   const id = randomUUID();
-  const details = { domain, spf, dkim, dmarc, mx, bounce_rate: bounceRate, recommendations: recommendations({ spf: spf.ok, dkim: dkim.ok, dmarc: dmarc.ok, mx: mx.ok, bounceRate }) };
+  const details = { domain, spf, dkim, dmarc, mx, bounce_rate: bounceRate, complaint_rate: complaintRate, sent_30d: usage.sent,
+    recommendations: recommendations({ spf: spf.ok, dkim: dkim.ok, dmarc: dmarc.ok, mx: mx.ok, bounceRate, complaintRate }) };
   getDb().prepare(`INSERT INTO deliverability_checks
     (id, workspace_id, email_account_id, domain, spf_status, dkim_status, dmarc_status, mx_status, score, details_json)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -189,12 +190,20 @@ async function findDkim(domain: string, preferred?: string) {
 }
 function status(ok: boolean) { return ok ? "pass" : "fail"; }
 function message(error: unknown) { return error instanceof Error ? error.message : String(error); }
-function recommendations(x: { spf: boolean; dkim: boolean; dmarc: boolean; mx: boolean; bounceRate: number }) {
+function mailboxUsage(emailAccountId: string): { sent: number; bounced: number; complained: number } {
+  const db = getDb();
+  const sent = (db.prepare("SELECT COUNT(*) n FROM sent_messages WHERE email_account_id = ? AND accepted_at >= datetime('now','-30 days')").get(emailAccountId) as { n: number }).n;
+  const events = db.prepare(`SELECT COUNT(CASE WHEN event_type = 'bounced' THEN 1 END) bounced, COUNT(CASE WHEN event_type = 'complained' THEN 1 END) complained
+    FROM sender_events WHERE email_account_id = ? AND occurred_at >= datetime('now','-30 days')`).get(emailAccountId) as { bounced: number; complained: number };
+  return { sent, ...events };
+}
+function recommendations(x: { spf: boolean; dkim: boolean; dmarc: boolean; mx: boolean; bounceRate: number; complaintRate: number }) {
   const out: string[] = [];
   if (!x.spf) out.push("Publish one SPF TXT record authorizing every sending provider.");
   if (!x.dkim) out.push("Enable DKIM signing and publish the provider selector.");
   if (!x.dmarc) out.push("Publish a DMARC record, beginning with p=none and aggregate reporting.");
   if (!x.mx) out.push("Configure valid MX records for the sending domain.");
   if (x.bounceRate > 0.03) out.push("Pause campaigns and clean the list; the 30-day bounce rate exceeds 3%.");
+  if (x.complaintRate > 0.001) out.push("Recipients are marking these emails as spam (over 0.1%): tighten targeting and make the opt-out obvious.");
   return out;
 }
