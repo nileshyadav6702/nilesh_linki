@@ -67,6 +67,19 @@ export function nextSourceRun(db: Database.Database, agentId: string): string | 
   return row.at;
 }
 
+/**
+ * When this agent's outreach next sends something: the earliest scheduled step of a lead in a
+ * running campaign (now, if one is already due). Null when nobody is queued.
+ */
+export function nextOutreachAt(db: Database.Database, workflowId: string | null): string | null {
+  if (!workflowId) return null;
+  const row = db.prepare(`SELECT MIN(datetime(COALESCE(rt.next_step_at, 'now'))) at, MAX(CASE WHEN rt.next_step_at IS NULL OR datetime(rt.next_step_at) <= datetime('now') THEN 1 ELSE 0 END) due
+    FROM run_profile_tracks rt JOIN run_profiles rp ON rp.id = rt.run_profile_id JOIN runs r ON r.id = rp.run_id
+    WHERE r.workflow_id = ? AND r.status = 'running' AND rt.state IN ('pending','in_progress')`).get(workflowId) as { at: string | null; due: number | null };
+  if (!row.at) return null;
+  return row.due ? new Date().toISOString() : `${row.at.replace(" ", "T")}Z`;
+}
+
 /** Leads with a step due inside the next day on this agent's campaign. */
 export function dueToday(db: Database.Database, workflowId: string | null): number {
   if (!workflowId) return 0;

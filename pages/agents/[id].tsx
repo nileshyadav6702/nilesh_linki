@@ -31,7 +31,7 @@ interface Detail {
   sources: AgentSourceRow[]; linkedin_budget: Budget | null;
   counts: { by_status: Record<string, number>; today: Record<string, number>; ai_cost_30d_usd: number };
   sequence: Array<Omit<Step, "draft">>; workflow: { id: string; name: string } | null;
-  performance: Performance; series: DayPoint[]; activity: ActivityItem[]; next_run_at: string | null; due_today: number; steps: StepRow[];
+  performance: Performance; series: DayPoint[]; activity: ActivityItem[]; next_run_at: string | null; due_today: number; next_outreach_at?: string | null; steps: StepRow[];
   senders: {
     linkedin: { name: string | null; email: string | null; daily_connection_limit: number | null; daily_message_limit: number | null; is_authenticated: number } | null;
     email: { from_email: string | null; from_name: string | null; daily_email_limit: number | null; ramp_up_enabled: number | null; ramp_start_date: string | null } | null;
@@ -44,6 +44,18 @@ interface Detail {
 const AGENT_LEAD_HIDDEN = ["agent", "list", "imported"];
 const TABS = ["Overview", "Leads", "Sources", "Campaign", "Activity", "Settings"] as const;
 
+
+/** "Next launch in 12 hours" under Pause Outreach: when outreach next sends, and what that means. */
+function launchInfo(sending: boolean, at: string | null): { lead: string; when: string; tip: string } | null {
+  if (!sending || !at) return null;
+  const t = Date.parse(at);
+  const now = Number.isNaN(t) || t <= Date.now() + 60_000;
+  const when = now ? "now" : `in ${formatDistanceToNowStrict(t)}`;
+  return {
+    lead: "Next launch", when,
+    tip: `The outreach campaign ${now ? "is sending now" : `begins ${when}`}. Lead detection and scoring run continuously. Your daily sending limit is shared across your active campaigns. Approved leads enter the queue gradually, and the rest will follow over the coming days.`,
+  };
+}
 
 export default function AgentDetail() {
   const router = useRouter();
@@ -142,10 +154,7 @@ export default function AgentDetail() {
           onToggleOutreach={() => patch({ outreach_enabled: !sending }, sending ? "Outreach paused" : "Outreach started")}
           onToggleSourcing={() => patch({ status: finding ? "paused" : "active" }, finding ? "Lead sourcing paused" : "Lead sourcing on")}
           onLaunch={() => setAskLaunch(true)} onDelete={remove} onSenderSettings={() => setTab("Settings")}
-          nextLaunch={soonest?.next_run_at && finding ? {
-            lead: "Next launch", when: timeUntil(soonest.next_run_at) === "due" ? "now" : `in ${formatDistanceToNowStrict(new Date(soonest.next_run_at))}`,
-            tip: "When this agent next runs its lead sources. Found leads are scored, then the qualified ones enter the campaign.",
-          } : null}
+          nextLaunch={launchInfo(sending, d.next_outreach_at ?? null)}
         />
         {askLaunch && <Confirm title="Launch sources now?" action="Launch now (10 credits)" onCancel={() => setAskLaunch(false)}
           onConfirm={async () => { setAskLaunch(false); await runNow(); }}

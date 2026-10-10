@@ -16,12 +16,15 @@ export interface HeaderSenders {
   email: { from_email: string | null; from_name: string | null; daily_email_limit: number | null; ramp_up_enabled: number | null; ramp_start_date: string | null } | null;
 }
 
-/** Hover/focus tooltip shown under its trigger. */
-function Tip({ tip, children }: { tip: ReactNode; children: ReactNode }) {
+/** Hover/focus tooltip shown under its trigger. `wide`: a right-aligned paragraph (the right-hand "Next launch" note). */
+function Tip({ tip, children, wide = false }: { tip: ReactNode; children: ReactNode; wide?: boolean }) {
+  const place = wide
+    ? "right-0 w-[min(500px,calc(100vw-2rem))] px-4 py-3 text-left text-[17px] leading-relaxed text-base-content/85"
+    : "left-1/2 w-max max-w-[340px] -translate-x-1/2 px-3.5 py-2 text-center text-[14.5px] leading-snug text-base-content/75";
   return (
     <span className="group relative inline-flex">
       {children}
-      <span role="tooltip" className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden w-max max-w-[340px] -translate-x-1/2 rounded-[10px] border border-[var(--border-subtle)] bg-base-100 px-3.5 py-2 text-center text-[14.5px] leading-snug text-base-content/75 shadow-[var(--shadow-overlay)] group-focus-within:block group-hover:block">
+      <span role="tooltip" className={`pointer-events-none absolute top-full z-30 mt-2 hidden rounded-[10px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)] group-focus-within:block group-hover:block ${place}`}>
         {tip}
       </span>
     </span>
@@ -146,7 +149,7 @@ export default function AgentHeader({ name, status, statusTip, outreachOn, sende
         {menu && <FloatingMenu anchor={menu} items={items} onClose={() => setMenu(null)} label="Agent actions" width={220} />}
       </div>
       {nextLaunch && (
-        <Tip tip={nextLaunch.tip}>
+        <Tip tip={nextLaunch.tip} wide>
           <span tabIndex={0} className="inline-flex items-center gap-1.5 pr-12 text-[15.5px] text-base-content/60 outline-none">
             {nextLaunch.lead} <b className="font-semibold text-base-content/80">{nextLaunch.when}</b>
             <RiInformationLine size={16} className="text-base-content/45" />

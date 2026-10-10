@@ -4,7 +4,7 @@ import { billingSummary } from "@/lib/credits/ledger";
 import { sourceItems } from "@/lib/agents/source-items";
 import { agentInputSchema, checkAgentRefs, deleteAgent, getAgent, listSources, updateAgent } from "@/lib/agents/store";
 import { activateAgentRuns, pauseAgentRuns } from "@/lib/agents/enroll";
-import { agentActivity, agentCounts, agentPerformance, agentSeries, dueToday, nextSourceRun, signalFunnel, stepOccupancy } from "@/lib/agents/analytics";
+import { agentActivity, agentCounts, agentPerformance, agentSeries, dueToday, nextOutreachAt, nextSourceRun, signalFunnel, stepOccupancy } from "@/lib/agents/analytics";
 import { budgetSnapshot } from "@/lib/linkedin/budget";
 import { createDefaultCampaign } from "@/lib/agents/default-campaign";
 import { sequenceSteps } from "@/lib/agents/drafts";
@@ -40,6 +40,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       activity: agentActivity(db, id, agent.workflow_id),
       next_run_at: nextSourceRun(db, id),
       due_today: dueToday(db, agent.workflow_id),
+      next_outreach_at: nextOutreachAt(db, agent.workflow_id),
       steps: stepOccupancy(db, agent.workflow_id),
       // Credit balance, so the Overview can warn before outreach stops for lack of credits.
       credits: (() => { const b = billingSummary(db, ctx.workspaceId); return { balance: b.balance, next_refill: b.next_refill }; })(),
