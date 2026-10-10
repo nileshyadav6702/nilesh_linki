@@ -335,6 +335,7 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
     const target = db.prepare("SELECT * FROM targets WHERE id = ?").get(tr.target_id) as Target;
     // Atomic claim: never two workers (or a still-running orphaned step) on one track.
     if (!claimTrack(db, tr.id, WORKER_ID, tr.current_step)) continue;
+    let wedged: string | null = null;
     // Bounded so one wedged profile cannot stop every profile behind it in the queue. On a
     // timeout the abandoned step keeps its track claim until it really ends, and whatever it
     // was sending is marked uncertain, so the next tick moves the track on WITHOUT resending.
@@ -350,9 +351,17 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
       },
       (err) => {
         log(db, tr.run_id, tr.target_id, "error", `Step aborted: ${err.message}`);
-        if (err instanceof WatchdogTimeoutError) markTrackActionsUncertain(db, tr.id, err.message);
+        if (err instanceof WatchdogTimeoutError) { markTrackActionsUncertain(db, tr.id, err.message); wedged = tr.account_id; }
       },
     );
+    // A wedged step may still be driving this account's browser: close the session (which cancels
+    // it) and end this pass, so two actions never run on one account at once. The next pass reopens it.
+    if (wedged) {
+      const { closeSession } = await import("@/lib/linkedin/session");
+      await closeSession(wedged).catch(() => {});
+      log(db, tr.run_id, tr.target_id, "warn", "Closed the LinkedIn session after a stuck step; the next pass continues");
+      break;
+    }
     // Progress through a long tick is liveness too — without this the indicator flags a
     // runner that is working hard through a backlog.
     executed += 1;
