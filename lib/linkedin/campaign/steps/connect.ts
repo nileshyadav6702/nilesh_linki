@@ -41,7 +41,7 @@ export async function runConnectStep(ctx: StepContext): Promise<void> {
     // Acceptance is detected by the daily sync-accepted job (scrolls invitation manager).
     // Runner just re-checks degree from DB — no per-profile page visits needed.
     log(db, runId, target.id, "info", `${name} not yet accepted — rechecking in ${CONNECTION_RECHECK_HOURS}h`);
-    trWait(db, tr, CONNECTION_RECHECK_HOURS);
+    trWait(db, tr, CONNECTION_RECHECK_HOURS, "Invitation sent — waiting for them to accept");
     return;
   }
 
@@ -75,7 +75,7 @@ export async function runConnectStep(ctx: StepContext): Promise<void> {
   await saveSessionAfterSend(accountId);
   db.transaction(() => {
     db.prepare("UPDATE targets SET connection_requested_at = ? WHERE id = ?").run(nowIso(), target.id);
-    trWait(db, tr, CONNECTION_RECHECK_HOURS);
+    trWait(db, tr, CONNECTION_RECHECK_HOURS, "Invitation sent — waiting for them to accept");
     log(db, runId, target.id, "info", `Connection request sent to ${name} — will recheck in ${CONNECTION_RECHECK_HOURS}h`);
   })();
 }

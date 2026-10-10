@@ -119,7 +119,7 @@ export function handleStepError(
   if (err instanceof SessionExpiredError || err instanceof AccountRestrictedError) {
     log(db, runId, target.id, "error", `${msg} — reconnect the LinkedIn account; holding ${name}`);
     void markNeedsReauth(tr.account_id).catch(() => {});
-    trWait(db, tr, 2);
+    trWait(db, tr, 2, "The LinkedIn account needs reconnecting");
     return;
   }
   if (err instanceof AlreadyConnectedError) {
@@ -138,7 +138,7 @@ export function handleStepError(
       trFail(db, tr, msg);
     } else {
       log(db, runId, target.id, "warn", `Invitation to ${name} not confirmed (${msg}) — retrying in ${INVITE_RETRY_HOURS}h`);
-      trWait(db, tr, INVITE_RETRY_HOURS);
+      trWait(db, tr, INVITE_RETRY_HOURS, "Invitation not confirmed — trying again");
     }
     return;
   }
@@ -153,7 +153,7 @@ export function handleStepError(
   if (err instanceof PendingInviteError) {
     log(db, runId, target.id, "info", `${name} invite already pending — will recheck`);
     if (!target.connection_requested_at) db.prepare("UPDATE targets SET connection_requested_at = ? WHERE id = ?").run(nowIso(), target.id);
-    trWait(db, tr, CONNECTION_RECHECK_HOURS);
+    trWait(db, tr, CONNECTION_RECHECK_HOURS, "Invitation sent — waiting for them to accept");
     return;
   }
   // The mailbox is paused — manually, or by the bounce/complaint policy. That says nothing
@@ -162,7 +162,7 @@ export function handleStepError(
   // resumed, and it read as a per-contact send error in the run log, which is misleading.
   if (err instanceof SenderPausedError) {
     log(db, runId, target.id, "warn", `Sending mailbox is paused (${msg}) — holding ${name} until it resumes`);
-    trWait(db, tr, 1);
+    trWait(db, tr, 1, "The sending mailbox is paused");
     return;
   }
   // On the do-not-send list. Permanent for this channel, but it is a deliberate exclusion,
@@ -179,7 +179,7 @@ export function handleStepError(
     const hours = 2 ** retries;
     db.prepare("UPDATE run_profile_tracks SET retry_count = ?, error_message = ? WHERE id = ?").run(retries + 1, msg.slice(0, 500), tr.id);
     log(db, runId, target.id, "warn", `Error on ${name}: ${msg} — retrying in ${hours}h (${retries + 1}/${MAX_STEP_RETRIES})`);
-    trWait(db, tr, hours);
+    trWait(db, tr, hours, `Retrying after an error (${retries + 1}/${MAX_STEP_RETRIES})`);
     return;
   }
   log(db, runId, target.id, "error", `Error on ${name}: ${msg} — giving up after ${MAX_STEP_RETRIES} retries`);

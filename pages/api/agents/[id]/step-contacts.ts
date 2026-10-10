@@ -29,7 +29,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     ? { sql: "t.connected_at IS NOT NULL AND (rt.state = 'completed' OR rt.current_step >= ? OR EXISTS (SELECT 1 FROM linkedin_actions la WHERE la.track_id = rt.id AND la.step_id = ? AND la.type = 'connect' AND la.status IN ('sent','uncertain')))", params: [step.step_order, stepId] as unknown[] }
     : atStepWhere(stepId, step?.step_type ?? "", w);
   const rows = db.prepare(`SELECT t.id, t.full_name, t.title, t.company, t.linkedin_url, t.profile_image_url, t.lead_score, t.agent_status, t.agent_id,
-      t.connected_at IS NOT NULL accepted, rt.current_step, rt.state, rt.last_step_at, rp.created_at enrolled_at,
+      t.connected_at IS NOT NULL accepted, rt.current_step, rt.state, rt.last_step_at, rt.next_step_at, rt.wait_reason, rt.error_message, rp.created_at enrolled_at,
       (SELECT s.title FROM signals s WHERE s.target_id = t.id ORDER BY COALESCE(s.weight, s.score, 0) DESC, s.occurred_at DESC LIMIT 1) signal_title,
       (SELECT COUNT(*) FROM signals s WHERE s.target_id = t.id) signal_count
     FROM run_profile_tracks rt JOIN run_profiles rp ON rp.id = rt.run_profile_id JOIN runs r ON r.id = rp.run_id JOIN targets t ON t.id = rp.target_id

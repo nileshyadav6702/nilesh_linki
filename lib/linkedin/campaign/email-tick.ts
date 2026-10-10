@@ -105,7 +105,7 @@ export async function emailCampaignTick(db: ReturnType<typeof getDb>): Promise<v
 
   for (const { tr, schedule } of toReschedule) {
     const slot = rescheduleToTomorrow(schedule);
-    db.prepare("UPDATE run_profile_tracks SET next_step_at = ? WHERE id = ?").run(slot, tr.id);
+    db.prepare("UPDATE run_profile_tracks SET next_step_at = ?, wait_reason = ? WHERE id = ?").run(slot, "The mailbox's daily limit is reached — continues next working day", tr.id);
     log(db, tr.run_id, tr.target_id, "warn", `Daily email limit reached — rescheduled to ${slot}`);
   }
 

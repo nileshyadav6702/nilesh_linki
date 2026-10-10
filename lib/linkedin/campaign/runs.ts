@@ -214,7 +214,7 @@ export function spreadEnrollBatch(
       const bucketEnd = bucketStart + bucketMs;
       return new Date(bucketStart + Math.random() * (bucketEnd - bucketStart)).toISOString();
     })();
-    db.prepare("UPDATE run_profile_tracks SET next_step_at = ? WHERE id = ?").run(slot, row.id);
+    db.prepare("UPDATE run_profile_tracks SET next_step_at = ?, wait_reason = 'Scheduled to start' WHERE id = ?").run(slot, row.id);
     const tgt = db.prepare("SELECT full_name, linkedin_url FROM targets WHERE id = (SELECT target_id FROM run_profiles WHERE id = ?)").get(row.run_profile_id) as { full_name: string | null; linkedin_url: string } | undefined;
     log(db, runId, null, "info", `[${track}] Scheduled ${tgt?.full_name ?? tgt?.linkedin_url ?? row.run_profile_id} within active window`);
   }

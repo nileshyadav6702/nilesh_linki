@@ -190,7 +190,7 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
   const hardLimit = effectiveEmailLimit(emailAccountLimits);
   if (sentTodayActual >= hardLimit) {
     log(db, runId, target.id, "warn", `Daily limit guard tripped for ${emailAccountId} (${sentTodayActual}/${hardLimit}) — rescheduling ${name} to tomorrow`);
-    trReschedule(db, tr, rescheduleToTomorrow(emailAccountLimits));
+    trReschedule(db, tr, rescheduleToTomorrow(emailAccountLimits), "The mailbox's daily limit is reached — continues next working day");
     return;
   }
 
@@ -199,7 +199,7 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
   const paceUntil = emailPaceGate(db, emailAccountId, emailAccountLimits, sentTodayActual, hardLimit);
   if (paceUntil) {
     log(db, runId, target.id, "info", `Pacing ${name} — next send window for ${emailAccountId} at ${paceUntil}`);
-    trReschedule(db, tr, paceUntil);
+    trReschedule(db, tr, paceUntil, "Spacing out this mailbox's sends");
     return;
   }
 
@@ -280,7 +280,7 @@ export async function runEmailStep(ctx: StepContext): Promise<void> {
     // step; a permanent failure (retries exhausted) still throws and fails the track.
     if (err instanceof EmailRetryScheduledError) {
       log(db, runId, target.id, "warn", `Email to ${name} hit a temporary error (${err.message}) — retrying after ${err.retryAt}`);
-      trReschedule(db, tr, err.retryAt);
+      trReschedule(db, tr, err.retryAt, "The mail server asked to retry later");
       return;
     }
     throw err;

@@ -60,23 +60,26 @@ export function trAdvance(db: ReturnType<typeof getDb>, tr: TrackRun, steps: Wor
   }
   if (nextIndex >= steps.length) {
     db.prepare(
-      "UPDATE run_profile_tracks SET state = 'completed', current_step = ?, last_step_at = datetime('now'), next_step_at = NULL WHERE id = ? AND state = 'in_progress'"
+      "UPDATE run_profile_tracks SET state = 'completed', current_step = ?, last_step_at = datetime('now'), next_step_at = NULL, wait_reason = NULL WHERE id = ? AND state = 'in_progress'"
     ).run(nextIndex, tr.id);
   } else {
     const nextStep = steps[nextIndex];
     const nextAt = nextStep.delay_seconds > 0 ? new Date(Date.now() + nextStep.delay_seconds * 1000).toISOString() : null;
+    const days = Math.round(nextStep.delay_seconds / 86400);
+    const waiting = nextAt ? (days >= 1 ? `Waiting ${days} day${days === 1 ? "" : "s"} before the next step` : "Waiting before the next step") : null;
     db.prepare(
-      "UPDATE run_profile_tracks SET current_step = ?, last_step_at = datetime('now'), next_step_at = ?, retry_count = 0 WHERE id = ? AND state = 'in_progress'"
-    ).run(nextIndex, nextAt, tr.id);
+      "UPDATE run_profile_tracks SET current_step = ?, last_step_at = datetime('now'), next_step_at = ?, retry_count = 0, wait_reason = ? WHERE id = ? AND state = 'in_progress'"
+    ).run(nextIndex, nextAt, waiting, tr.id);
   }
 }
 
-export function trWait(db: ReturnType<typeof getDb>, tr: TrackRun, hours: number) {
-  db.prepare("UPDATE run_profile_tracks SET next_step_at = ? WHERE id = ?").run(addHours(hours), tr.id);
+/** Park the lead on its step for a while; `reason` is what the campaign shows next to it. */
+export function trWait(db: ReturnType<typeof getDb>, tr: TrackRun, hours: number, reason?: string) {
+  db.prepare("UPDATE run_profile_tracks SET next_step_at = ?, wait_reason = ? WHERE id = ?").run(addHours(hours), reason ?? null, tr.id);
 }
 
-export function trReschedule(db: ReturnType<typeof getDb>, tr: TrackRun, isoTimestamp: string) {
-  db.prepare("UPDATE run_profile_tracks SET next_step_at = ? WHERE id = ?").run(isoTimestamp, tr.id);
+export function trReschedule(db: ReturnType<typeof getDb>, tr: TrackRun, isoTimestamp: string, reason?: string) {
+  db.prepare("UPDATE run_profile_tracks SET next_step_at = ?, wait_reason = ? WHERE id = ?").run(isoTimestamp, reason ?? null, tr.id);
 }
 
 export function trSkip(db: ReturnType<typeof getDb>, tr: TrackRun, reason: string) {
@@ -89,7 +92,7 @@ export function trFail(db: ReturnType<typeof getDb>, tr: TrackRun, reason: strin
 
 /** Keep the track on its current step and retry later, with the reason visible on the track. */
 export function trHold(db: ReturnType<typeof getDb>, tr: TrackRun, hours: number, reason: string) {
-  db.prepare("UPDATE run_profile_tracks SET next_step_at = ?, error_message = ? WHERE id = ?").run(addHours(hours), reason, tr.id);
+  db.prepare("UPDATE run_profile_tracks SET next_step_at = ?, error_message = ?, wait_reason = ? WHERE id = ?").run(addHours(hours), reason, reason, tr.id);
 }
 
 export function trRecordContext(db: ReturnType<typeof getDb>, tr: TrackRun, ctx: { linkedinMessage?: string; emailSubject?: string; emailBody?: string }) {
@@ -116,6 +119,6 @@ export function enforceSchedule(
   if (isWithinSchedule(schedule)) return true;
   const nextSlot = nextScheduledSlot(schedule);
   log(db, runId, targetId, "info", `Outside working schedule — rescheduling ${name} to ${nextSlot}`);
-  trReschedule(db, tr, nextSlot);
+  trReschedule(db, tr, nextSlot, "Outside the sender's working hours");
   return false;
 }

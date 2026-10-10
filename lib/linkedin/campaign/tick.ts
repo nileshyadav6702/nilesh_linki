@@ -313,7 +313,7 @@ export async function tick(db: ReturnType<typeof getDb>, lease?: ActiveLease, ac
   if (leaseLost()) { console.warn("[runner] LinkedIn lease lost — ending tick before rescheduling"); return; }
   for (const { tr, schedule, channel } of toReschedule) {
     const slot = rescheduleToTomorrow(schedule);
-    db.prepare("UPDATE run_profile_tracks SET next_step_at = ? WHERE id = ?").run(slot, tr.id);
+    db.prepare("UPDATE run_profile_tracks SET next_step_at = ?, wait_reason = ? WHERE id = ?").run(slot, `Today's ${channel} limit is reached — continues next working day`, tr.id);
     log(db, tr.run_id, tr.target_id, "warn", `Daily ${channel} limit reached — rescheduled to ${slot}`);
   }
 

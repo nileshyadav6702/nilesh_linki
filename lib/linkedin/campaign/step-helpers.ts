@@ -29,7 +29,7 @@ export function settlePriorLinkedinAction(
   db.transaction(() => {
     if (type === "connect") {
       db.prepare("UPDATE targets SET connection_requested_at = COALESCE(connection_requested_at, ?) WHERE id = ?").run(nowIso(), targetId);
-      trWait(db, tr, CONNECTION_RECHECK_HOURS);
+      trWait(db, tr, CONNECTION_RECHECK_HOURS, "Invitation sent — waiting for them to accept");
     } else {
       if (type === "message") db.prepare("UPDATE targets SET message_sent_at = COALESCE(message_sent_at, ?) WHERE id = ?").run(nowIso(), targetId);
       if (type === "inmail") db.prepare("UPDATE targets SET inmail_sent_at = COALESCE(inmail_sent_at, ?), message_sent_at = COALESCE(message_sent_at, ?) WHERE id = ?").run(nowIso(), nowIso(), targetId);

@@ -33,7 +33,7 @@ export async function runMessageStep(ctx: StepContext): Promise<void> {
       return;
     }
     log(db, runId, target.id, "info", `${name} not yet connected — rescheduling message in ${CONNECTION_RECHECK_HOURS}h`);
-    trWait(db, tr, CONNECTION_RECHECK_HOURS);
+    trWait(db, tr, CONNECTION_RECHECK_HOURS, "Invitation sent — waiting for them to accept");
     return;
   }
 

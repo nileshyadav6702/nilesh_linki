@@ -272,6 +272,9 @@ const STATEMENTS: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_linkedin_actions_target ON linkedin_actions(target_id, account_id, type)",
   "CREATE INDEX IF NOT EXISTS idx_logs_target ON logs(target_id)",
   "CREATE INDEX IF NOT EXISTS idx_runs_workflow ON runs(workflow_id, status)",
+  // Why a lead is parked on its step right now (daily limit, outside hours, waiting to accept…),
+  // shown next to it in the campaign. Cleared when it moves on.
+  "ALTER TABLE run_profile_tracks ADD COLUMN wait_reason TEXT",
 ];
 
 /** Every LinkedIn action the runner records (like = Like Posts step, voice = voice message, withdraw = stale invitation). */

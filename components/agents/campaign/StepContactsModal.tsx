@@ -11,6 +11,16 @@ interface StepContact {
   id: string; full_name: string | null; title: string | null; company: string | null; linkedin_url: string | null; profile_image_url: string | null;
   lead_score: number | null; agent_status: string | null; current_step: number; state: string; enrolled_at: string | null;
   signal_title: string | null; signal_count: number; accepted: boolean; step_number: number | null; step_name: string | null;
+  next_step_at: string | null; wait_reason: string | null; error_message: string | null;
+}
+
+/** Where the lead stands on its step: why it's waiting and until when, due now, or why it stopped. */
+function standing(c: StepContact): { text: string; tone: "muted" | "warn" } | null {
+  if (c.state === "failed" || c.state === "skipped") return c.error_message ? { text: c.error_message, tone: "warn" } : null;
+  if (c.state === "completed") return null;
+  const at = c.next_step_at ? Date.parse(c.next_step_at.includes("T") ? c.next_step_at : `${c.next_step_at.replace(" ", "T")}Z`) : NaN;
+  if (Number.isNaN(at) || at <= Date.now()) return c.state === "in_progress" ? { text: "Due now", tone: "muted" } : null;
+  return { text: `${c.wait_reason ?? "Next step"} · ${stamp(c.next_step_at)}`, tone: /limit|paused|reconnect|Nothing to send|blocked|error/i.test(c.wait_reason ?? "") ? "warn" : "muted" };
 }
 
 function stamp(iso: string | null): string {
@@ -114,6 +124,7 @@ export default function StepContactsModal({ agentId, stepId, title, invite = fal
                         <div className="text-[17px] font-semibold text-base-content">Step {c.step_number}</div>
                         <div className="truncate text-[15.5px] text-base-content/65">{c.step_name}</div>
                         {c.accepted && <div className="text-[15.5px] font-medium text-[#1f9d55]">(Accepted)</div>}
+                        {(() => { const s = standing(c); return s ? <div title={s.text} className={`mt-0.5 line-clamp-2 text-[14.5px] leading-snug ${s.tone === "warn" ? "text-[#b45309]" : "text-base-content/55"}`}>{s.text}</div> : null; })()}
                       </> : <span className="text-[15px] text-base-content/45">—</span>}
                     </td>
                     <td className={`${td} text-[15.5px] text-base-content/65`}>{stamp(c.enrolled_at)}</td>

@@ -29,7 +29,7 @@ export async function runVoiceStep(ctx: StepContext): Promise<void> {
     if (invitationExpired(steps, freshTarget.connection_requested_at)) { skipToEmail(db, runId, tr, target.id, name, steps); return; }
     if (!freshTarget.connection_requested_at) { skipNotConnected(db, runId, tr, target.id, name); return; }
     log(db, runId, target.id, "info", `${name} not yet connected — rescheduling voice message in ${CONNECTION_RECHECK_HOURS}h`);
-    trWait(db, tr, CONNECTION_RECHECK_HOURS);
+    trWait(db, tr, CONNECTION_RECHECK_HOURS, "Invitation sent — waiting for them to accept");
     return;
   }
 
