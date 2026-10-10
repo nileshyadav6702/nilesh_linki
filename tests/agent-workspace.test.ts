@@ -77,3 +77,21 @@ describe("agent workspace", () => {
     expect(stepOccupancy(db, workflowId).find((s) => s.track === "linkedin" && s.step_order === 1)).toMatchObject({ contacts: 2, invited: 2, accepted: 0 });
   });
 });
+
+describe("due today", () => {
+  it("counts not-started leads only up to the account's daily cap", () => {
+    const db = getDb();
+    db.prepare("INSERT INTO accounts (id, workspace_id, name, email, daily_connection_limit) VALUES ('acc-due', ?, 'A', 'due@x.io', 3)").run(WS);
+    db.prepare("INSERT INTO workflows (id, name, workspace_id) VALUES ('wf-due', 'Due', ?)").run(WS);
+    db.prepare("INSERT INTO runs (id, workspace_id, workflow_id, account_id, status) VALUES ('run-due', ?, 'wf-due', 'acc-due', 'running')").run(WS);
+    for (let i = 0; i < 10; i++) {
+      db.prepare("INSERT INTO targets (id, workspace_id, full_name) VALUES (?, ?, 'L')").run(`t-due-${i}`, WS);
+      db.prepare("INSERT INTO run_profiles (id, run_id, target_id) VALUES (?, 'run-due', ?)").run(`rp-due-${i}`, `t-due-${i}`);
+      db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step) VALUES (?, ?, 'linkedin', 'pending', 0)").run(`tr-due-${i}`, `rp-due-${i}`);
+    }
+    expect(dueToday(db, "wf-due")).toBe(3);
+    // One under way, due in an hour: counted on top.
+    db.prepare("UPDATE run_profile_tracks SET state = 'in_progress', next_step_at = datetime('now', '+1 hour') WHERE id = 'tr-due-0'").run();
+    expect(dueToday(db, "wf-due")).toBe(4);
+  });
+});

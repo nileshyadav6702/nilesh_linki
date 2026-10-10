@@ -1,4 +1,6 @@
 import type Database from "better-sqlite3";
+import { effectiveEmailLimit } from "@/lib/linkedin/campaign/schedule";
+import type { EmailAccountLimits } from "@/lib/linkedin/campaign/types";
 import { signalLabel } from "@/lib/signals/types";
 
 export interface FunnelRow {
@@ -68,28 +70,55 @@ export function nextSourceRun(db: Database.Database, agentId: string): string | 
 }
 
 /**
- * When this agent's outreach next sends something: the earliest scheduled step of a lead in a
- * running campaign (now, if one is already due). Null when nobody is queued.
+ * When this agent's outreach next sends something: the earliest scheduled step of a lead already
+ * under way in a running campaign (now, if one is due). Leads not started yet have no time of
+ * their own (the runner enrols them as the daily caps allow), so they only count as "now" when
+ * nobody is under way. Null when nobody is queued.
  */
 export function nextOutreachAt(db: Database.Database, workflowId: string | null): string | null {
   if (!workflowId) return null;
-  const row = db.prepare(`SELECT MIN(datetime(COALESCE(rt.next_step_at, 'now'))) at, MAX(CASE WHEN rt.next_step_at IS NULL OR datetime(rt.next_step_at) <= datetime('now') THEN 1 ELSE 0 END) due
+  const row = db.prepare(`SELECT MIN(CASE WHEN rt.state = 'in_progress' THEN datetime(COALESCE(rt.next_step_at, 'now')) END) at,
+      MAX(CASE WHEN rt.state = 'in_progress' AND (rt.next_step_at IS NULL OR datetime(rt.next_step_at) <= datetime('now')) THEN 1 ELSE 0 END) due,
+      MAX(CASE WHEN rt.state = 'pending' THEN 1 ELSE 0 END) waiting
     FROM run_profile_tracks rt JOIN run_profiles rp ON rp.id = rt.run_profile_id JOIN runs r ON r.id = rp.run_id
-    WHERE r.workflow_id = ? AND r.status = 'running' AND rt.state IN ('pending','in_progress')`).get(workflowId) as { at: string | null; due: number | null };
-  if (!row.at) return null;
-  return row.due ? new Date().toISOString() : `${row.at.replace(" ", "T")}Z`;
+    WHERE r.workflow_id = ? AND r.status = 'running' AND rt.state IN ('pending','in_progress')`).get(workflowId) as { at: string | null; due: number | null; waiting: number | null };
+  if (row.due || (!row.at && row.waiting)) return new Date().toISOString();
+  return row.at ? `${row.at.replace(" ", "T")}Z` : null;
 }
 
-/** Leads with a step due inside the next day on this agent's campaign. */
+/**
+ * Leads with a step due inside the next day on this agent's campaign: leads under way whose next
+ * step is due, plus as many not-started leads as their account's daily cap lets start (a
+ * 500-lead import is not 500 leads due today).
+ */
 export function dueToday(db: Database.Database, workflowId: string | null): number {
   if (!workflowId) return 0;
-  return (db.prepare(`SELECT COUNT(DISTINCT rp.target_id) n
+  const underWay = (db.prepare(`SELECT COUNT(DISTINCT rp.target_id) n
     FROM run_profile_tracks rt
     JOIN run_profiles rp ON rp.id = rt.run_profile_id
     JOIN runs r ON r.id = rp.run_id
-    WHERE r.workflow_id = ? AND r.status = 'running'
-      AND rt.state IN ('pending','in_progress')
+    WHERE r.workflow_id = ? AND r.status = 'running' AND rt.state = 'in_progress'
       AND (rt.next_step_at IS NULL OR datetime(rt.next_step_at) <= datetime('now','+1 day'))`).get(workflowId) as { n: number }).n;
+  // Not started at all (no track under way), per sending account: LinkedIn first, else email.
+  const waiting = db.prepare(`SELECT rt.track, CASE WHEN rt.track = 'linkedin' THEN r.account_id ELSE rp.email_account_id END account, COUNT(DISTINCT rp.target_id) n
+    FROM run_profile_tracks rt
+    JOIN run_profiles rp ON rp.id = rt.run_profile_id
+    JOIN runs r ON r.id = rp.run_id
+    WHERE r.workflow_id = ? AND r.status = 'running' AND rt.state = 'pending'
+      AND NOT EXISTS (SELECT 1 FROM run_profile_tracks x WHERE x.run_profile_id = rp.id AND x.state = 'in_progress')
+      AND (rt.track = 'linkedin' OR NOT EXISTS (SELECT 1 FROM run_profile_tracks x WHERE x.run_profile_id = rp.id AND x.track = 'linkedin' AND x.state = 'pending'))
+    GROUP BY 1, 2`).all(workflowId) as Array<{ track: string; account: string | null; n: number }>;
+  let starting = 0;
+  for (const w of waiting) {
+    const cap = w.track === "linkedin"
+      ? (db.prepare("SELECT daily_connection_limit c FROM accounts WHERE id = ?").get(w.account) as { c: number | null } | undefined)?.c ?? 20
+      : (() => {
+        const acc = db.prepare("SELECT daily_email_limit, ramp_up_enabled, ramp_start_date FROM email_accounts WHERE id = ?").get(w.account) as EmailAccountLimits | undefined;
+        return acc ? effectiveEmailLimit(acc) : 0;
+      })();
+    starting += Math.min(w.n, Math.max(0, cap));
+  }
+  return underWay + starting;
 }
 
 export interface DayPoint { day: string; found: number; invitations: number; messages: number; emails: number }
