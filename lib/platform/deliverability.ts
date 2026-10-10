@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { decryptSecret } from "@/lib/crypto";
 import { sendEmailDurably, evaluateSenderHealth } from "@/lib/email/infrastructure";
 import { emitDomainEvent } from "@/lib/platform/events";
+import { localDayBoundsUtc } from "@/lib/outreach/schedule";
 
 export async function checkDomainDeliverability(input: { workspaceId: string; domain: string; emailAccountId?: string; selector?: string }) {
   const domain = input.domain.toLowerCase().replace(/^www\./, "").trim();
@@ -135,8 +136,10 @@ export async function processWarmupCycle(limit = 10): Promise<number> {
       continue;
     }
 
-    const sentToday = (db.prepare("SELECT COUNT(*) c FROM warmup_messages WHERE from_account_id = ? AND status = 'sent' AND date(sent_at) = date('now')")
-      .get(setting.email_account_id) as { c: number }).c;
+    // "Today" in the mailbox's own timezone, like its campaign cap (a UTC day reset the quota mid-afternoon in Asia).
+    const day = localDayBoundsUtc(acct.timezone || "UTC");
+    const sentToday = (db.prepare("SELECT COUNT(*) c FROM warmup_messages WHERE from_account_id = ? AND status = 'sent' AND sent_at >= ? AND sent_at < ?")
+      .get(setting.email_account_id, day.start, day.end) as { c: number }).c;
     if (sentToday >= setting.daily_target) continue; // daily quota already met
 
     // Pace: one send per (active-window / daily_target) interval, so the quota trickles out
