@@ -37,8 +37,11 @@ export async function classifyAndDispatch(replyId: string, overrideKind?: ReplyK
     db.prepare(`UPDATE email_replies SET classified_at = ?, classification_json = ?, classification_error = NULL,
       sentiment = ?, inbox_status = 'open', sla_due_at = COALESCE(sla_due_at, datetime('now', '+4 hours')) WHERE id = ?`)
       .run(now, JSON.stringify(verdict), verdict.kind === "positive" ? "positive" : verdict.kind === "negative" || verdict.kind === "unsubscribe" ? "negative" : "neutral", replyId);
-    db.prepare("UPDATE targets SET reply_kind = ?, email_replied_at = COALESCE(email_replied_at, ?) WHERE id = ?")
-      .run(verdict.kind, verdict.kind === "out_of_office" ? null : now, reply.target_id);
+    // An auto-reply doesn't replace what the person actually said earlier (a positive reply
+    // followed by an out-of-office stays positive).
+    db.prepare(`UPDATE targets SET reply_kind = CASE WHEN ? = 'out_of_office' AND reply_kind IS NOT NULL AND reply_kind <> 'out_of_office'
+      THEN reply_kind ELSE ? END, email_replied_at = COALESCE(email_replied_at, ?) WHERE id = ?`)
+      .run(verdict.kind, verdict.kind, verdict.kind === "out_of_office" ? null : now, reply.target_id);
 
     // A human override to unsubscribe is an explicit, deliberate choice; the model's inferred
     // unsubscribe still requires explicit opt-out language in the reply.
@@ -67,10 +70,8 @@ export async function classifyAndDispatch(replyId: string, overrideKind?: ReplyK
       await notifyWorkspaceOfPositiveReply(workspaceId, replyId, reply, verdict);
       dispatch = { action: "unenrolled_and_task_created" };
     } else if (verdict.kind === "out_of_office") {
-      const scheduled = verdict.return_date && !Number.isNaN(Date.parse(verdict.return_date)) ? new Date(verdict.return_date).toISOString() : new Date(Date.now() + 7 * 86400_000).toISOString();
-      db.prepare(`UPDATE run_profile_tracks SET next_step_at = ?, pending_reply_context = ? WHERE run_profile_id IN
-        (SELECT id FROM run_profiles WHERE target_id = ?) AND state IN ('pending','in_progress')`)
-        .run(scheduled, JSON.stringify({ reply: reply.body_text, summary: verdict.summary }), reply.target_id);
+      const scheduled = holdForOutOfOffice(String(reply.target_id), Date.now(), verdict.return_date,
+        JSON.stringify({ reply: reply.body_text, summary: verdict.summary })).until;
       dispatch = { action: "rescheduled", scheduled_for: scheduled };
     } else {
       stopAutomation(String(reply.target_id), "Reply needs human review");
@@ -168,10 +169,33 @@ async function classifyReply(workspaceId: string, subject: string, body: string)
 function ruleVerdict(text: string): Verdict | null {
   const lower = text.toLowerCase();
   if (/unsubscribe|remove me|stop (emailing|contacting)|do not (email|contact)|opt[ -]?out|take me off/.test(lower)) return { kind: "unsubscribe", confidence: 1, summary: "Explicit opt-out request", suggested_action: "suppress" };
-  if (/out of (the )?office|automatic reply|auto-?reply|on (annual )?leave|away from (my )?email|returning on/.test(lower)) return { kind: "out_of_office", confidence: 0.99, summary: "Out-of-office automatic response", suggested_action: "reschedule" };
+  if (OUT_OF_OFFICE.test(lower)) return { kind: "out_of_office", confidence: 0.99, summary: "Out-of-office automatic response", suggested_action: "reschedule" };
   if (/not interested|no thanks|not a priority|we('re| are) all set|do not need|pass on this/.test(lower)) return { kind: "negative", confidence: 0.98, summary: "Prospect declined", suggested_action: "unenroll" };
   if (/sounds (good|interesting)|let's (talk|chat)|book|schedule|interested|send me|tell me more|available (on|tomorrow|next)/.test(lower)) return { kind: "positive", confidence: 0.97, summary: "Prospect expressed interest", suggested_action: "human_followup" };
   return null;
+}
+
+const OUT_OF_OFFICE = /out of (the )?office|automatic reply|auto-?reply|on (annual |parental |maternity |paternity )?leave|away from (my )?(email|desk|inbox|linkedin)|returning on|back in the office|limited access to (my )?(email|messages)/i;
+
+/** An out-of-office / auto-reply, from the words alone (used where no model runs, e.g. LinkedIn). */
+export function isOutOfOffice(text: string): boolean {
+  return OUT_OF_OFFICE.test(text);
+}
+
+/**
+ * The lead is away: hold their active sequence steps until they're back (the day after the
+ * return date they gave, else a week from the auto-reply), never more than 60 days out, and
+ * never pull a step that was already due later forward. Returns how many steps were held.
+ */
+export function holdForOutOfOffice(targetId: string, fromMs: number, returnDate: string | null | undefined, context: string): { until: string; held: number } {
+  const ret = returnDate ? Date.parse(returnDate) : NaN;
+  const latest = fromMs + 60 * 86400_000;
+  const untilMs = !Number.isNaN(ret) && ret > fromMs ? Math.min(ret + 86400_000, latest) : fromMs + 7 * 86400_000;
+  const until = new Date(untilMs).toISOString();
+  const held = getDb().prepare(`UPDATE run_profile_tracks SET next_step_at = ?, pending_reply_context = ? WHERE run_profile_id IN
+    (SELECT id FROM run_profiles WHERE target_id = ?) AND state IN ('pending','in_progress')
+    AND (next_step_at IS NULL OR next_step_at < ?)`).run(until, context, targetId, until).changes;
+  return { until, held };
 }
 
 /** Unenroll a contact from every non-terminal track across all their runs. Exported so

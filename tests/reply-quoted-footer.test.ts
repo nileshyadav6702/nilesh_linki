@@ -47,3 +47,14 @@ describe("reply classification", () => {
     expect(suppressed(r.email)).toBe(true);
   });
 });
+
+describe("out-of-office after a real reply", () => {
+  it("keeps the earlier positive verdict", async () => {
+    const r = seed("Sounds interesting, let's talk on Thursday.");
+    await classifyAndDispatch(r.reply);
+    getDb().prepare(`INSERT INTO email_replies (id, workspace_id, target_id, from_email, subject, body_text, received_at)
+      VALUES ('qf-ooo', ?, ?, ?, 'Automatic reply: Quick question', 'I am out of the office until next week.', datetime('now'))`).run(WS, r.target, r.email);
+    await classifyAndDispatch("qf-ooo");
+    expect((getDb().prepare("SELECT reply_kind FROM targets WHERE id = ?").get(r.target) as { reply_kind: string }).reply_kind).toBe("positive");
+  });
+});

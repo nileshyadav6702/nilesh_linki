@@ -49,3 +49,21 @@ describe("a LinkedIn reply ends the sequence", () => {
     expect(tracks("t-stranger")).toEqual(["in_progress", "in_progress"]);
   });
 });
+
+describe("out-of-office auto-replies", () => {
+  it("a LinkedIn away message holds the sequence for a week instead of ending it", () => {
+    const db = getDb();
+    db.prepare("INSERT INTO targets (id, workspace_id, full_name, linkedin_url) VALUES ('t-away', ?, 'Away', 'https://www.linkedin.com/in/away-r')").run(WS);
+    db.prepare("INSERT INTO run_profiles (id, run_id, target_id) VALUES ('rp-t-away', 'run-li-r', 't-away')").run();
+    db.prepare("INSERT INTO run_profile_tracks (id, run_profile_id, track, state, current_step) VALUES ('li-t-away', 'rp-t-away', 'linkedin', 'in_progress', 1)").run();
+    db.pragma("foreign_keys = OFF");
+    db.prepare("INSERT INTO linkedin_actions (id, idempotency_key, account_id, run_id, track_id, step_id, target_id, type, status, created_at) VALUES ('la-away', 'k-away', 'acc-li-r', 'run-li-r', 'tr', 's', 't-away', 'connect', 'sent', '2026-10-05 10:00:00')").run();
+    db.pragma("foreign_keys = ON");
+    const { id } = upsertThread(db, { workspaceId: WS, channel: "linkedin", accountId: "acc-li-r", externalId: "th-away", participantName: "Away", participantUrl: "https://www.linkedin.com/in/away-r", lastMessageAt: "2026-10-06T09:00:00.000Z" });
+    addMessages(db, id, [{ externalId: "th-away-m1", direction: "in", senderName: "Away", bodyText: "Thanks for your message. I'm out of the office until Monday.", sentAt: "2026-10-06T09:00:00.000Z" }]);
+    const tr = db.prepare("SELECT state, next_step_at FROM run_profile_tracks WHERE id = 'li-t-away'").get() as { state: string; next_step_at: string };
+    expect(tr.state).toBe("in_progress");
+    expect(tr.next_step_at).toBe("2026-10-13T09:00:00.000Z");
+    expect((db.prepare("SELECT last_replied_at FROM targets WHERE id = 't-away'").get() as { last_replied_at: string | null }).last_replied_at).toBeNull();
+  });
+});
