@@ -174,8 +174,12 @@ function ruleVerdict(text: string): Verdict | null {
 /** Unenroll a contact from every non-terminal track across all their runs. Exported so
  *  other reply paths (e.g. manually recording a LinkedIn reply) reuse the same stop. */
 export function stopAutomation(targetId: string, reason: string) {
-  getDb().prepare(`UPDATE run_profile_tracks SET state = 'skipped', error_message = ? WHERE run_profile_id IN
+  const db = getDb();
+  db.prepare(`UPDATE run_profile_tracks SET state = 'skipped', error_message = ? WHERE run_profile_id IN
     (SELECT id FROM run_profiles WHERE target_id = ?) AND state NOT IN ('completed','failed','skipped')`).run(reason, targetId);
+  // Campaign emails already queued for the contact must not go out either.
+  db.prepare(`UPDATE email_jobs SET status = 'cancelled', last_error = ?, updated_at = datetime('now')
+    WHERE target_id = ? AND status = 'pending' AND source = 'campaign'`).run(reason, targetId);
 }
 function createFollowup(workspaceId: string, targetId: string, title: string, description: string) {
   getDb().prepare("INSERT INTO todos (id, workspace_id, target_id, title, description, due_date) VALUES (?, ?, ?, ?, ?, date('now', '+1 day'))")

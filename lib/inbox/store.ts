@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { recordLinkedInReply } from "@/lib/inbox/replies";
 import type Database from "better-sqlite3";
 
 /**
@@ -80,6 +81,8 @@ export function addMessages(db: Database.Database, threadId: string, messages: M
     db.prepare(`UPDATE inbox_threads SET messages_synced_at = datetime('now'),
         has_inbound = CASE WHEN EXISTS (SELECT 1 FROM inbox_messages WHERE thread_id = ? AND direction = 'in') THEN 1 ELSE has_inbound END WHERE id = ?`).run(threadId, threadId);
   })();
+  // A lead answering our LinkedIn outreach ends their sequences.
+  if (added && messages.some((m) => m.direction === "in")) recordLinkedInReply(db, threadId);
   return added;
 }
 
