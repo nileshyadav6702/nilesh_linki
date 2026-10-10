@@ -156,7 +156,7 @@ export function ExportMenu({ onCsv, onCopy, profileHref }: { onCsv: () => void; 
         <RiUpload2Line size={19} />Export<RiArrowDownSLine size={20} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div role="menu" className="wizard-rise absolute bottom-full right-0 z-30 mb-2 w-[230px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
+        <div role="menu" className="pop-in absolute bottom-full right-0 z-30 mb-2 w-[230px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
           <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onCsv(); }}><RiFileDownloadLine size={18} />Download CSV</button>
           <button type="button" role="menuitem" className={item} onClick={() => { setOpen(false); onCopy(); }}><RiFileCopyLine size={18} />Copy details</button>
           <a role="menuitem" href={profileHref} className={item}><RiExternalLinkLine size={18} />Open full profile</a>

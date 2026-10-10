@@ -48,7 +48,7 @@ export default function Compose({ account, onClose }: { account: { id: string; n
             <RiArrowDownSLine size={20} className="ml-auto shrink-0 text-base-content/50" />
           </button>
           {open && (
-            <div className="wizard-rise absolute left-0 right-0 top-full z-30 mt-1.5 overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+            <div className="pop-in absolute left-0 right-0 top-full z-30 mt-1.5 overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
               <div className="relative border-b border-[var(--border-subtle)] p-2">
                 <RiSearchLine size={16} className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-base-content/45" />
                 <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search contacts by name or company" className="h-10 w-full rounded-[8px] border border-primary/40 pl-9 pr-3 text-[15px] outline-none" />

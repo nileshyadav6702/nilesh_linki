@@ -77,7 +77,7 @@ export default function IntegrationsPage() {
             <label className="flex cursor-pointer items-center gap-3 text-[16px]">
               <button type="button" role="switch" aria-checked={installedOnly} onClick={() => setInstalledOnly((v) => !v)}
                 className={`relative h-7 w-12 rounded-full transition-colors ${installedOnly ? "bg-primary" : "bg-base-300"}`}>
-                <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${installedOnly ? "left-6" : "left-1"}`} />
+                <span className={`absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow transition-[translate] duration-200 ease-out ${installedOnly ? "translate-x-5" : ""}`} />
               </button>
               Show only installed
             </label>

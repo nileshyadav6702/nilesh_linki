@@ -144,7 +144,7 @@ function FunnelRow({
       <span className="text-xs text-base-content/50 w-24 shrink-0">{label}</span>
       <div className="flex-1 h-1 bg-base-300/30 rounded-full overflow-hidden">
         <div
-          className="h-full rounded-full transition-all duration-700"
+          className="h-full rounded-full transition-[width] duration-300 ease-out"
           style={{ width: `${pct}%`, background: color }}
         />
       </div>
@@ -216,7 +216,7 @@ function ActivityChart({
             <button
               key={d}
               onClick={() => onDaysChange(d)}
-              className={`px-2.5 py-1 rounded-[7px] text-xs font-medium transition-all ${
+              className={`px-2.5 py-1 rounded-[7px] text-xs font-medium transition ${
                 days === d
                   ? "bg-base-100 text-base-content shadow-[var(--shadow-raised)] border border-[var(--border-subtle)]"
                   : "text-base-content/40 hover:text-base-content/70"
@@ -258,7 +258,7 @@ function ActivityChart({
                   {SERIES.filter(s => activeSeries.has(s.key)).map(s => (
                     <div
                       key={s.key}
-                      className="flex-1 rounded-t-sm transition-all duration-300"
+                      className="flex-1 rounded-t-sm transition-[height] duration-300 ease-out"
                       style={{
                         height: `${Math.max(2, (d[s.key] / maxVal) * 120)}px`,
                         background: s.color,

@@ -206,7 +206,7 @@ export default function WorkflowsPage({ initialWorkflows }: { initialWorkflows: 
             return (
               <div
                 key={w.id}
-                className="bg-base-100 border border-[var(--border-subtle)] rounded-2xl p-5 cursor-pointer hover:border-[var(--border-strong)] transition-all shadow-[var(--shadow-raised)] hover:shadow-[var(--shadow-floating)] flex flex-col gap-4"
+                className="bg-base-100 border border-[var(--border-subtle)] rounded-2xl p-5 cursor-pointer hover:border-[var(--border-strong)] transition shadow-[var(--shadow-raised)] hover:shadow-[var(--shadow-floating)] flex flex-col gap-4"
                 onClick={() => router.push(`/workflows/${w.id}`)}
               >
                 {/* Header: icon + name + status */}
@@ -291,7 +291,7 @@ export default function WorkflowsPage({ initialWorkflows }: { initialWorkflows: 
                       <span>{progress}%</span>
                     </div>
                     <div className="w-full h-1.5 bg-base-200 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+                      <div className="h-full rounded-full bg-primary transition-[width] duration-300 ease-out" style={{ width: `${progress}%` }} />
                     </div>
                     {(w.connections_sent > 0 || acceptanceRate !== null) && (
                       <div className="flex items-center gap-3 text-xs text-base-content/35 mt-0.5">

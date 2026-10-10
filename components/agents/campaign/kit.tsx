@@ -69,7 +69,7 @@ export function Tip({ text, children, side = "top", className = "" }: { text: Re
   return (
     <span className={`group/tip relative inline-flex ${className}`}>
       {children}
-      <span role="tooltip" className={`pointer-events-none absolute left-1/2 z-50 w-max max-w-[320px] -translate-x-1/2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-left text-[14.5px] font-normal leading-snug text-base-content opacity-0 shadow-[var(--shadow-overlay)] transition-opacity group-hover/tip:opacity-100 ${side === "top" ? "bottom-full mb-2" : "top-full mt-2"}`}>{text}</span>
+      <span role="tooltip" className={`pointer-events-none absolute left-1/2 z-50 w-max max-w-[320px] -translate-x-1/2 rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-2 text-left text-[14.5px] font-normal leading-snug text-base-content scale-[0.97] opacity-0 shadow-[var(--shadow-overlay)] transition-[opacity,scale] duration-100 ease-out group-hover/tip:scale-100 group-hover/tip:opacity-100 group-hover/tip:delay-200 group-hover/tip:duration-150 ${side === "top" ? "bottom-full mb-2 origin-bottom" : "top-full mt-2 origin-top"}`}>{text}</span>
     </span>
   );
 }

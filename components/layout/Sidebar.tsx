@@ -61,7 +61,7 @@ function Label({ show, children, className = "" }: { show: boolean; children: Re
 function Tip({ show, text }: { show: boolean; text: string }) {
   if (!show) return null;
   return (
-    <span role="tooltip" className="pointer-events-none invisible absolute left-full top-1/2 z-[60] ml-3 -translate-y-1/2 -translate-x-1 whitespace-nowrap rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-1.5 text-[14px] font-medium text-base-content opacity-0 shadow-[var(--shadow-overlay)] transition-all duration-150 group-hover:visible group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100">
+    <span role="tooltip" className="pointer-events-none invisible absolute left-full top-1/2 z-[60] ml-3 -translate-y-1/2 -translate-x-1 whitespace-nowrap rounded-[8px] border border-[var(--border-subtle)] bg-base-100 px-3 py-1.5 text-[14px] font-medium text-base-content opacity-0 shadow-[var(--shadow-overlay)] transition-[translate,opacity,visibility] duration-150 ease-out group-hover:visible group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:visible group-focus-visible:opacity-100">
       {text}
     </span>
   );

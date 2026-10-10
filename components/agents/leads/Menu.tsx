@@ -45,8 +45,8 @@ export function FloatingMenu({ anchor, items, onClose, label, width = 240 }: { a
 
   return createPortal(
     <div ref={ref} role="menu" aria-label={label} onKeyDown={onKey} onClick={(e) => e.stopPropagation()}
-      style={{ position: "fixed", top: -9999, left: -9999, width }}
-      className="z-[60] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 text-left text-[15px] shadow-[var(--shadow-overlay)]">
+      style={{ position: "fixed", top: -9999, left: -9999, width, transformOrigin: "top right" }}
+      className="pop-in z-[60] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 text-left text-[15px] shadow-[var(--shadow-overlay)]">
       {items.map((it, i) => (
         <button key={i} type="button" role="menuitem" disabled={it.disabled}
           onClick={() => { onClose(); it.onSelect(); }}

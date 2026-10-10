@@ -67,7 +67,7 @@ export default function StepCard({ item, n, stat, editing, busy, aiLabel, workfl
   const likes = Math.max(1, s.like_count ?? 1);
 
   return (
-    <div className="wizard-rise rounded-[18px] border border-[var(--border-subtle)] bg-base-100 px-7 py-6 shadow-[0_4px_18px_-12px_rgba(20,20,19,0.18)] transition-shadow hover:shadow-[0_12px_30px_-16px_rgba(20,20,19,0.26)]">
+    <div className="rounded-[18px] border border-[var(--border-subtle)] bg-base-100 px-7 py-6 shadow-[0_4px_18px_-12px_rgba(20,20,19,0.18)] transition-shadow hover:shadow-[0_12px_30px_-16px_rgba(20,20,19,0.26)]">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-4">
           <IconTile icon={look.icon} tone={look.tone} size={48} />

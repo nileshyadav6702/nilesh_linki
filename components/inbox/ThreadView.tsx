@@ -26,7 +26,7 @@ function Menu({ email, onArchive, onDelete }: { email: boolean; onArchive: () =>
     <div ref={wrap} className="relative">
       <button type="button" onClick={() => setOpen(!open)} aria-label="More actions" aria-expanded={open} className="flex h-10 w-10 items-center justify-center rounded-[10px] text-base-content/60 hover:bg-base-200 hover:text-base-content"><RiMore2Fill size={20} /></button>
       {open && (
-        <div className="wizard-rise absolute right-0 top-full z-30 mt-1 w-52 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
+        <div className="pop-in absolute right-0 top-full z-30 mt-1 w-52 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
           {email && <button type="button" onClick={() => { setOpen(false); onArchive(); }} className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-[15px] hover:bg-base-200"><RiArchiveLine size={18} /> Archive</button>}
           <button type="button" onClick={() => { setOpen(false); onDelete(); }} className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-[15px] text-error hover:bg-error/10"><RiDeleteBin6Line size={18} /> Delete chat</button>
         </div>
@@ -130,14 +130,14 @@ export default function ThreadView({ id, onChanged, onRemoved }: { id: string; o
           const out = m.direction === "out";
           if (!linkedin) {
             return (
-              <div key={m.id} className="wizard-rise">
+              <div key={m.id}>
                 <div className="mb-1.5 flex items-center gap-2 pl-1 text-[14px] text-base-content/60"><span className="font-medium text-base-content/80">{out ? "You" : m.sender_name ?? m.sender_email}</span>{m.sender_email && !out && <span className="truncate">{m.sender_email}</span>}<span>· {ago(m.sent_at)}</span></div>
                 <div className={`rounded-[14px] border px-6 py-5 ${out ? "border-[#e5e1fb] bg-[#f6f4ff]" : "border-[var(--border-subtle)] bg-base-100"}`}><EmailBody html={m.body_html} text={m.body_text} /></div>
               </div>
             );
           }
           return (
-            <div key={m.id} className={`wizard-rise flex items-end gap-3 ${out ? "justify-end" : ""}`}>
+            <div key={m.id} className={`flex items-end gap-3 ${out ? "justify-end" : ""}`}>
               {!out && <PersonAvatar name={m.sender_name ?? t.participant_name} photo={t.participant_photo} size={34} />}
               <div className={`max-w-[72%] ${out ? "items-end" : ""} flex flex-col`}>
                 <div className={`mb-1 text-[13px] text-base-content/50 ${out ? "text-right" : ""}`}>{out ? "You" : m.sender_name} · {ago(m.sent_at)}</div>

@@ -90,10 +90,10 @@ export default function AgentOverview({ agentId, performance, series, activity, 
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             <Stat label="Found" value={p.found} corner={<Tip text="Every lead this agent's sources found, before ICP scoring."><RiInformationLine size={19} className="shrink-0 text-base-content/45" /></Tip>} />
-            <Stat label="Contacted" value={p.contacted} hint={p.found && p.contacted ? `${pct(p.contacted, p.found)} of found` : undefined} />
-            <Stat label="Accepted" value={p.accepted} hint={p.contacted ? `${pct(p.accepted, p.contacted)} acceptance rate` : undefined} />
-            <Stat label="Replied" value={p.replied || "—"} hint={p.contacted && p.replied ? `${pct(p.replied, p.contacted)} reply rate` : undefined} />
-            <Stat label="Interested" value={p.interested || "—"} corner={<RiFireLine size={22} className="shrink-0 text-[#f0785a]" />} />
+            <Stat i={1} label="Contacted" value={p.contacted} hint={p.found && p.contacted ? `${pct(p.contacted, p.found)} of found` : undefined} />
+            <Stat i={2} label="Accepted" value={p.accepted} hint={p.contacted ? `${pct(p.accepted, p.contacted)} acceptance rate` : undefined} />
+            <Stat i={3} label="Replied" value={p.replied || "—"} hint={p.contacted && p.replied ? `${pct(p.replied, p.contacted)} reply rate` : undefined} />
+            <Stat i={4} label="Interested" value={p.interested || "—"} corner={<RiFireLine size={22} className="shrink-0 text-[#f0785a]" />} />
           </div>
         </section>
 
@@ -113,7 +113,7 @@ export default function AgentOverview({ agentId, performance, series, activity, 
                 <RiCalendarLine size={17} /> Select dates
               </button>
               {picking && (
-                <div className="wizard-rise absolute left-0 top-full z-30 mt-2 rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+                <div className="pop-in absolute left-0 top-full z-30 mt-2 rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
                   <DateRangeCalendar value={custom ? { from: custom.from, to: custom.to } : null} onChange={(r) => void pickDates(r)} />
                 </div>
               )}
@@ -158,9 +158,9 @@ function agoLong(iso: string): string {
   return Number.isNaN(t) ? "" : formatDistanceToNowStrict(t, { addSuffix: true });
 }
 
-function Stat({ label, value, hint, corner }: { label: string; value: ReactNode; hint?: string; corner?: ReactNode }) {
+function Stat({ label, value, hint, corner, i = 0 }: { label: string; value: ReactNode; hint?: string; corner?: ReactNode; i?: number }) {
   return (
-    <div className="min-h-[160px] rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-5 py-5">
+    <div style={{ "--i": i } as React.CSSProperties} className="wizard-rise stagger min-h-[160px] rounded-[16px] border border-[var(--border-subtle)] bg-base-100 px-5 py-5">
       <div className="flex items-start justify-between gap-2"><span className="text-[17px] text-base-content/75">{label}</span>{corner}</div>
       <div className="mt-3 text-[34px] font-semibold leading-none tabular-nums text-base-content">{value}</div>
       {hint && <div className="mt-3 text-[15.5px] leading-snug text-base-content/55">{hint}</div>}

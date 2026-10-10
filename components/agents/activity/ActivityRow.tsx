@@ -12,7 +12,7 @@ export default function ActivityRow({ item, onViewLeads }: { item: ActivityFeedI
   const icon = o ? outcomeIcon(o.icon) : null;
   const signal = item.signal_type;
   return (
-    <li className="wizard-rise grid grid-cols-[44px_minmax(0,1fr)] items-center gap-x-5 gap-y-2 border-b border-[var(--border-subtle)] px-6 py-5 last:border-b-0 md:grid-cols-[44px_minmax(0,3fr)_minmax(0,2fr)_96px]">
+    <li className="grid grid-cols-[44px_minmax(0,1fr)] items-center gap-x-5 gap-y-2 border-b border-[var(--border-subtle)] px-6 py-5 last:border-b-0 md:grid-cols-[44px_minmax(0,3fr)_minmax(0,2fr)_96px]">
       {item.lead
         ? <Avatar name={item.lead.name} src={item.lead.photo} size={44} />
         : <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-base-200 text-base-content/70" aria-hidden="true">{markIcon(item.mark ?? "source")}</span>}

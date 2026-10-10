@@ -24,7 +24,7 @@ function Dropdown({ label, value, placeholder, children, small }: { label: strin
         <span className={`min-w-0 flex-1 truncate ${value ? "text-base-content" : "text-base-content/55"}`}>{value ?? placeholder}</span>
         <RiArrowDownSLine size={22} className={`shrink-0 text-base-content/55 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div className="wizard-rise absolute left-0 right-0 z-40 mt-1.5 max-h-72 overflow-y-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]" role="listbox" aria-label={label}>{children(() => setOpen(false))}</div>}
+      {open && <div className="pop-in absolute left-0 right-0 z-40 mt-1.5 max-h-72 overflow-y-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]" role="listbox" aria-label={label}>{children(() => setOpen(false))}</div>}
     </div>
   );
 }

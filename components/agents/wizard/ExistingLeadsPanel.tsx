@@ -83,7 +83,7 @@ function Choice({ on, onClick, icon, title, text, children }: { on: boolean; onC
       <button type="button" role="radio" aria-checked={on} onClick={onClick} className="flex w-full items-center gap-5 rounded-[16px] px-6 py-6 text-left">
         <span className="shrink-0 text-base-content">{icon}</span>
         <span className="min-w-0 flex-1"><span className="block text-[17px] font-medium">{title}</span><span className="block text-[17px] text-base-content/60">{text}</span></span>
-        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition-all ${on ? "border-primary/70 shadow-[0_0_0_4px_rgba(217,119,87,0.15)]" : "border-primary/60"}`}>
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 transition ${on ? "border-primary/70 shadow-[0_0_0_4px_rgba(217,119,87,0.15)]" : "border-primary/60"}`}>
           {on && <span className="h-4 w-4 rounded-full bg-primary" />}
         </span>
       </button>

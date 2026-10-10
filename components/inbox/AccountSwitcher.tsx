@@ -41,7 +41,7 @@ export default function AccountSwitcher({ scope, setScope, info }: { scope: stri
         {cur.icon}<span className="truncate">{cur.label}</span><RiArrowDownSLine size={18} className={`shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && info && (
-        <div role="listbox" aria-label="Accounts" className="wizard-rise absolute left-0 top-full z-40 mt-2 max-h-[70vh] w-[360px] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 p-1.5 shadow-[var(--shadow-overlay)]">
+        <div role="listbox" aria-label="Accounts" className="pop-in absolute left-0 top-full z-40 mt-2 max-h-[70vh] w-[360px] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 p-1.5 shadow-[var(--shadow-overlay)]">
           <Row on={scope === "all"} icon={<RiArchiveDrawerLine size={20} className="text-base-content/70" />} label="All accounts" count={info.all} onClick={() => pick("all")} />
           <div className="my-1 border-t border-[var(--border-subtle)]" />
           {heading("LinkedIn")}

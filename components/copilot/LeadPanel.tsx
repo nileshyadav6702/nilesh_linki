@@ -58,7 +58,7 @@ function ExportMenu({ detail }: { detail: LeadDetail }) {
         <RiUpload2Line size={19} /> Export <RiArrowDownSLine size={20} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="wizard-rise absolute bottom-full right-0 z-30 mb-2 w-52 overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 py-1 shadow-[var(--shadow-overlay)]">
+        <div className="pop-in absolute bottom-full right-0 z-30 mb-2 w-52 overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 py-1 shadow-[var(--shadow-overlay)]">
           <button type="button" onClick={csv} className="block w-full px-4 py-2.5 text-left text-[15px] hover:bg-base-200">Download as CSV</button>
           <button type="button" onClick={() => void copy()} className="block w-full px-4 py-2.5 text-left text-[15px] hover:bg-base-200">Copy LinkedIn URL</button>
         </div>

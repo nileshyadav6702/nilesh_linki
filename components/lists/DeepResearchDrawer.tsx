@@ -55,7 +55,7 @@ export default function DeepResearchDrawer({ listId, listName, leads, companies,
     <div className="fixed inset-0 z-50 flex justify-end" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
       <button type="button" tabIndex={-1} aria-label="Close" onClick={onClose} className={`absolute inset-0 bg-[#141413]/45 transition-opacity duration-300 ${shown ? "opacity-100" : "opacity-0"}`} />
       <div ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="dr-title"
-        className={`relative flex h-full w-full max-w-[900px] flex-col bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition-transform duration-300 ease-out ${shown ? "translate-x-0" : "translate-x-full"}`}>
+        className={`relative flex h-full w-full max-w-[900px] flex-col bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition-transform duration-200 ease-out ease-out ${shown ? "translate-x-0" : "translate-x-full"}`}>
         <header className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-8 py-6">
           <div>
             <div id="dr-title" className="text-[30px] font-medium leading-tight">Deep Research</div>

@@ -49,9 +49,9 @@ function inHours(iso: string | null) {
 
 function Pill({ href, ok, children }: { href: string; ok: boolean; children: React.ReactNode }) {
   return (
-    <Link href={href} className={`group inline-flex h-12 items-center gap-2.5 rounded-[10px] border px-4 text-[16px] font-medium transition-all hover:-translate-y-0.5 hover:shadow-[0_6px_18px_-10px_rgba(20,20,19,0.35)] ${ok ? "border-[var(--border-strong)] bg-base-200/70 text-base-content" : "border-[#f3c98b] bg-[#fff4e0] text-[#a65a00]"}`}>
+    <Link href={href} className={`group inline-flex h-12 items-center gap-2.5 rounded-[10px] border px-4 text-[16px] font-medium transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_-10px_rgba(20,20,19,0.35)] ${ok ? "border-[var(--border-strong)] bg-base-200/70 text-base-content" : "border-[#f3c98b] bg-[#fff4e0] text-[#a65a00]"}`}>
       {ok ? <RiCheckboxCircleLine size={20} className="text-[#22a06b]" /> : <RiErrorWarningLine size={20} />}{children}
-      <RiArrowRightSLine size={18} className="-ml-1 opacity-0 transition-all group-hover:ml-0 group-hover:opacity-60" />
+      <RiArrowRightSLine size={18} className="-translate-x-1 opacity-0 transition-[translate,opacity] duration-150 ease-out group-hover:translate-x-0 group-hover:opacity-60" />
     </Link>
   );
 }
@@ -120,7 +120,7 @@ export default function Dashboard() {
           <div role="group" aria-label="Period" className="flex flex-wrap justify-end gap-2">
             {RANGES.map((r) => (
               <button key={r.id} type="button" aria-pressed={range === r.id} onClick={() => setRange(r.id)} style={range === r.id ? { background: "#2b2b33", color: "#fff" } : undefined}
-                className={`h-10 rounded-[10px] px-4 text-[16px] transition-all ${range === r.id ? "font-medium shadow-[0_4px_12px_-4px_rgba(20,20,19,0.5)]" : "bg-base-200/70 text-base-content/75 hover:bg-base-200 hover:text-base-content"}`}>
+                className={`h-10 rounded-[10px] px-4 text-[16px] transition ${range === r.id ? "font-medium shadow-[0_4px_12px_-4px_rgba(20,20,19,0.5)]" : "bg-base-200/70 text-base-content/75 hover:bg-base-200 hover:text-base-content"}`}>
                 {r.label}
               </button>
             ))}

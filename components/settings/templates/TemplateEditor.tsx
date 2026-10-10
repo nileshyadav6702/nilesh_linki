@@ -23,7 +23,7 @@ export const KIND_META: Record<Kind, { label: string; icon: React.ReactNode }> =
   closing: { label: "Closing", icon: <LuFlag size={18} /> },
 };
 const card = "rounded-[16px] border border-[var(--border-subtle)] bg-base-100";
-const seg = (on: boolean) => `inline-flex h-11 items-center gap-2 rounded-[10px] px-3 text-[16px] transition-all ${on ? "bg-base-100 font-medium text-base-content shadow-[0_1px_4px_rgba(20,20,19,0.12)]" : "text-base-content/60 hover:text-base-content"}`;
+const seg = (on: boolean) => `inline-flex h-11 items-center gap-2 rounded-[10px] px-3 text-[16px] transition ${on ? "bg-base-100 font-medium text-base-content shadow-[0_1px_4px_rgba(20,20,19,0.12)]" : "text-base-content/60 hover:text-base-content"}`;
 const ago = (iso?: string) => { if (!iso) return ""; const h = Math.round((Date.now() - Date.parse(iso.includes("T") ? iso : `${iso.replace(" ", "T")}Z`)) / 3_600_000); return h < 1 ? "just now" : h < 24 ? `${h} hour${h === 1 ? "" : "s"} ago` : `${Math.round(h / 24)} days ago`; };
 
 function ContactPicker({ value, onChange }: { value: Contact | null; onChange: (c: Contact) => void }) {
@@ -49,7 +49,7 @@ function ContactPicker({ value, onChange }: { value: Contact | null; onChange: (
         <LuChevronDown size={22} className={`shrink-0 text-base-content/55 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="wizard-rise absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+        <div className="pop-in absolute left-0 right-0 top-full z-40 mt-2 overflow-hidden rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
           <div className="relative p-2"><LuSearch size={17} className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-base-content/45" />
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search contacts..." aria-label="Search contacts" className="h-11 w-full rounded-[8px] border border-[var(--border-strong)] bg-base-100 pl-10 pr-3 text-[16px] outline-none focus:border-primary/60 focus:ring-2 focus:ring-[var(--ring)]" /></div>
           <ul className="max-h-[420px] overflow-y-auto pb-1">
@@ -191,7 +191,7 @@ export default function TemplateEditor({ initial, examples, onClose, onSaved }: 
                 <LuSparkles size={21} /><LuChevronDown size={18} className={`transition-transform ${exOpen ? "rotate-180" : ""}`} />
               </button>
               {exOpen && (
-                <div className="wizard-rise absolute right-0 top-full z-40 mt-2 w-[440px] overflow-hidden rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+                <div className="pop-in absolute right-0 top-full z-40 mt-2 w-[440px] overflow-hidden rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
                   {examples[channel][kind].map((e) => (
                     <button key={e.title} type="button" onClick={() => pickExample(e)} className="block w-full border-b border-[var(--border-subtle)] px-5 py-3.5 text-left hover:bg-base-200/60">
                       <span className="block text-[17px] font-medium">{e.title}</span><span className="block text-[15px] text-base-content/60">{e.desc}</span>

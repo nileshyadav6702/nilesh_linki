@@ -69,7 +69,7 @@ export default function TodosPage({ todos: initialTodos }: { todos: TodoWithCont
               <button
                 key={value}
                 onClick={() => setFilter(value)}
-                className={`rounded-[7px] px-3 py-1.5 text-xs font-medium capitalize transition-all ${
+                className={`rounded-[7px] px-3 py-1.5 text-xs font-medium capitalize transition ${
                   filter === value
                     ? "border border-[var(--border-subtle)] bg-base-100 text-base-content shadow-[var(--shadow-raised)]"
                     : "text-base-content/40 hover:text-base-content/70"

@@ -93,7 +93,7 @@ export default function Insights() {
     { id: "replied", label: "Replied", value: o.replied, sub: `${rate(o.replied, o.messaged)} reply rate`, help: HELP.replied },
     { id: "interested", label: "Interested", value: o.interested, sub: `${rate(o.interested, o.replied)} of replies`, help: HELP.interested },
   ];
-  const pill = (on: boolean) => `inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[15px] transition-all ${on ? "bg-base-100 text-base-content shadow-[0_1px_3px_rgba(20,20,19,0.12)]" : "text-base-content/70 hover:text-base-content"}`;
+  const pill = (on: boolean) => `inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[15px] transition ${on ? "bg-base-100 text-base-content shadow-[0_1px_3px_rgba(20,20,19,0.12)]" : "text-base-content/70 hover:text-base-content"}`;
 
   return (
     <>
@@ -116,7 +116,7 @@ export default function Insights() {
                 </button>
               </div>
               {picking && (
-                <div className="wizard-rise absolute right-0 top-full z-50 mt-2 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+                <div className="pop-in absolute right-0 top-full z-50 mt-2 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
                   <DateRangeCalendar value={range === "custom" ? period : null} onChange={(p) => { setRange("custom"); setPeriod(p); setPicking(false); }} />
                 </div>
               )}
@@ -127,7 +127,7 @@ export default function Insights() {
                 <RiUploadLine size={17} />Export<RiArrowDownSLine size={20} className={`transition-transform ${exporting ? "rotate-180" : ""}`} />
               </button>
               {exporting && (
-                <div role="menu" className="wizard-rise absolute right-0 top-full z-50 mt-2 w-[240px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
+                <div role="menu" className="pop-in absolute right-0 top-full z-50 mt-2 w-[240px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
                   {([["overview", "Daily overview"], ...(agent ? [["channels", "Channel performance"]] : [["agents", "Agent performance"]]), ["sources", "Lead source performance"]] as Array<[Parameters<typeof exportCsv>[0], string]>).map(([k, label]) => (
                     <button key={k} type="button" role="menuitem" onClick={() => exportCsv(k)} className="flex w-full items-center rounded-[8px] px-3 py-2.5 text-left text-[14px] hover:bg-base-200">{label} (CSV)</button>
                   ))}
@@ -152,7 +152,7 @@ export default function Insights() {
                     <div className="flex items-center gap-1.5 text-[16px] text-base-content/60">{t.label}{t.help && <InfoTip text={t.help} align={i === 3 ? "right" : "center"} />}</div>
                     <div className="mt-1 text-[42px] font-bold leading-[1.15] tabular-nums tracking-tight text-base-content">{t.value.toLocaleString()}</div>
                     {t.sub && <div className="mt-1 text-[15px] text-base-content/55">{t.sub}</div>}
-                    <span className={`absolute inset-x-0 bottom-[-1px] h-[2px] bg-primary transition-transform duration-300 ${on ? "scale-x-100" : "scale-x-0"}`} />
+                    <span className={`absolute inset-x-0 bottom-[-1px] h-[2px] bg-primary transition-transform duration-200 ease-out ${on ? "scale-x-100" : "scale-x-0"}`} />
                   </div>
                 );
               })}

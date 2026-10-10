@@ -50,7 +50,7 @@ function MoveMenu({ lists, currentId, disabled, onMove }: { lists: ListInfo[]; c
         Move to list <RiArrowDownSLine size={18} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className="wizard-rise absolute right-0 top-full z-40 mt-2 max-h-[420px] w-[340px] overflow-y-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
+        <div className="pop-in absolute right-0 top-full z-40 mt-2 max-h-[420px] w-[340px] overflow-y-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
           {lists.map((l) => (
             <button key={l.id} type="button" disabled={l.id === currentId} onClick={() => { setOpen(false); onMove(l); }}
               className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2.5 text-left text-[15px] hover:bg-base-200 disabled:cursor-not-allowed disabled:text-base-content/35 disabled:hover:bg-transparent">
@@ -187,7 +187,7 @@ export default function ListDetail() {
         <div className="flex flex-wrap items-center gap-4 rounded-[14px] border border-[var(--border-subtle)] bg-base-100 px-5 py-3.5">
           <span className="flex items-center gap-1.5 text-[15px] font-medium uppercase text-primary"><RiSearchLine size={17} /> Deep research</span>
           <span className="min-w-0 flex-1 truncate text-[15px] text-base-content/60">{status}</span>
-          {running && <span className="h-1.5 w-40 overflow-hidden rounded-full bg-base-200"><span className="block h-full bg-primary transition-all duration-500" style={{ width: `${run!.total ? Math.round((run!.done_count / run!.total) * 100) : 0}%` }} /></span>}
+          {running && <span className="h-1.5 w-40 overflow-hidden rounded-full bg-base-200"><span className="block h-full bg-primary transition-[width] duration-300 ease-out" style={{ width: `${run!.total ? Math.round((run!.done_count / run!.total) * 100) : 0}%` }} /></span>}
           <button type="button" disabled={running} onClick={() => setResearchOpen(true)}
             className="inline-flex h-10 items-center gap-2 rounded-[8px] bg-primary px-4 text-[15px] font-medium text-primary-content hover:bg-[var(--primary-hover)] disabled:opacity-60">
             {running ? <RiLoader4Line size={17} className="animate-spin" /> : <RiSearchLine size={17} />} {run ? "Research again" : "Deep research this list"}

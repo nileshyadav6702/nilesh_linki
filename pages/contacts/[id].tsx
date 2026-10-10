@@ -1228,7 +1228,7 @@ export default function ContactDetailPage({
                   </div>
                   <button
                     onClick={() => deleteLog(log.id)}
-                    className="shrink-0 opacity-0 group-hover:opacity-100 text-base-content/20 hover:text-error/60 transition-all mt-0.5"
+                    className="shrink-0 opacity-0 group-hover:opacity-100 text-base-content/20 hover:text-error/60 transition mt-0.5"
                   >
                     <RiDeleteBinLine size={13} />
                   </button>
@@ -1460,7 +1460,7 @@ export default function ContactDetailPage({
                     </div>
                     <button
                       onClick={() => deleteTodo(todo.id)}
-                      className="shrink-0 opacity-0 group-hover:opacity-100 text-base-content/20 hover:text-error/60 transition-all"
+                      className="shrink-0 opacity-0 group-hover:opacity-100 text-base-content/20 hover:text-error/60 transition"
                     >
                       <RiDeleteBinLine size={12} />
                     </button>

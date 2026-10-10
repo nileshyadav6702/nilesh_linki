@@ -74,8 +74,8 @@ export default function AgentsPage() {
           </Empty>
         ) : (
           <div className="grid items-stretch gap-6 xl:grid-cols-2">
-            {agents.map((a) => (
-              <AgentCard key={a.id} a={a}
+            {agents.map((a, i) => (
+              <AgentCard key={a.id} a={a} index={i}
                 onPatch={(body, ok) => patch(a.id, body, ok)}
                 onDuplicate={() => duplicate(a.id)}
                 onDelete={() => remove(a)} />

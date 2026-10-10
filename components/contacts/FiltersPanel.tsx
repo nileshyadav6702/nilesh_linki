@@ -99,7 +99,7 @@ export default function FiltersPanel({ filters, patch, clear, onClose, agents, l
   );
   if (compact) {
     return (
-      <div ref={wrap} role="dialog" aria-label="Lead filters" className="wizard-rise absolute right-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(540px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+      <div ref={wrap} role="dialog" aria-label="Lead filters" className="pop-in absolute right-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(540px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
         <button type="button" onClick={onClose} aria-label="Close filters" className="absolute right-4 top-4 z-10 text-base-content/50 hover:text-base-content"><RiCloseLine size={24} /></button>
         <div className="space-y-5 px-6 pb-5 pt-6">
           <div><Heading>Campaign</Heading>{sel("Step", filters.step, [{ value: "", label: "All" }, ...CAMPAIGN.slice(1)], (v) => patch({ step: v }))}</div>
@@ -117,7 +117,7 @@ export default function FiltersPanel({ filters, patch, clear, onClose, agents, l
     );
   }
   return (
-    <div ref={wrap} role="dialog" aria-label="Contact filters" className="wizard-rise absolute left-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(880px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+    <div ref={wrap} role="dialog" aria-label="Contact filters" className="pop-in absolute left-0 top-full z-40 mt-2 max-h-[calc(100vh-260px)] w-[min(880px,calc(100vw-2rem))] overflow-y-auto rounded-[14px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
       <button type="button" onClick={onClose} aria-label="Close filters" className="absolute right-4 top-4 z-10 text-base-content/50 hover:text-base-content"><RiCloseLine size={22} /></button>
       <div className="grid gap-x-5 gap-y-4 px-6 pb-5 pt-6 sm:grid-cols-2">
         {!lockAgent && sel("AI Agent", filters.agent, [{ value: "", label: "All Agents" }, ...agents.map((a) => ({ value: a.id, label: a.name }))], (v) => patch({ agent: v }), agents.length > 6)}

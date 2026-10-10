@@ -43,7 +43,7 @@ function Group({ id, open, setOpen, icon, tint, title, subtitle, active, pill, a
         {!disabled && (
           <button type="button" onClick={toggle} aria-label={on ? `Collapse ${title}` : `Expand ${title}`}
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-base-content/60 transition hover:bg-base-200 hover:text-base-content ${on ? "border border-base-content/70" : ""}`}>
-            <RiArrowDownSLine size={22} className={`transition-transform duration-300 ${on ? "rotate-180" : ""}`} />
+            <RiArrowDownSLine size={22} className={`transition-transform duration-200 ease-out ${on ? "rotate-180" : ""}`} />
           </button>
         )}
       </div>
@@ -132,7 +132,7 @@ function CompanySearch({ suggestions, onAdd }: { suggestions: Array<{ name: stri
           }} />
       </div>
       {open && options.length > 0 && (
-        <ul role="listbox" aria-label="Matching companies" className="wizard-rise absolute left-0 right-0 top-12 z-30 mt-1 overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
+        <ul role="listbox" aria-label="Matching companies" className="pop-in absolute left-0 right-0 top-12 z-30 mt-1 overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">
           {options.map((o) => (
             <li key={o.url}>
               <button type="button" onClick={() => add(o.url)} className="flex w-full items-center gap-3 rounded-[8px] px-3 py-2 text-left hover:bg-base-200">

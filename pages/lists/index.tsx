@@ -205,7 +205,7 @@ export default function ListsPage({ initialLists }: { initialLists: List[] }) {
                     </div>
                     {!scheduled && (
                       <div className="mt-1.5 w-full bg-base-100 rounded-full h-1 overflow-hidden">
-                        <div className="bg-primary h-1 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                        <div className="bg-primary h-1 rounded-full transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
                       </div>
                     )}
                     <span className="text-xs text-base-content/40">

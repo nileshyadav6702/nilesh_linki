@@ -51,7 +51,7 @@ async function api(url: string, method: string, body?: unknown) {
   return d;
 }
 
-const btn = "inline-flex h-12 items-center gap-2 rounded-[8px] px-5 text-[17px] font-medium transition-all duration-200";
+const btn = "inline-flex h-12 items-center gap-2 rounded-[8px] px-5 text-[17px] font-medium transition duration-200";
 
 /** Create an agent: Sources → Target → Preview → Outreach → Review. */
 export default function NewAgent() {

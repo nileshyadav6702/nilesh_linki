@@ -280,7 +280,7 @@ export default function LeadDrawer({ targetId, onClose, onChanged, siblings, onO
                           return (
                             <span key={s.id} className="inline-flex items-center gap-2">
                               <button type="button" onClick={() => setStep(on ? null : s.id)} aria-pressed={on}
-                                className={`inline-flex h-10 items-center gap-2 rounded-full border px-4 text-[15px] transition-all ${on ? "border-primary/45 bg-primary/10 text-base-content shadow-[0_2px_8px_-4px_var(--color-primary)]" : "border-[var(--border-subtle)] bg-[#fdf4ee] text-base-content/80 hover:border-primary/30"}`}>
+                                className={`inline-flex h-10 items-center gap-2 rounded-full border px-4 text-[15px] transition ${on ? "border-primary/45 bg-primary/10 text-base-content shadow-[0_2px_8px_-4px_var(--color-primary)]" : "border-[var(--border-subtle)] bg-[#fdf4ee] text-base-content/80 hover:border-primary/30"}`}>
                                 <span className={`h-2 w-2 rounded-full ${dot}`} />{s.label}
                                 {ai && <RiSparkling2Line size={17} className="text-[#c04ad6]" />}
                               </button>

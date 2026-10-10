@@ -23,7 +23,7 @@ function Tip({ tip, children, wide = false }: { tip: ReactNode; children: ReactN
   return (
     <span className="group relative inline-flex">
       {children}
-      <span role="tooltip" className={`pointer-events-none absolute top-full z-30 mt-2 hidden rounded-[10px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)] group-focus-within:block group-hover:block ${place}`}>
+      <span role="tooltip" className={`pop-in pointer-events-none absolute top-full z-30 mt-2 hidden rounded-[10px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)] group-focus-within:block group-hover:block ${place}`}>
         {tip}
       </span>
     </span>

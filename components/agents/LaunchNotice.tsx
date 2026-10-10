@@ -46,7 +46,7 @@ export function FindingLeadsToast({ leadCount, onClose }: { leadCount: number; o
 
 export function LeadsFinderTip({ onClose }: { onClose: () => void }) {
   return (
-    <div role="dialog" aria-labelledby="finder-tip-title" className="wizard-rise absolute left-0 top-full z-40 mt-3 w-[500px] max-w-[calc(100vw-2rem)] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-6 shadow-[var(--shadow-overlay)]">
+    <div role="dialog" aria-labelledby="finder-tip-title" className="pop-in absolute left-0 top-full z-40 mt-3 w-[500px] max-w-[calc(100vw-2rem)] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-6 shadow-[var(--shadow-overlay)]">
       <span className="absolute -top-2 left-[220px] h-4 w-4 rotate-45 border-l border-t border-[var(--border-subtle)] bg-base-100" aria-hidden="true" />
       <div className="flex items-start justify-between gap-4">
         <h2 id="finder-tip-title" className="flex items-center gap-2.5 text-[19px] font-medium text-base-content">

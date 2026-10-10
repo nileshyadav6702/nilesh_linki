@@ -128,7 +128,7 @@ export default function OutreachStep({ state, set, onManual, onEditSources }: {
               <div role="radiogroup" aria-label="Message tone" className="grid gap-4 sm:grid-cols-3">
                 {TONES.map(([v, t, d]) => (
                   <button key={v} type="button" role="radio" aria-checked={o.tone === v} onClick={() => put({ tone: v })}
-                    className={`rounded-[12px] border px-4 py-5 text-center transition-all duration-200 ${o.tone === v ? "border-primary/60 bg-primary/5" : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]"}`}>
+                    className={`rounded-[12px] border px-4 py-5 text-center transition duration-200 ${o.tone === v ? "border-primary/60 bg-primary/5" : "border-[var(--border-subtle)] hover:border-[var(--border-strong)]"}`}>
                     <div className="text-[17px] font-medium">{t}</div><div className="mt-1 text-[15px] text-base-content/55">{d}</div>
                   </button>
                 ))}

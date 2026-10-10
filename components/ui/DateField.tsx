@@ -31,7 +31,7 @@ export default function DateField({ value, onChange, min, max, name, placeholder
         )}
       </button>
       {open && (
-        <div role="dialog" aria-label={label ?? "Pick a date"} className="wizard-rise absolute left-0 top-full z-50 mt-1.5 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
+        <div role="dialog" aria-label={label ?? "Pick a date"} className="pop-in absolute left-0 top-full z-50 mt-1.5 rounded-[12px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)]">
           <DateCalendar value={value || null} min={min} max={max} onChange={(v) => { onChange(v ?? ""); setOpen(false); }} />
         </div>
       )}

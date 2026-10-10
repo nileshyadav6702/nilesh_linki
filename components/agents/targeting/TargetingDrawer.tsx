@@ -82,7 +82,7 @@ export default function TargetingDrawer({ icp, websiteUrl, onClose, onSave }: {
       <button type="button" tabIndex={-1} aria-label="Close" onClick={requestClose}
         className={`absolute inset-0 bg-[#141413]/35 transition-opacity duration-300 motion-reduce:transition-none ${shown ? "opacity-100" : "opacity-0"}`} />
       <div ref={panel} role="dialog" aria-modal="true" aria-labelledby="targeting-title" tabIndex={-1} onKeyDown={onKey}
-        className={`relative flex h-full w-full flex-col bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition-transform duration-300 ease-out motion-reduce:transition-none md:w-[65%] md:min-w-[640px] ${shown ? "translate-x-0" : "translate-x-full"}`}>
+        className={`relative flex h-full w-full flex-col bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition-transform duration-200 ease-out ease-out motion-reduce:transition-none md:w-[65%] md:min-w-[640px] ${shown ? "translate-x-0" : "translate-x-full"}`}>
         <header className="flex items-start justify-between gap-4 border-b border-[var(--border-subtle)] px-6 py-5">
           <div className="min-w-0">
             <h2 id="targeting-title" className="font-medium text-[24px] leading-tight text-base-content">Edit targeting</h2>

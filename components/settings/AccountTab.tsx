@@ -36,7 +36,7 @@ function SearchPicker({ value, onChange, options, noun, placeholder, clearable =
         <LuChevronDown size={20} className={`shrink-0 text-base-content/55 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <div className={`wizard-rise absolute left-0 z-50 w-full min-w-[320px] overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)] sm:w-[640px] ${up ? "bottom-full mb-2" : "top-full mt-2"}`}>
+        <div className={`pop-in absolute left-0 z-50 w-full min-w-[320px] overflow-hidden rounded-[12px] border border-[var(--border-subtle)] bg-base-100 shadow-[var(--shadow-overlay)] sm:w-[640px] ${up ? "bottom-full mb-2" : "top-full mt-2"}`}>
           <div className="relative border-b border-[var(--border-subtle)] p-2">
             <LuSearch size={18} className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-base-content/45" />
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${noun}...`} aria-label={`Search ${noun}`}

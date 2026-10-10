@@ -54,7 +54,7 @@ export function OptionCard({ selected, onClick, icon, title, text, badge, corner
 }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={selected} disabled={disabled}
-      className={`rounded-[12px] border p-5 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 ${selected ? "border-primary/70 bg-primary/5 shadow-[0_0_0_4px_rgba(217,119,87,0.12)]" : "border-[var(--border-subtle)] bg-base-100 enabled:hover:-translate-y-0.5 enabled:hover:border-[var(--border-strong)] enabled:hover:shadow-[0_4px_14px_rgba(20,20,19,0.06)]"} ${className}`}>
+      className={`rounded-[12px] border p-5 text-left transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 ${selected ? "border-primary/70 bg-primary/5 shadow-[0_0_0_4px_rgba(217,119,87,0.12)]" : "border-[var(--border-subtle)] bg-base-100 enabled:hover:-translate-y-0.5 enabled:hover:border-[var(--border-strong)] enabled:hover:shadow-[0_4px_14px_rgba(20,20,19,0.06)]"} ${className}`}>
       <div className={`mb-4 flex items-start justify-between gap-2 ${iconBelow ? "min-h-[26px]" : ""}`}>{badge ?? (iconBelow ? <span /> : icon)}{corner}</div>
       {iconBelow && icon && <div className="mb-5">{icon}</div>}
       <div className="text-[17px] font-medium text-base-content">{title}</div>

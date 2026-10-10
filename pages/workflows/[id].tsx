@@ -2837,7 +2837,7 @@ function AnalyticsPanel({ workflowId, days: initialDays }: { workflowId: string;
       <div className="flex items-center gap-3 py-2">
         <span className="text-xs text-base-content/50 w-28 shrink-0">{label}</span>
         <div className="flex-1 h-1.5 bg-base-200 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: color }} />
+          <div className="h-full rounded-full transition-[width] duration-300 ease-out" style={{ width: `${pct}%`, background: color }} />
         </div>
         <span className="text-sm font-semibold tabular-nums w-12 text-right" style={{ color }}>{value.toLocaleString()}</span>
         <span className="text-xs text-base-content/30 w-8 text-right">{rate}%</span>
@@ -2855,7 +2855,7 @@ function AnalyticsPanel({ workflowId, days: initialDays }: { workflowId: string;
             <button
               key={d}
               onClick={() => setDays(d)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${days === d ? "bg-base-100 text-base-content shadow-[var(--shadow-raised)] border border-[var(--border-subtle)]" : "text-base-content/35 hover:text-base-content/60"}`}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${days === d ? "bg-base-100 text-base-content shadow-[var(--shadow-raised)] border border-[var(--border-subtle)]" : "text-base-content/35 hover:text-base-content/60"}`}
             >
               {d}d
             </button>
@@ -2947,7 +2947,7 @@ function AnalyticsPanel({ workflowId, days: initialDays }: { workflowId: string;
                         {ANALYTICS_SERIES.map(s => (
                           <div
                             key={s.key}
-                            className="flex-1 rounded-t-sm transition-all"
+                            className="flex-1 rounded-t-sm transition-[height] duration-300 ease-out"
                             style={{
                               height: `${Math.max(2, (d[s.key] / maxActivity) * 100)}px`,
                               background: s.color,
@@ -3668,7 +3668,7 @@ export default function WorkflowDetailPage({
                       ) : null}
                       <button
                         onClick={() => setSelectedStep(sel ? null : { track, step_order: s.step_order })}
-                        className={`w-full text-left px-3 py-3 rounded-xl transition-all flex items-center gap-3 border ${sel ? "bg-primary/10 border-primary/30" : "bg-base-200 border-[var(--border-subtle)] hover:border-[var(--border-subtle)]"}`}
+                        className={`w-full text-left px-3 py-3 rounded-xl transition flex items-center gap-3 border ${sel ? "bg-primary/10 border-primary/30" : "bg-base-200 border-[var(--border-subtle)] hover:border-[var(--border-subtle)]"}`}
                       >
                         <span className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs border ${sel ? "bg-primary/20 border-primary/40 text-primary" : `${STEP_COLORS[s.step_type]}`}`}>
                           {STEP_ICONS[s.step_type]}
@@ -3696,7 +3696,7 @@ export default function WorkflowDetailPage({
                 <div className="mt-4 pt-4 border-t border-[var(--border-subtle)] flex flex-col gap-1.5">
                   <button
                     onClick={() => setSelectedStep(selectedStep === "completed" ? null : "completed")}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center gap-2.5 border ${selectedStep === "completed" ? "text-success bg-success/10 border-success/20" : "text-base-content/50 hover:text-success bg-base-200 border-[var(--border-subtle)] hover:border-success/20"}`}
+                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition flex items-center gap-2.5 border ${selectedStep === "completed" ? "text-success bg-success/10 border-success/20" : "text-base-content/50 hover:text-success bg-base-200 border-[var(--border-subtle)] hover:border-success/20"}`}
                   >
                     <span className="w-2 h-2 rounded-full bg-success shrink-0" />
                     <span className="font-medium">{displayStats.completed_prospects} completed</span>
@@ -3704,7 +3704,7 @@ export default function WorkflowDetailPage({
                   {displayStats.failed_prospects > 0 && (
                     <button
                       onClick={() => setSelectedStep(selectedStep === "failed" ? null : "failed")}
-                      className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition-all flex items-center gap-2.5 border ${selectedStep === "failed" ? "text-error bg-error/10 border-error/20" : "text-base-content/50 hover:text-error bg-base-200 border-[var(--border-subtle)] hover:border-error/20"}`}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl text-xs transition flex items-center gap-2.5 border ${selectedStep === "failed" ? "text-error bg-error/10 border-error/20" : "text-base-content/50 hover:text-error bg-base-200 border-[var(--border-subtle)] hover:border-error/20"}`}
                     >
                       <span className="w-2 h-2 rounded-full bg-error shrink-0" />
                       <span className="font-medium">{displayStats.failed_prospects} failed / skipped</span>

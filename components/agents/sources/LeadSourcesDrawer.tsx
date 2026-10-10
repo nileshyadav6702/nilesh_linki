@@ -152,7 +152,7 @@ export default function LeadSourcesDrawer({ agentId, agentName, ownListId, rows,
       <button type="button" tabIndex={-1} aria-label="Close" onClick={requestClose}
         className={`absolute inset-0 bg-[#141413]/35 transition-opacity duration-300 motion-reduce:transition-none ${shown ? "opacity-100" : "opacity-0"}`} />
       <div ref={panel} role="dialog" aria-modal="true" aria-labelledby="lead-sources-title" tabIndex={-1} onKeyDown={modal ? undefined : onKeyDown}
-        className={`relative flex h-full w-full flex-col bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition-transform duration-300 ease-out motion-reduce:transition-none md:w-[72%] md:min-w-[760px] ${shown ? "translate-x-0" : "translate-x-full"}`}>
+        className={`relative flex h-full w-full flex-col bg-base-100 shadow-[var(--shadow-overlay)] outline-none transition-transform duration-200 ease-out ease-out motion-reduce:transition-none md:w-[72%] md:min-w-[760px] ${shown ? "translate-x-0" : "translate-x-full"}`}>
         <header className="flex items-center justify-between gap-4 border-b border-[var(--border-subtle)] px-6 py-5">
           <h2 id="lead-sources-title" className="flex flex-wrap items-baseline gap-3 font-medium text-[26px] leading-tight text-base-content">
             Lead sources

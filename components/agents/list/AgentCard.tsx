@@ -36,7 +36,9 @@ function Metric({ label, value, of, hint, icon, tone }: { label: string; value: 
 }
 
 /** One agent: name + status switcher, four funnel metrics, senders and an Open action. */
-export default function AgentCard({ a, onPatch, onDuplicate, onDelete }: {
+export default function AgentCard({ a, index = 0, onPatch, onDuplicate, onDelete }: {
+  /** Position in the list: cards cascade in 40ms apart. */
+  index?: number;
   a: AgentRow;
   onPatch: (body: Record<string, unknown>, ok: string) => void;
   onDuplicate: () => void; onDelete: () => void;
@@ -52,7 +54,7 @@ export default function AgentCard({ a, onPatch, onDuplicate, onDelete }: {
   const replied = pct(p.replied, p.contacted);
 
   return (
-    <div className="wizard-rise flex flex-col rounded-[16px] border border-[var(--border-subtle)] bg-base-100 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(20,20,19,0.25)]">
+    <div style={{ "--i": index } as React.CSSProperties} className="wizard-rise stagger flex flex-col rounded-[16px] border border-[var(--border-subtle)] bg-base-100 transition-[translate,box-shadow] duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_12px_32px_-16px_rgba(20,20,19,0.25)]">
       <div className="flex items-center gap-3 px-7 pt-6">
         <IconTile icon={<LuBot size={22} />} tone={state === "paused" || state === "draft" ? "ink" : "coral"} size={40} />
         <Link href={`/agents/${a.id}`} title={a.name} className="min-w-0 flex-1 truncate text-[20px] font-semibold text-base-content transition-colors hover:text-primary">

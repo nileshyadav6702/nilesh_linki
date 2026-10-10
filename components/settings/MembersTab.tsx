@@ -103,7 +103,7 @@ export default function MembersTab() {
   const copy = (text: string, what = "Link") => navigator.clipboard.writeText(text).then(() => toast.success(`${what} copied`), () => toast.error("Could not copy"));
 
   if (!d) return <div className="flex justify-center py-20"><LuLoaderCircle size={26} className="animate-spin text-primary" /></div>;
-  const seg = (on: boolean) => `inline-flex h-11 items-center gap-2 rounded-[10px] px-4 text-[16px] transition-all ${on ? "bg-base-100 font-medium text-base-content shadow-[0_1px_4px_rgba(20,20,19,0.12)]" : "text-base-content/60 hover:text-base-content"}`;
+  const seg = (on: boolean) => `inline-flex h-11 items-center gap-2 rounded-[10px] px-4 text-[16px] transition ${on ? "bg-base-100 font-medium text-base-content shadow-[0_1px_4px_rgba(20,20,19,0.12)]" : "text-base-content/60 hover:text-base-content"}`;
 
   return (
     <section className="wizard-rise rounded-[16px] border border-[var(--border-subtle)] bg-base-100">

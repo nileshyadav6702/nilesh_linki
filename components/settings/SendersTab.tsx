@@ -179,7 +179,7 @@ export default function SendersTab({ onAddLinkedIn, onAuthLinkedIn, onGmail, onS
             <div ref={menuRef} className="relative">
               <button type="button" onClick={() => setConnectMenu((v) => !v)} aria-expanded={connectMenu} className={primary}><LuMail size={19} />Connect Mailbox<LuChevronDown size={18} className={`transition-transform ${connectMenu ? "rotate-180" : ""}`} /></button>
               {connectMenu && (
-                <div className="wizard-rise absolute right-0 top-full z-30 mt-2 w-[300px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1.5 shadow-[var(--shadow-overlay)]">
+                <div className="pop-in absolute right-0 top-full z-30 mt-2 w-[300px] rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1.5 shadow-[var(--shadow-overlay)]">
                   <button type="button" onClick={() => { setConnectMenu(false); onGmail(); }} className="flex w-full items-start gap-3 rounded-[8px] px-3 py-2.5 text-left hover:bg-base-200">
                     <span className="mt-0.5 text-[18px] font-bold" style={{ color: "#ea4335" }}>G</span>
                     <span><span className="block text-[15px] font-medium">Gmail</span><span className="block text-[13px] text-base-content/55">With an app password; sending and inbox are verified first</span></span>

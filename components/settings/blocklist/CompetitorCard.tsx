@@ -21,7 +21,7 @@ function Toggle({ on, onClick, disabled }: { on: boolean; onClick: () => void; d
   return (
     <button type="button" role="switch" aria-checked={on} aria-label="AI Competitor Filtering" disabled={disabled} onClick={onClick}
       className={`relative h-8 w-14 shrink-0 rounded-full border-2 transition-colors disabled:opacity-60 ${on ? "border-primary bg-primary" : "border-[var(--border-strong)] bg-base-200"}`}>
-      <span className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-[6px] transition-all ${on ? "left-[26px] bg-white" : "left-1 bg-base-content/35"}`} />
+      <span className={`absolute left-1 top-1/2 h-5 w-5 -translate-y-1/2 rounded-[6px] transition-[translate,background-color] duration-200 ease-out ${on ? "translate-x-[22px] bg-white" : "bg-base-content/35"}`} />
     </button>
   );
 }

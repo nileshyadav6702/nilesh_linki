@@ -51,7 +51,7 @@ function Dropdown({ label, icon, disabled, children, width = 280 }: { label: Rea
         className={`inline-flex h-11 items-center gap-2 rounded-[8px] border bg-base-100 px-4 text-[15px] transition-colors disabled:cursor-not-allowed disabled:text-base-content/40 ${open ? "border-base-content/70" : "border-[var(--border-subtle)] enabled:hover:bg-base-200"}`}>
         {icon}{label}<RiArrowDownSLine size={18} className={`transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div style={{ width }} className="wizard-rise absolute right-0 top-full z-40 mt-2 max-h-[420px] overflow-y-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">{children(() => setOpen(false))}</div>}
+      {open && <div style={{ width }} className="pop-in absolute right-0 top-full z-40 mt-2 max-h-[420px] overflow-y-auto rounded-[12px] border border-[var(--border-subtle)] bg-base-100 p-1 shadow-[var(--shadow-overlay)]">{children(() => setOpen(false))}</div>}
     </div>
   );
 }
